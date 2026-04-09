@@ -7,21 +7,6 @@ let UL = [];
 // ══ API ══════════════════════════════════════════════
 // ══ LOGIN ════════════════════════════════════════════
 function initLoginPage(){
-  const du = document.getElementById('du');
-  if(!du) return;
-  du.innerHTML = DU.map(u => {
-    const rc = ROLES[u.role];
-    const safeLogin = escapeHtml(u.login);
-    const nm = escapeHtml((u.name.split(' ')[0] || ''));
-    const rl = escapeHtml(rc.l || '');
-    return `<button type="button" class="du" data-demo-login="${safeLogin}"><span style="width:6px;height:6px;border-radius:50%;background:${rc.c};display:inline-block;flex-shrink:0"></span>${nm} <span style="opacity:.4">(${rl})</span></button>`;
-  }).join('');
-  du.querySelectorAll('[data-demo-login]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.getElementById('il').value = btn.getAttribute('data-demo-login') || '';
-      document.getElementById('ip').value = '123';
-    });
-  });
   ['il','ip'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.addEventListener('keydown', e => { if(e.key === 'Enter') doLogin(); });
@@ -62,21 +47,9 @@ async function doLogin(){
   btn.disabled=true;btn.innerHTML='<span class="spin"></span>';
   document.getElementById('lerr').style.display='none';
 
-  // 1. Сначала всегда проверяем реальный API
   const res=await api('login',{login,password:pass});
   if(res?.ok){if(typeof hideBar==='function')hideBar();U=res.user;startApp();return;}
-
-  // 2. Фолбек на демо-пользователей — работает всегда:
-  //    - когда API недоступен (res === null)
-  //    - когда API вернул ошибку (неверные данные в таблице, или пользователи ещё не созданы)
-  const u=DU.find(u=>u.login===login.trim()&&pass==='123');
-  if(u){
-    showDemoBar();
-    U=u;startApp();return;
-  }
-
-  // 3. Ни API ни демо не прошли
-  showLErr(res?.error||'Неверный логин или пароль');
+  showLErr(res?.error||(res===null?'Сервер недоступен. Попробуйте позже.':'Неверный логин или пароль'));
   rstBtn();
 }
 function showLErr(m){const e=document.getElementById('lerr');e.textContent=m;e.style.display='block'}
@@ -270,6 +243,42 @@ function applyF(){
   });
 }
 
+function intersectsPeriod(v, from, to){
+  const opened = v.date_opened || '';
+  if(!opened || opened > to) return false;
+  const closed = v.fact_date || '';
+  if(closed && closed < from) return false;
+  return true;
+}
+
+function monthsInRange(from, to){
+  const out = [];
+  const start = new Date(from + 'T00:00:00');
+  const end = new Date(to + 'T00:00:00');
+  if(Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return out;
+  let y = start.getFullYear();
+  let m = start.getMonth();
+  const ey = end.getFullYear();
+  const em = end.getMonth();
+  while(y < ey || (y === ey && m <= em)){
+    out.push(`${y}-${String(m + 1).padStart(2,'0')}`);
+    m++;
+    if(m > 11){ m = 0; y++; }
+  }
+  return out;
+}
+
+function sumPlanForPeriod(recIds, from, to){
+  const months = monthsInRange(from, to);
+  let total = 0;
+  for(const recId of recIds){
+    for(const month of months){
+      total += Number(PLANS[`${recId}::${month}`] || 0);
+    }
+  }
+  return total;
+}
+
 function refreshDash(){
   document.querySelectorAll('.pbtn[data-f]').forEach(b=>b.classList.toggle('on',b.dataset.f===PERIOD.from&&b.dataset.t===PERIOD.to));
   const lbl=document.getElementById('plbl');
@@ -282,6 +291,8 @@ function refreshDash(){
 function renderStats(vacs){
   const el=document.getElementById('stats-row');if(!el)return;
   const cl=vacs.filter(v=>PLAN_CLOSED_STATUSES.includes(v.status));
+  const inWorkPeriod=vacs.filter(v=>intersectsPeriod(v, PERIOD.from, PERIOD.to));
+  const inWorkNow=vacs.filter(v=>['В работе','Приостановлена'].includes(v.status));
   const cwn=cl.filter(v=>v.norm_days&&v.days_total!=null);
   const fast=cwn.filter(v=>Number(v.days_total)<Number(v.norm_days));
   const pct=cwn.length?Math.round(fast.length/cwn.length*100):0;
@@ -289,7 +300,8 @@ function renderStats(vacs){
   const avg=closedForAvg.length?Math.round(closedForAvg.reduce((s,v)=>s+(v.days_total||0),0)/closedForAvg.length):0;
   el.innerHTML=
     sv('Всего',vacs.length,'за период','var(--acc)')+
-    sv('В работе',vacs.filter(v=>v.status==='В работе').length,'активных','var(--blue)')+
+    sv('В работе за период',inWorkPeriod.length,'В работе + Приостановлена','var(--blue)')+
+    sv('В работе сейчас',inWorkNow.length,'актуальный срез','var(--blue)')+
     sv('Закрыто',cl.length,`${pct}% раньше норматива`,pct>=50?'var(--green)':'var(--amber)')+
     sv('Приостановлено',vacs.filter(v=>v.status==='Приостановлена').length,'','var(--amber)')+
     sv('Передано',vacs.filter(v=>v.transferred).length,'между рекрутерами','var(--blue)')+
@@ -714,8 +726,11 @@ async function renderAnalytics(){
       return true;
     });
 
-    // 4. Текущий статус «В работе» + «Приостановлена» (актуальный срез)
-    const inWork=base.filter(v=>['В работе','Приостановлена'].includes(v.status));
+    // 4. В работе за период: пересекает период по жизненному циклу вакансии
+    const inWorkPeriod=base.filter(v=>intersectsPeriod(v,pFrom,pTo));
+
+    // 4b. Текущий статус «В работе» + «Приостановлена» (актуальный срез)
+    const inWorkNow=base.filter(v=>['В работе','Приостановлена'].includes(v.status));
 
     // 5. Закрыто за период: статус «Закрыта» или «Отменена», fact_date ВНУТРИ периода
     const closedInPeriod=base.filter(v=>PLAN_CLOSED_STATUSES.includes(v.status)&&v.fact_date&&v.fact_date>=pFrom&&v.fact_date<=pTo);
@@ -733,13 +748,15 @@ async function renderAnalytics(){
       const k=v.current_recruiter_id||v.recruiter_id;
       const nm=v.current_recruiter_name||v.recruiter_name;
       if(!k||!nm)return;
-      if(!byRec[k])byRec[k]={id:k,name:nm,opened:0,closed:0,in_work:0,atStart:0,fast:0,nt:0,days:[]};
+      if(!byRec[k])byRec[k]={id:k,name:nm,opened:0,closed:0,in_work_period:0,in_work_now:0,atStart:0,fast:0,nt:0,days:[]};
       // Открыто за период
       if(v.date_opened&&v.date_opened>=pFrom&&v.date_opened<=pTo)byRec[k].opened++;
       // Закрыто за период (Закрыта + Отменена)
       if(PLAN_CLOSED_STATUSES.includes(v.status)&&v.fact_date&&v.fact_date>=pFrom&&v.fact_date<=pTo)byRec[k].closed++;
-      // В работе (текущий статус)
-      if(['В работе','Приостановлена'].includes(v.status))byRec[k].in_work++;
+      // В работе за период
+      if(intersectsPeriod(v,pFrom,pTo))byRec[k].in_work_period++;
+      // В работе сейчас (текущий статус)
+      if(['В работе','Приостановлена'].includes(v.status))byRec[k].in_work_now++;
       // В работе на начало периода
       if(v.date_opened&&v.date_opened<pFrom&&(!v.fact_date||v.fact_date>=pFrom))byRec[k].atStart++;
       // % раньше норматива
@@ -753,20 +770,21 @@ async function renderAnalytics(){
       r.pct=r.nt?Math.round(r.fast/r.nt*100):0;
       r.avg=r.days.length?Math.round(r.days.reduce((a,b)=>a+b,0)/r.days.length):0;
       // % выполнения плана
-      const planKey=`${r.id}::${pFrom.slice(0,7)}`;
-      r.plan=PLANS[planKey]||0;
+      r.plan=sumPlanForPeriod([r.id],pFrom,pTo);
       r.planPct=r.plan>0?Math.min(Math.round(r.closed/r.plan*100),200):null;
     });
 
     document.getElementById('a-body').innerHTML=`
       ${(()=>{
         // % выполнения плана общий
-        const totalPlan=Object.values(PLANS).reduce((s,v)=>s+v,0);
+        const recIds = Object.values(byRec).map(r=>r.id);
+        const totalPlan=sumPlanForPeriod(recIds,pFrom,pTo);
         const totalPlanPct=totalPlan>0?Math.min(Math.round(closedInPeriod.length/totalPlan*100),200):null;
         return`<div class="stats-row">
           ${sv('На начало периода',activeAtStart.length,'из прошлых периодов','var(--blue)')}
           ${sv('Открыто за период',openedInPeriod.length,'новых вакансий','var(--acc)')}
-          ${sv('В работе сейчас',inWork.length,'В работе + Приостановлена','var(--blue)')}
+          ${sv('В работе за период',inWorkPeriod.length,'пересечение с периодом','var(--blue)')}
+          ${sv('В работе сейчас',inWorkNow.length,'актуальный срез','var(--blue)')}
           ${sv('Открыто на конец',openAtEndOfPeriod.length,'нагрузка на выходе','var(--amber)')}
           ${sv('Закрыто',closedInPeriod.length,'Закрыта + Отменена','var(--green)')}
           ${sv('Раньше норматива',pct+'%','Факт < Норматив',pct>=50?'var(--green)':'var(--amber)')}
@@ -787,12 +805,13 @@ async function renderAnalytics(){
             <div class="rec-av">${r.name.charAt(0)}</div>
             <div style="min-width:140px">
               <div style="font-weight:600;font-size:13px">${r.name}</div>
-              <div style="font-size:11px;color:var(--ink3)">${r.opened} откр. · ${r.in_work} в работе · ${r.atStart} на начало</div>
+              <div style="font-size:11px;color:var(--ink3)">${r.opened} откр. · ${r.in_work_period} в работе за период · ${r.atStart} на начало</div>
             </div>
             <div style="display:flex;gap:14px;margin-left:auto;flex-wrap:wrap;align-items:center">
               <div class="rs" style="text-align:right"><div class="rsv">${r.atStart}</div><div class="rsl">На начало</div></div>
               <div class="rs" style="text-align:right"><div class="rsv">${r.opened}</div><div class="rsl">Открыто</div></div>
-              <div class="rs" style="text-align:right"><div class="rsv" style="color:var(--blue)">${r.in_work}</div><div class="rsl">В работе</div></div>
+              <div class="rs" style="text-align:right"><div class="rsv" style="color:var(--blue)">${r.in_work_period}</div><div class="rsl">В работе за период</div></div>
+              <div class="rs" style="text-align:right"><div class="rsv" style="color:var(--blue)">${r.in_work_now}</div><div class="rsl">В работе сейчас</div></div>
               <div class="rs" style="text-align:right"><div class="rsv" style="color:var(--green)">${r.closed}</div><div class="rsl">Закрыто</div></div>
               <div class="rs" style="text-align:right"><div class="rsv">${r.avg}д</div><div class="rsl">Сред. дней</div></div>
               <div class="rs" style="text-align:right">
@@ -805,7 +824,7 @@ async function renderAnalytics(){
                   ?`<input type="number" class="plan-input" min="0" max="99"
                       value="${r.plan||''}" placeholder="—"
                       onchange="setPlan('${id}','${pFrom.slice(0,7)}',this.value)"
-                      title="План закрытия на период">`
+                      title="План закрытия (редактируется по месяцу начала периода)">`
                   :`<div class="rsv">${r.plan||'—'}</div>`
                 }
                 <div class="rsl">План</div>
@@ -828,9 +847,10 @@ async function renderAnalytics(){
         <div style="padding:12px 20px 16px;font-size:13px;color:var(--ink2);line-height:1.9">
           <b>Раньше норматива:</b> Факт &lt; Норматив. Для переданных вакансий считаются дни текущего рекрутера.<br>
           <b>В работе на начало периода:</b> все вакансии, созданные ДО начала периода и незакрытые на первый день — «хвосты» из прошлых периодов. Показывает исходную нагрузку рекрутера.<br>
+          <b>В работе за период:</b> вакансия попадает в метрику, если её жизненный цикл (от даты открытия до даты закрытия/передачи/отмены) пересекается с выбранным периодом.<br>
           <b>Открыто на конец периода:</b> вакансии, открытые до конца периода и НЕ закрытые до его конца — остаток нагрузки на последний день.<br>
           <b>Период закрытия:</b> минимум 1 день (открытая и закрытая в один день = 1 день).<br>
-          <b>% выполнения плана:</b> Закрыто ÷ План × 100%. Статус «Передана» — не считается закрытой. «Отменена» — считается.
+          <b>% выполнения плана:</b> Закрыто ÷ План × 100% по выбранному периоду. Статус «Передана» — не считается закрытой. «Отменена» — считается.
         </div>
       </div>`;
   };
