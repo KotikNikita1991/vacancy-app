@@ -14,7 +14,10 @@ async function api(action, body){
     var r = await fetch(url, {
       method: 'POST',
       redirect: 'follow',
-      headers: { 'Content-Type': 'application/json' },
+      // Important: avoid triggering CORS preflight (OPTIONS) on Apps Script.
+      // Apps Script often does not answer OPTIONS with CORS headers.
+      // Sending JSON as text/plain keeps request "simple" for CORS.
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(Object.assign({ action: action }, body)),
       signal: ctrl.signal
     });

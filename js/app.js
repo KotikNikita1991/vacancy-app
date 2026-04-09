@@ -28,6 +28,14 @@ function initLoginPage(){
   });
   const lb = document.getElementById('lbtn');
   if(lb) lb.addEventListener('click', () => doLogin());
+
+  // Advanced API override: hidden by default (for end users).
+  // Show only when opening the page with ?debug=1 (or ?debug=true).
+  const apiWrap = document.getElementById('api-url-wrap');
+  const qs = (() => { try { return new URLSearchParams(location.search); } catch(e){ return null; } })();
+  const debugOn = !!(qs && (qs.get('debug') === '1' || String(qs.get('debug')).toLowerCase() === 'true'));
+  if(apiWrap) apiWrap.style.display = debugOn ? '' : 'none';
+
   const apiOv = document.getElementById('api-url-ov');
   const apiSv = document.getElementById('api-url-save');
   const Cfg = (typeof VACANCY_APP !== 'undefined' && VACANCY_APP.config) ? VACANCY_APP.config : {};
