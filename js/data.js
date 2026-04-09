@@ -77,5 +77,5 @@ const CL_BLOCKS=[
 const CL_MAX=CL_BLOCKS.length;
 
 // Поля, которые рекрутер НЕ может редактировать
-const RECRUITER_LOCKED=['name','type','reason','vacancy_group'];
+const RECRUITER_LOCKED=[];
 

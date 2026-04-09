@@ -450,18 +450,18 @@ function openVacModal(vac=null){
           </div>
           <div class="fg">
             <label class="flbl">Норматив (дней)</label>
-            <input id="f-norm" class="finp" type="number" min="1" placeholder="авто по группе" value="${v.norm_days||''}">
+            <input id="f-norm" class="finp" type="number" min="1" placeholder="авто по группе" value="${v.norm_days||''}" ${dis?'disabled':''}>
             <span class="field-note">Заполняется автоматически по группе вакансии</span>
           </div>
           ${canEdit()?`
           <div class="fg">
             <label class="flbl">План (дедлайн)</label>
             <input id="f-plan" class="finp" type="date" value="${v.plan_date||''}">
-          </div>
+          </div>`:''}
           <div class="fg" id="fact-wrap">
             <label class="flbl" id="lbl-fact">Дата закрытия</label>
             <input id="f-fact" class="finp" type="date" value="${v.fact_date||''}">
-          </div>`:''}
+          </div>
 
           <!-- Блок передачи — только выбор рекрутера, дата = f-fact -->
           <div id="transfer-block" style="display:none;grid-column:1/-1">
@@ -502,8 +502,7 @@ function openVacModal(vac=null){
   const _fg=document.getElementById('f-group');
   if(_fs)_fs.addEventListener('change',e=>onStatusChange(e.target.value));
   if(_fg)_fg.addEventListener('change',e=>onGroupChange(e.target.value));
-  // Показываем блок передачи если статус уже "Передана"
-  if(v.status==='Передана')onStatusChange('Передана');
+  onStatusChange(v.status||'В работе');
 }
 
 function onGroupChange(grp){
