@@ -450,7 +450,7 @@ function renderVacTbl(vacs){
     const dc=isOver?'var(--red)':fastClosed?'var(--green)':'var(--ink)';
     const showNormCol=!isClosed&&norm>0;
     const grpBadge=v.vacancy_group?`<span style="font-size:10px;color:var(--ink3);background:var(--bg);padding:2px 7px;border-radius:5px;white-space:nowrap">${escapeHtml(v.vacancy_group)}</span>`:'';
-    const overBadge=isOver?'<span class="status-overdue">Просрочено</span>':'';
+    const overNote=isOver?'<span class="dover" style="color:var(--red)">просрочено</span>':'';
     const nm=escapeHtml(v.name||'');
     return`<tr>
       <td style="font-size:12px;color:var(--ink2);white-space:nowrap">${fru(v.date_opened)}</td>
@@ -461,18 +461,18 @@ function renderVacTbl(vacs){
       </td>
       <td>${grpBadge}</td>
       ${showRec?`<td style="font-size:12px;color:var(--ink2);white-space:nowrap">${escapeHtml(v.current_recruiter_name||'')}</td>`:''}
-      <td style="vertical-align:top">
+      <td style="vertical-align:middle">
         <span class="badge ${sc}">${escapeHtml(v.status)}</span>
-        ${overBadge}
       </td>
       <td style="font-size:12px;color:var(--ink2);white-space:nowrap">${fru(v.fact_date||'')||'—'}</td>
       <td style="font-size:12px;color:var(--ink2);white-space:nowrap">${escapeHtml(v.salary_offer||'—')}</td>
       <td>
         <span class="dv" style="color:${dc}">${days}д</span>
         ${showNormCol?`<span class="dn">/ ${norm}</span>`:''}
+        ${overNote}
         ${fastClosed?'<span class="dover" style="color:var(--green)">раньше срока ✓</span>':''}
       </td>
-      <td style="white-space:nowrap;display:flex;gap:4px;align-items:flex-start;padding-top:12px">
+      <td style="white-space:nowrap;display:flex;gap:4px;align-items:center">
         <button type="button" class="btn-icon-pencil" data-act="edit-vac" data-vacid="${escapeHtml(v.id)}" title="${escapeHtml(editTitle)}" aria-label="${escapeHtml(editTitle)}">${IC_PENCIL}</button>
         ${canDelete()?`<button type="button" class="btn-danger" data-act="del-vac" data-vacid="${escapeHtml(v.id)}">✕</button>`:''}
       </td>
