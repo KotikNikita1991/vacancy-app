@@ -3,9 +3,103 @@ let PERIOD=defPeriod(), FQ='';
 // Пустой массив = «все» (мультивыбор фильтров)
 let FStat=[], FGrp=[], FRec=[];
 const FILTER_STATUS_OPTS=['В работе','Закрыта','Приостановлена','Отменена','Передана'];
+// Сортировка таблицы дашборда
+let DASH_SORT={key:'date_opened',dir:'desc'};
 // Планы: {recruiterId: {month(YYYY-MM): count}}
 let PLANS = {};
 let UL = [];
+
+function filterDdHtml(ddId,label,opts,selected){
+  const boxes=opts.map(o=>{
+    const esc=escapeHtml(o);
+    const on=selected.includes(o)?' checked':'';
+    return`<label class="filter-dd-item"><input type="checkbox" value="${esc}"${on}><span>${esc}</span></label>`;
+  }).join('');
+  return`<div class="filter-dd" id="${ddId}">
+    <button type="button" class="filter-dd-btn" aria-expanded="false" aria-haspopup="listbox">
+      <span class="filter-dd-lbl">${escapeHtml(label)}</span><span class="filter-dd-cnt"></span><span class="filter-dd-chev">▾</span>
+    </button>
+    <div class="filter-dd-panel" hidden>
+      <div class="filter-dd-actions"><button type="button" class="filter-dd-clear">Снять выбор</button></div>
+      <div class="filter-dd-list" role="list">${boxes}</div>
+    </div>
+  </div>`;
+}
+
+function filterDdSyncBtn(wrapId,count){
+  const w=document.getElementById(wrapId);
+  if(!w)return;
+  const cnt=w.querySelector('.filter-dd-cnt');
+  if(cnt)cnt.textContent=count?` (${count})`:'';
+}
+
+function bindFilterDd(wrapId,getArr,setArr,after){
+  const w=document.getElementById(wrapId);
+  if(!w)return;
+  const btn=w.querySelector('.filter-dd-btn');
+  const panel=w.querySelector('.filter-dd-panel');
+  const list=w.querySelector('.filter-dd-list');
+  const clear=w.querySelector('.filter-dd-clear');
+  const read=()=>Array.from(list.querySelectorAll('input:checked')).map(i=>i.value);
+  const sync=()=>{filterDdSyncBtn(wrapId,getArr().length);};
+  sync();
+  btn.addEventListener('click',e=>{
+    e.stopPropagation();
+    const wasOpen=!panel.hidden;
+    closeAllFilterDd();
+    if(!wasOpen){panel.hidden=false;btn.setAttribute('aria-expanded','true');}
+  });
+  list.addEventListener('change',()=>{setArr(read());sync();after();});
+  if(clear)clear.addEventListener('click',e=>{
+    e.stopPropagation();
+    list.querySelectorAll('input').forEach(i=>{i.checked=false;});
+    setArr([]);sync();after();
+  });
+  panel.addEventListener('click',e=>e.stopPropagation());
+}
+
+function closeAllFilterDd(){
+  document.querySelectorAll('.filter-dd-panel').forEach(p=>{p.hidden=true;});
+  document.querySelectorAll('.filter-dd-btn').forEach(b=>b.setAttribute('aria-expanded','false'));
+}
+
+function initDocFilterDdClose(){
+  if(document.body._vacFddDoc)return;
+  document.body._vacFddDoc=true;
+  document.addEventListener('click',()=>closeAllFilterDd());
+}
+
+function salarySortKey(s){
+  if(s==null||s==='')return 0;
+  const d=String(s).replace(/\D/g,'');
+  return parseInt(d.slice(0,9),10)||0;
+}
+
+function sortVacanciesForDash(list,key,dir){
+  const mult=dir==='desc'?-1:1;
+  const val=v=>{
+    switch(key){
+      case 'date_opened':return v.date_opened||'';
+      case 'name':return (v.name||'').toLowerCase();
+      case 'vacancy_group':return v.vacancy_group||'';
+      case 'recruiter':return v.current_recruiter_name||'';
+      case 'status':return v.status||'';
+      case 'fact_date':return v.fact_date||'';
+      case 'salary_offer':return salarySortKey(v.salary_offer);
+      case 'days':return Number(v.days_total)||0;
+      default:return'';
+    }
+  };
+  const cmp=(a,b)=>{
+    const va=val(a),vb=val(b);
+    if(va<vb)return-1;
+    if(va>vb)return 1;
+    return 0;
+  };
+  return[...list].sort((a,b)=>cmp(a,b)*mult);
+}
+
+const IC_PENCIL='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
 
 // ══ API ══════════════════════════════════════════════
 // ══ LOGIN ════════════════════════════════════════════
@@ -80,6 +174,7 @@ async function startApp(){
   try{ Object.assign(PLANS, loadPlans()||{}); }catch(e){}
   initGlobalActs();
   initEscClose();
+  initDocFilterDdClose();
   const rr=await api('getReference');
   if(rr?.ok){REF=rr.reference;updateGroupNorm();}
   navigate('dashboard');
@@ -167,7 +262,6 @@ function buildDash(recNames,groups){
     {l:'Всё время',   f:'2020-01-01',           t:fd(new Date(y+1,0,1))},
   ];
   const showRec=U.role!=='recruiter';
-  const optMulti=(arr,sel)=>arr.map(s=>`<option value="${escapeHtml(s)}"${sel.includes(s)?' selected':''}>${escapeHtml(s)}</option>`).join('');
   return`
   <div class="toolbar">
     <span class="tbar-lbl">Период</span>
@@ -184,11 +278,9 @@ function buildDash(recNames,groups){
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <input id="fsrch" placeholder="Поиск..." value="${FQ}">
     </div>
-    <div class="fsel-hint" title="Несколько значений: Ctrl+клик (⌘ на Mac). Пустой выбор = все.">Статусы · Ctrl+клик</div>
-    <select multiple class="fsel fsel-multi" id="fst" title="Несколько статусов">${optMulti(FILTER_STATUS_OPTS,FStat)}</select>
-    <div class="fsel-hint">Группы</div>
-    <select multiple class="fsel fsel-multi" id="fgr" title="Несколько групп">${optMulti(groups,FGrp)}</select>
-    ${showRec?`<div class="fsel-hint">Рекрутеры</div><select multiple class="fsel fsel-multi" id="frec" title="Несколько рекрутеров">${optMulti(recNames,FRec)}</select>`:''}
+    ${filterDdHtml('fdd-dash-st','Статусы',FILTER_STATUS_OPTS,FStat)}
+    ${filterDdHtml('fdd-dash-grp','Группы',groups,FGrp)}
+    ${showRec?filterDdHtml('fdd-dash-rec','Рекрутеры',recNames,FRec):''}
     <button type="button" class="papply" id="btn-dash-reset">Сбросить</button>
     ${canCreate()?`<button type="button" class="btn-primary" id="btn-new-vac">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -224,14 +316,11 @@ function bindDash(){
     }else toast('Укажи корректный диапазон дат','err');
   };
   const fs=document.getElementById('fsrch');
-  const st=document.getElementById('fst');
-  const gr=document.getElementById('fgr');
-  const rc=document.getElementById('frec');
-  const readMulti=id=>{const el=document.getElementById(id);if(!el)return[];return Array.from(el.selectedOptions).map(o=>o.value);};
   if(fs)fs.oninput=e=>{FQ=e.target.value;saveDashPrefs();refreshDash()};
-  if(st)st.onchange=()=>{FStat=readMulti('fst');saveDashPrefs();refreshDash()};
-  if(gr)gr.onchange=()=>{FGrp=readMulti('fgr');saveDashPrefs();refreshDash()};
-  if(rc)rc.onchange=()=>{FRec=readMulti('frec');saveDashPrefs();refreshDash()};
+  const afterDashFilters=()=>{saveDashPrefs();refreshDash();};
+  bindFilterDd('fdd-dash-st',()=>FStat,v=>{FStat=v;},afterDashFilters);
+  bindFilterDd('fdd-dash-grp',()=>FGrp,v=>{FGrp=v;},afterDashFilters);
+  bindFilterDd('fdd-dash-rec',()=>FRec,v=>{FRec=v;},afterDashFilters);
   const br=document.getElementById('btn-dash-reset');
   if(br)br.addEventListener('click',()=>{resetF();});
   const bn=document.getElementById('btn-new-vac');
@@ -326,6 +415,11 @@ function sv(lbl,val,sub,col){
   return`<div class="sc"><div class="sc-lbl">${lbl}</div><div class="sc-val">${val}</div>${sub?`<div class="sc-sub" style="color:${col}">${sub}</div>`:''}</div>`;
 }
 
+function thSort(key,label){
+  const on=DASH_SORT.key===key?` sorted sorted-${DASH_SORT.dir}`:'';
+  return`<th class="th-sort${on}" data-sort="${key}" scope="col">${escapeHtml(label)}<span class="sort-ind">${DASH_SORT.key===key?(DASH_SORT.dir==='asc'?'▲':'▼'):''}</span></th>`;
+}
+
 function renderVacTbl(vacs){
   const el=document.getElementById('vtbl');if(!el)return;
   const showRec=U.role!=='recruiter';
@@ -333,42 +427,53 @@ function renderVacTbl(vacs){
     el.innerHTML=`<div class="empty" style="padding:36px"><p style="color:var(--ink3)">Нет вакансий по выбранным фильтрам</p></div>`;
     return;
   }
+  const sorted=sortVacanciesForDash(vacs,DASH_SORT.key,DASH_SORT.dir);
+  const editTitle=canEdit()?'Редактировать':'Просмотр';
   el.innerHTML=`<table><thead><tr>
-    <th>№</th><th>Дата</th><th>Вакансия</th><th>Группа</th>
-    ${showRec?'<th>Рекрутер</th>':''}
-    <th>Статус</th><th>Дата закрытия (отмены)</th><th>ЗП оффер</th><th>Дней/норм</th><th></th>
+    ${thSort('date_opened','Дата')}
+    ${thSort('name','Вакансия')}
+    ${thSort('vacancy_group','Группа')}
+    ${showRec?thSort('recruiter','Рекрутер'):''}
+    ${thSort('status','Статус')}
+    ${thSort('fact_date','Дата закрытия')}
+    ${thSort('salary_offer','ЗП оффер')}
+    ${thSort('days','Дней / норм')}
+    <th></th>
   </tr></thead><tbody>
-  ${vacs.map(v=>{
+  ${sorted.map(v=>{
     const sc=SC_MAP[v.status]||'sc2';
     const days=Number(v.days_total)||0;
     const norm=Number(v.norm_days)||0;
-    const over=!v.fact_date&&days>norm&&norm>0;
-    const fast=v.fact_date&&days<norm&&norm>0;
-    const dc=over?'var(--red)':fast?'var(--green)':'var(--ink)';
-    const grpBadge=v.vacancy_group?`<span style="font-size:10px;color:var(--ink3);background:var(--bg);padding:2px 7px;border-radius:5px;white-space:nowrap">${escapeHtml(v.vacancy_group)}</span>`:''
+    const isClosed=!!(v.fact_date&&FINAL_STATUSES.includes(v.status));
+    const isOver=norm>0&&days>norm;
+    const fastClosed=isClosed&&norm>0&&days<norm;
+    const dc=isOver?'var(--red)':fastClosed?'var(--green)':'var(--ink)';
+    const showNormCol=!isClosed&&norm>0;
+    const grpBadge=v.vacancy_group?`<span style="font-size:10px;color:var(--ink3);background:var(--bg);padding:2px 7px;border-radius:5px;white-space:nowrap">${escapeHtml(v.vacancy_group)}</span>`:'';
+    const overBadge=isOver?'<span class="status-overdue">Просрочено</span>':'';
+    const nm=escapeHtml(v.name||'');
     return`<tr>
-      <td style="font-size:12px;color:var(--ink3);font-weight:500;white-space:nowrap">${escapeHtml(v.num||'—')}</td>
       <td style="font-size:12px;color:var(--ink2);white-space:nowrap">${fru(v.date_opened)}</td>
-      <td>
-        <div class="vn">${escapeHtml(v.name)}</div>
+      <td class="td-vac-name">
+        <div class="vn-clamp" title="${nm}">${nm}</div>
         <div style="font-size:11px;color:var(--ink3)">${escapeHtml(v.project&&v.project!=='—'?v.project:v.department||'')}</div>
         ${v.transferred?`<div class="btag">↗ от ${escapeHtml(v.transferred_from_name||'')} · ${fru(v.transfer_date)}</div>`:''}
       </td>
       <td>${grpBadge}</td>
       ${showRec?`<td style="font-size:12px;color:var(--ink2);white-space:nowrap">${escapeHtml(v.current_recruiter_name||'')}</td>`:''}
-      <td><span class="badge ${sc}">${escapeHtml(v.status)}</span></td>
+      <td style="vertical-align:top">
+        <span class="badge ${sc}">${escapeHtml(v.status)}</span>
+        ${overBadge}
+      </td>
       <td style="font-size:12px;color:var(--ink2);white-space:nowrap">${fru(v.fact_date||'')||'—'}</td>
       <td style="font-size:12px;color:var(--ink2);white-space:nowrap">${escapeHtml(v.salary_offer||'—')}</td>
       <td>
         <span class="dv" style="color:${dc}">${days}д</span>
-        <span class="dn">/ ${norm||'—'}</span>
-        ${over?'<span class="dover" style="color:var(--red)">просрочено</span>':''}
-        ${fast?'<span class="dover" style="color:var(--green)">раньше срока ✓</span>':''}
+        ${showNormCol?`<span class="dn">/ ${norm}</span>`:''}
+        ${fastClosed?'<span class="dover" style="color:var(--green)">раньше срока ✓</span>':''}
       </td>
-      <td style="white-space:nowrap;display:flex;gap:4px;align-items:center">
-        <button type="button" class="btn-edit" data-act="edit-vac" data-vacid="${escapeHtml(v.id)}">
-          ${canEdit()?'Изменить':'Просмотр'}
-        </button>
+      <td style="white-space:nowrap;display:flex;gap:4px;align-items:flex-start;padding-top:12px">
+        <button type="button" class="btn-icon-pencil" data-act="edit-vac" data-vacid="${escapeHtml(v.id)}" title="${escapeHtml(editTitle)}" aria-label="${escapeHtml(editTitle)}">${IC_PENCIL}</button>
         ${canDelete()?`<button type="button" class="btn-danger" data-act="del-vac" data-vacid="${escapeHtml(v.id)}">✕</button>`:''}
       </td>
     </tr>`;
@@ -697,7 +802,6 @@ async function renderAnalytics(){
   const recNames=[...new Set(allV.map(v=>v.current_recruiter_name).filter(Boolean))];
   const deptNames=[...new Set(allV.map(v=>v.department).filter(Boolean))];
   const groups=[...VAC_GROUPS];
-  const optMultiA=(arr,sel)=>arr.map(s=>`<option value="${escapeHtml(s)}"${sel.includes(s)?' selected':''}>${escapeHtml(s)}</option>`).join('');
   const n=new Date(),y=n.getFullYear(),m=n.getMonth();
   const presets=[
     {l:'Этот месяц',  f:fd(new Date(y,m,1)),   t:fd(new Date(y,m+1,0))},
@@ -884,14 +988,10 @@ async function renderAnalytics(){
     </div>
     <div class="toolbar" style="margin-bottom:16px">
       <span class="tbar-lbl">Фильтры</span>
-      <div class="fsel-hint">Статусы</div>
-      <select multiple class="fsel fsel-multi" id="a-st">${optMultiA(FILTER_STATUS_OPTS,AStat)}</select>
-      <div class="fsel-hint">Рекрутеры</div>
-      <select multiple class="fsel fsel-multi" id="a-rec">${optMultiA(recNames,ARec)}</select>
-      <div class="fsel-hint">Группы</div>
-      <select multiple class="fsel fsel-multi" id="a-grp">${optMultiA(groups,AGrp)}</select>
-      <div class="fsel-hint">Подразделения</div>
-      <select multiple class="fsel fsel-multi" id="a-dept">${optMultiA(deptNames,ADept)}</select>
+      ${filterDdHtml('fdd-a-st','Статусы',FILTER_STATUS_OPTS,AStat)}
+      ${filterDdHtml('fdd-a-rec','Рекрутеры',recNames,ARec)}
+      ${filterDdHtml('fdd-a-grp','Группы',groups,AGrp)}
+      ${filterDdHtml('fdd-a-dept','Подразделения',deptNames,ADept)}
       <div class="fsearch" style="flex:1 1 120px;min-width:100px">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input id="a-name" placeholder="Название...">
@@ -916,11 +1016,10 @@ async function renderAnalytics(){
     if(f&&t&&f<=t){APeriod={from:f,to:t};document.querySelectorAll('.pbtn[data-f]').forEach(b=>{if(b.id.startsWith('ap-'))b.classList.remove('on')});render();}
     else toast('Укажи корректный диапазон дат','err');
   };
-  const readMA=id=>{const x=document.getElementById(id);if(!x)return[];return Array.from(x.selectedOptions).map(o=>o.value);};
-  document.getElementById('a-st').onchange=()=>{AStat=readMA('a-st');render()};
-  document.getElementById('a-rec').onchange=()=>{ARec=readMA('a-rec');render()};
-  document.getElementById('a-grp').onchange=()=>{AGrp=readMA('a-grp');render()};
-  document.getElementById('a-dept').onchange=()=>{ADept=readMA('a-dept');render()};
+  bindFilterDd('fdd-a-st',()=>AStat,v=>{AStat=v;},render);
+  bindFilterDd('fdd-a-rec',()=>ARec,v=>{ARec=v;},render);
+  bindFilterDd('fdd-a-grp',()=>AGrp,v=>{AGrp=v;},render);
+  bindFilterDd('fdd-a-dept',()=>ADept,v=>{ADept=v;},render);
   document.getElementById('a-name').oninput=e=>{ANameFilter=e.target.value;render()};
   render();
 }
@@ -934,6 +1033,17 @@ function setPlan(recId,month,val){
 
 // ══ CHECKLIST ════════════════════════════════════════
 let CL_STATE={vacancyId:'',vacancyName:'',candidateName:'',interviewDate:'',answers:{},notes:'',step:1};
+
+async function deleteAssessment(id){
+  if(!canDelete()||!id)return;
+  if(!confirm('Удалить эту оценку? Действие необратимо.'))return;
+  const res=await api('deleteAssessment',{id, caller_role:U.role});
+  if(res?.ok||res===null){
+    ASSESSMENTS=ASSESSMENTS.filter(a=>String(a.id)!==String(id));
+    toast('Оценка удалена');
+    await renderChecklist();
+  }else toast(res?.error||'Ошибка','err');
+}
 
 async function renderChecklist(){
   const el=document.getElementById('content');
@@ -967,15 +1077,18 @@ function renderAssessmentList(el){
           <button type="button" class="btn-primary" style="margin-top:16px" data-act="cl-new">Начать оценку</button>
         </div></div>`
       :`<div class="card"><div class="tbl-wrap"><table>
-          <thead><tr><th>Кандидат</th><th>Вакансия</th><th>Рекрутер</th><th>Дата</th><th>Балл</th><th>Рекомендация</th><th></th></tr></thead>
+          <thead><tr><th>Кандидат</th><th>Вакансия</th><th>Рекрутер</th><th>Дата</th><th>Балл</th><th>Действия</th></tr></thead>
           <tbody>${ASSESSMENTS.map(a=>{
             return`<tr>
-              <td><div style="font-weight:600;font-size:13px">${a.candidate_name}</div></td>
-              <td><div style="font-size:12px;color:var(--ink2)">${a.vacancy_name||'—'}</div></td>
-              <td><div style="font-size:12px;color:var(--ink2)">${a.recruiter_name}</div></td>
-              <td><div style="font-size:12px;color:var(--ink3)">${a.interview_date}</div></td>
+              <td><div style="font-weight:600;font-size:13px">${escapeHtml(a.candidate_name||'')}</div></td>
+              <td><div style="font-size:12px;color:var(--ink2)">${escapeHtml(a.vacancy_name||'—')}</div></td>
+              <td><div style="font-size:12px;color:var(--ink2)">${escapeHtml(a.recruiter_name||'')}</div></td>
+              <td><div style="font-size:12px;color:var(--ink3)">${escapeHtml(a.interview_date||'')}</div></td>
               <td><div style="font-size:12px;color:var(--ink3)">${Object.keys(a.scores||{}).length}/${CL_BLOCKS.length} блоков</div></td>
-              <td><button type="button" class="btn-sm" data-act="cl-view" data-aid="${escapeHtml(a.id)}">Открыть</button></td>
+              <td style="white-space:nowrap"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                <button type="button" class="btn-sm" data-act="cl-view" data-aid="${escapeHtml(a.id)}">Открыть</button>
+                ${canDelete()?`<button type="button" class="btn-danger" data-act="cl-del" data-aid="${escapeHtml(a.id)}" title="Удалить">✕</button>`:''}
+              </div></td>
             </tr>`;
           }).join('')}</tbody>
         </table></div></div>`
@@ -1377,6 +1490,15 @@ function initGlobalActs(){
   if(document.body._vacGlobalActs) return;
   document.body._vacGlobalActs = true;
   document.addEventListener('click', (ev)=>{
+    const _vt=document.getElementById('vtbl');
+    const sortTh=ev.target.closest('#vtbl thead th[data-sort]');
+    if(_vt&&sortTh&&_vt.contains(sortTh)){
+      const k=sortTh.dataset.sort;
+      if(DASH_SORT.key===k)DASH_SORT.dir=DASH_SORT.dir==='asc'?'desc':'asc';
+      else{DASH_SORT.key=k;DASH_SORT.dir=k==='name'||k==='status'||k==='vacancy_group'||k==='recruiter'?'asc':'desc';}
+      refreshDash();
+      return;
+    }
     const el = ev.target.closest('[data-act]');
     if(!el) return;
     const act = el.dataset.act;
@@ -1404,6 +1526,8 @@ function initGlobalActs(){
       CL_STATE.step=1; renderCLStep1();
     } else if(act==='cl-submit'){
       clSubmit();
+    } else if(act==='cl-del'){
+      deleteAssessment(el.dataset.aid);
     } else if(act==='user-toggle'){
       const uid = el.getAttribute('data-uid');
       const ua = el.getAttribute('data-uactive')==='1';
@@ -1422,19 +1546,19 @@ function initEscClose(){
   document.body._vacEsc = true;
   document.addEventListener('keydown', (e)=>{
     if(e.key !== 'Escape') return;
+    closeAllFilterDd();
     if(document.getElementById('vac-modal')) closeModal();
     if(document.getElementById('user-modal')) closeUserModal();
   });
 }
 
 function exportCsvVacancies(){
-  const rows = applyF();
+  const rows = sortVacanciesForDash(applyF(),DASH_SORT.key,DASH_SORT.dir);
   const spec = [
-    {k:'num',h:'№'},
     {k:'date_opened',h:'Дата открытия'},
     {k:'name',h:'Вакансия'},
     {k:'status',h:'Статус'},
-    {k:'fact_date',h:'Дата закрытия (отмены)'},
+    {k:'fact_date',h:'Дата закрытия'},
     {k:'vacancy_group',h:'Группа'},
     {k:'current_recruiter_name',h:'Рекрутер'},
     {k:'salary_offer',h:'ЗП оффер'},
