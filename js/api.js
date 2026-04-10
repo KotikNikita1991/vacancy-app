@@ -1,41 +1,60 @@
 // api.js
 async function api(action, body){
   body = body || {};
-  var url = getApiUrl();
   var cfg = (typeof VACANCY_APP !== 'undefined' && VACANCY_APP.config) ? VACANCY_APP.config : {};
-  if(!url || String(url).includes('ВСТАВЬ')){
+  var urls = (typeof getApiUrlCandidates === 'function') ? getApiUrlCandidates() : [getApiUrl()];
+  urls = urls.filter(function(u){ return u && String(u).indexOf('ВСТАВЬ') === -1; });
+  if(!urls.length){
     if(typeof showDemoBar === 'function') showDemoBar();
     return null;
   }
-  var ctrl = new AbortController();
-  var ms = cfg.API_TIMEOUT_MS || 20000;
-  var t = setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, ms);
-  try{
-    var r = await fetch(url, {
-      method: 'POST',
-      redirect: 'follow',
-      // Important: avoid triggering CORS preflight (OPTIONS) on Apps Script.
-      // Apps Script often does not answer OPTIONS with CORS headers.
-      // Sending JSON as text/plain keeps request "simple" for CORS.
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(Object.assign({ action: action }, body)),
-      signal: ctrl.signal
-    });
-    clearTimeout(t);
-    if(!r.ok){
-      setBarError('HTTP ' + r.status);
-      return { ok: false, error: 'HTTP ' + r.status };
-    }
-    var text = await r.text();
+  var lastErr = null;
+  for(var i = 0; i < urls.length; i++){
+    var url = urls[i];
+    var ctrl = new AbortController();
+    var ms = cfg.API_TIMEOUT_MS || 20000;
+    var t = setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, ms);
     try{
-      return JSON.parse(text);
+      var r = await fetch(url, {
+        method: 'POST',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(Object.assign({ action: action }, body)),
+        signal: ctrl.signal
+      });
+      clearTimeout(t);
+      if(!r.ok){
+        lastErr = { ok: false, error: 'HTTP ' + r.status };
+        if(r.status >= 500 || r.status === 0) continue;
+        setBarError('HTTP ' + r.status);
+        return lastErr;
+      }
+      var text = await r.text();
+      var parsed;
+      try{
+        parsed = JSON.parse(text);
+      }catch(e){
+        lastErr = { ok: false, error: String(text).slice(0, 200) };
+        continue;
+      }
+      try{
+        if(cfg.LS_API_LAST_OK) sessionStorage.setItem(cfg.LS_API_LAST_OK, url);
+      }catch(e2){}
+      if(typeof hideBar === 'function' && parsed && parsed.ok) hideBar();
+      return parsed;
     }catch(e){
-      return { ok: false, error: String(text).slice(0, 200) };
+      clearTimeout(t);
+      var msg = e && e.name === 'AbortError' ? 'Таймаут запроса' : String(e && (e.message || e) || e);
+      if(i === urls.length - 1){
+        setBarError(msg);
+        return null;
+      }
     }
-  }catch(e){
-    clearTimeout(t);
-    setBarError(e && e.name === 'AbortError' ? 'Таймаут запроса' : String(e && (e.message || e) || e));
-    return null;
   }
+  if(lastErr && lastErr.error){
+    setBarError(lastErr.error);
+    return lastErr;
+  }
+  return null;
 }
 

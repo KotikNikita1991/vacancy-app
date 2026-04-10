@@ -10,6 +10,7 @@
   --blue:#1A5FA0;--bbg:#E5EFF9;
   --red:#B83232;--rbg:#FDEAEA;
   --gray:#6B6880;--grbg:#EEEDF4;
+  --violet:#6B4A9A;--vbg:#EDE4F5;
   --r:10px;--rl:16px;--font:'Onest','Segoe UI',sans-serif;--tr:0.17s ease;
 }
 *{box-sizing:border-box;margin:0;padding:0}
@@ -69,6 +70,9 @@ nav{flex:1;padding:10px 8px;overflow-y:auto}
 .papply:hover{background:#6a4d91}
 .fsel{padding:5px 9px;border-radius:8px;border:1px solid var(--bg2);background:var(--sur);color:var(--ink2);font-size:12px;font-family:var(--font)}
 .fsel:focus{outline:none;border-color:var(--acc)}
+.fsel-multi{min-width:140px;min-height:88px;padding:6px;line-height:1.35}
+.fsel-multi option{padding:2px 0}
+.fsel-hint{font-size:10px;color:var(--ink3);max-width:220px;line-height:1.35}
 .fsearch{position:relative;flex:1 1 160px;min-width:120px}
 .fsearch svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);pointer-events:none}
 .fsearch input{width:100%;padding:5px 9px 5px 29px;border-radius:8px;border:1px solid var(--bg2);background:var(--sur);color:var(--ink);font-size:12px;font-family:var(--font)}
@@ -94,11 +98,15 @@ td{padding:10px 14px;vertical-align:middle}
 .dn{font-size:11px;color:var(--ink3);margin-left:3px}
 .dover{display:block;font-size:10px}
 .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
-.sw{background:var(--gbg);color:var(--green)}
-.sc2{background:var(--grbg);color:var(--gray)}
+/* Статусы вакансий: В работе — синий, Закрыта — зелёный, Приостановлена — жёлтый, Отменена — красный, Передана — сиреневый */
+.sw{background:var(--bbg);color:var(--blue)}
+.sc2{background:var(--gbg);color:var(--green)}
 .sp{background:var(--abg);color:var(--amber)}
 .sca{background:var(--rbg);color:var(--red)}
-.st{background:var(--bbg);color:var(--blue)}
+.st{background:var(--vbg);color:var(--violet)}
+.ass-ok{background:var(--gbg);color:var(--green)}
+.ass-bad{background:var(--rbg);color:var(--red)}
+.ass-mid{background:var(--abg);color:var(--amber)}
 /* MODAL */
 .modal-overlay{position:fixed;inset:0;background:rgba(30,26,60,.5);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px;backdrop-filter:blur(2px)}
 .modal{background:var(--sur);border-radius:var(--rl);width:100%;max-width:680px;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(30,26,60,.25)}

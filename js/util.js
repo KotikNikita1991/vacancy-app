@@ -20,7 +20,7 @@ function loadDashPrefs(){
 }
 function saveDashPrefs(){
   const c = (typeof VACANCY_APP!=='undefined' && VACANCY_APP.config) ? VACANCY_APP.config : {};
-  saveJson(c.LS_DASH_PREFS || 'vacancy_app_dash_prefs', { PERIOD, FS, FR, FG, FQ });
+  saveJson(c.LS_DASH_PREFS || 'vacancy_app_dash_prefs', { PERIOD, FStat, FGrp, FRec, FQ });
 }
 function loadPlans(){
   const c = (typeof VACANCY_APP!=='undefined' && VACANCY_APP.config) ? VACANCY_APP.config : {};

@@ -1,5 +1,8 @@
 let U=null, VACS=[], ASSESSMENTS=[], PAGE='dashboard', COLSB=false;
-let PERIOD=defPeriod(), FS='Все', FR='Все', FQ='', FG='Все';
+let PERIOD=defPeriod(), FQ='';
+// Пустой массив = «все» (мультивыбор фильтров)
+let FStat=[], FGrp=[], FRec=[];
+const FILTER_STATUS_OPTS=['В работе','Закрыта','Приостановлена','Отменена','Передана'];
 // Планы: {recruiterId: {month(YYYY-MM): count}}
 let PLANS = {};
 let UL = [];
@@ -48,7 +51,7 @@ async function doLogin(){
   document.getElementById('lerr').style.display='none';
 
   const res=await api('login',{login,password:pass});
-  if(res?.ok){if(typeof hideBar==='function')hideBar();U=res.user;startApp();return;}
+  if(res?.ok&&res.user){if(typeof hideBar==='function')hideBar();U=res.user;startApp();return;}
   showLErr(res?.error||(res===null?'Сервер недоступен. Попробуйте позже.':'Неверный логин или пароль'));
   rstBtn();
 }
@@ -98,7 +101,7 @@ function navigate(page){
 }
 function toggleSB(){COLSB=!COLSB;document.getElementById('sidebar').classList.toggle('col',COLSB)}
 function doLogout(){
-  U=null;VACS=[];ASSESSMENTS=[];PLANS={};PERIOD=defPeriod();FS='Все';FR='Все';FQ='';FG='Все';
+  U=null;VACS=[];ASSESSMENTS=[];PLANS={};PERIOD=defPeriod();FStat=[];FGrp=[];FRec=[];FQ='';
   document.getElementById('app').style.display='none';
   document.getElementById('ls').style.display='flex';
   document.getElementById('il').value='';
@@ -109,6 +112,11 @@ function doLogout(){
 
 // ══ ROUTER ═══════════════════════════════════════════
 async function renderPage(p){
+  if(!U||!U.role){
+    const el=document.getElementById('content');
+    if(el)el.innerHTML='<div class="card"><div class="empty" style="padding:48px"><h3>Сессия недоступна</h3><p style="color:var(--ink3);margin-top:8px">Выйдите и войдите снова.</p></div></div>';
+    return;
+  }
   if(p==='dashboard')await renderDash();
   else if(p==='analytics')await renderAnalytics();
   else if(p==='checklist')await renderChecklist();
@@ -127,15 +135,21 @@ function canSetPlan(){return U.role==='manager'||U.role==='admin'}
 async function renderDash(){
   const vr=await api('getVacancies',{role:U.role,recruiter_id:U.id});
   VACS=vr?.ok?vr.vacancies:(U.role==='recruiter'?DV.filter(v=>v.recruiter_id===U.id||v.current_recruiter_id===U.id):DV);
-  const recNames=['Все',...new Set(VACS.map(v=>v.current_recruiter_name).filter(Boolean))];
-  const groups=['Все',...VAC_GROUPS];
+  const recNames=[...new Set(VACS.map(v=>v.current_recruiter_name).filter(Boolean))];
+  const groups=[...VAC_GROUPS];
   try{
     const dp=loadDashPrefs();
     if(dp&&typeof dp==='object'){
       if(dp.PERIOD&&dp.PERIOD.from&&dp.PERIOD.to)PERIOD=dp.PERIOD;
-      if(dp.FS!==undefined)FS=dp.FS;
-      if(dp.FR!==undefined)FR=dp.FR;
-      if(dp.FG!==undefined)FG=dp.FG;
+      if(Array.isArray(dp.FStat))FStat=dp.FStat;
+      else if(dp.FS==='Все'||dp.FS===undefined||dp.FS==='')FStat=[];
+      else if(typeof dp.FS==='string')FStat=[dp.FS];
+      if(Array.isArray(dp.FGrp))FGrp=dp.FGrp;
+      else if(dp.FG==='Все'||dp.FG===undefined||dp.FG==='')FGrp=[];
+      else if(typeof dp.FG==='string')FGrp=[dp.FG];
+      if(Array.isArray(dp.FRec))FRec=dp.FRec;
+      else if(dp.FR==='Все'||dp.FR===undefined||dp.FR==='')FRec=[];
+      else if(typeof dp.FR==='string')FRec=[dp.FR];
       if(dp.FQ!==undefined)FQ=dp.FQ;
     }
   }catch(e){}
@@ -152,8 +166,8 @@ function buildDash(recNames,groups){
     {l:'Год',         f:fd(new Date(y,0,1)),   t:fd(new Date(y,11,31))},
     {l:'Всё время',   f:'2020-01-01',           t:fd(new Date(y+1,0,1))},
   ];
-  const statuses=['Все','В работе','Закрыта','Приостановлена','Отменена','Передана'];
   const showRec=U.role!=='recruiter';
+  const optMulti=(arr,sel)=>arr.map(s=>`<option value="${escapeHtml(s)}"${sel.includes(s)?' selected':''}>${escapeHtml(s)}</option>`).join('');
   return`
   <div class="toolbar">
     <span class="tbar-lbl">Период</span>
@@ -170,9 +184,11 @@ function buildDash(recNames,groups){
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <input id="fsrch" placeholder="Поиск..." value="${FQ}">
     </div>
-    <select class="fsel" id="fst">${statuses.map(s=>`<option${s===FS?' selected':''}>${s}</option>`).join('')}</select>
-    <select class="fsel" id="fgr">${groups.map(g=>`<option${g===FG?' selected':''}>${g}</option>`).join('')}</select>
-    ${showRec?`<select class="fsel" id="frec">${recNames.map(r=>`<option${r===FR?' selected':''}>${r}</option>`).join('')}</select>`:''}
+    <div class="fsel-hint" title="Несколько значений: Ctrl+клик (⌘ на Mac). Пустой выбор = все.">Статусы · Ctrl+клик</div>
+    <select multiple class="fsel fsel-multi" id="fst" title="Несколько статусов">${optMulti(FILTER_STATUS_OPTS,FStat)}</select>
+    <div class="fsel-hint">Группы</div>
+    <select multiple class="fsel fsel-multi" id="fgr" title="Несколько групп">${optMulti(groups,FGrp)}</select>
+    ${showRec?`<div class="fsel-hint">Рекрутеры</div><select multiple class="fsel fsel-multi" id="frec" title="Несколько рекрутеров">${optMulti(recNames,FRec)}</select>`:''}
     <button type="button" class="papply" id="btn-dash-reset">Сбросить</button>
     ${canCreate()?`<button type="button" class="btn-primary" id="btn-new-vac">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -211,10 +227,11 @@ function bindDash(){
   const st=document.getElementById('fst');
   const gr=document.getElementById('fgr');
   const rc=document.getElementById('frec');
+  const readMulti=id=>{const el=document.getElementById(id);if(!el)return[];return Array.from(el.selectedOptions).map(o=>o.value);};
   if(fs)fs.oninput=e=>{FQ=e.target.value;saveDashPrefs();refreshDash()};
-  if(st)st.onchange=e=>{FS=e.target.value;saveDashPrefs();refreshDash()};
-  if(gr)gr.onchange=e=>{FG=e.target.value;saveDashPrefs();refreshDash()};
-  if(rc)rc.onchange=e=>{FR=e.target.value;saveDashPrefs();refreshDash()};
+  if(st)st.onchange=()=>{FStat=readMulti('fst');saveDashPrefs();refreshDash()};
+  if(gr)gr.onchange=()=>{FGrp=readMulti('fgr');saveDashPrefs();refreshDash()};
+  if(rc)rc.onchange=()=>{FRec=readMulti('frec');saveDashPrefs();refreshDash()};
   const br=document.getElementById('btn-dash-reset');
   if(br)br.addEventListener('click',()=>{resetF();});
   const bn=document.getElementById('btn-new-vac');
@@ -225,19 +242,17 @@ function bindDash(){
 }
 
 function resetF(){
-  FS='Все';FR='Все';FQ='';FG='Все';PERIOD=defPeriod();
+  FStat=[];FGrp=[];FRec=[];FQ='';PERIOD=defPeriod();
   saveDashPrefs();
   navigate('dashboard');
 }
 
 function applyF(){
   return VACS.filter(v=>{
-    const raw=v.date_opened||'';
-    if(PERIOD.from&&raw&&raw<PERIOD.from)return false;
-    if(PERIOD.to&&raw&&raw>PERIOD.to)return false;
-    if(FS!=='Все'&&v.status!==FS)return false;
-    if(FG!=='Все'&&v.vacancy_group!==FG)return false;
-    if(FR!=='Все'&&v.current_recruiter_name!==FR)return false;
+    if(!intersectsPeriod(v,PERIOD.from,PERIOD.to))return false;
+    if(FStat.length&&!FStat.includes(v.status))return false;
+    if(FGrp.length&&!(v.vacancy_group&&FGrp.includes(v.vacancy_group)))return false;
+    if(FRec.length&&!FRec.includes(v.current_recruiter_name))return false;
     if(FQ){const q=FQ.toLowerCase();if(!v.name.toLowerCase().includes(q)&&!(v.department||'').toLowerCase().includes(q))return false;}
     return true;
   });
@@ -321,7 +336,7 @@ function renderVacTbl(vacs){
   el.innerHTML=`<table><thead><tr>
     <th>№</th><th>Дата</th><th>Вакансия</th><th>Группа</th>
     ${showRec?'<th>Рекрутер</th>':''}
-    <th>Статус</th><th>ЗП оффер</th><th>Дней/норм</th><th></th>
+    <th>Статус</th><th>Дата закрытия (отмены)</th><th>ЗП оффер</th><th>Дней/норм</th><th></th>
   </tr></thead><tbody>
   ${vacs.map(v=>{
     const sc=SC_MAP[v.status]||'sc2';
@@ -342,6 +357,7 @@ function renderVacTbl(vacs){
       <td>${grpBadge}</td>
       ${showRec?`<td style="font-size:12px;color:var(--ink2);white-space:nowrap">${escapeHtml(v.current_recruiter_name||'')}</td>`:''}
       <td><span class="badge ${sc}">${escapeHtml(v.status)}</span></td>
+      <td style="font-size:12px;color:var(--ink2);white-space:nowrap">${fru(v.fact_date||'')||'—'}</td>
       <td style="font-size:12px;color:var(--ink2);white-space:nowrap">${escapeHtml(v.salary_offer||'—')}</td>
       <td>
         <span class="dv" style="color:${dc}">${days}д</span>
@@ -675,14 +691,13 @@ async function renderAnalytics(){
   const allV=vr?.ok?vr.vacancies:DV;
 
   let APeriod={...PERIOD};
-  let ARecFilter='Все';
-  let AGroupFilter='Все';
+  let AStat=[], AGrp=[], ADept=[], ARec=[];
   let ANameFilter='';
-  let ADeptFilter='Все';
 
-  const recNames=['Все',...new Set(allV.map(v=>v.current_recruiter_name).filter(Boolean))];
-  const deptNames=['Все',...new Set(allV.map(v=>v.department).filter(Boolean))];
-  const groups=['Все',...VAC_GROUPS];
+  const recNames=[...new Set(allV.map(v=>v.current_recruiter_name).filter(Boolean))];
+  const deptNames=[...new Set(allV.map(v=>v.department).filter(Boolean))];
+  const groups=[...VAC_GROUPS];
+  const optMultiA=(arr,sel)=>arr.map(s=>`<option value="${escapeHtml(s)}"${sel.includes(s)?' selected':''}>${escapeHtml(s)}</option>`).join('');
   const n=new Date(),y=n.getFullYear(),m=n.getMonth();
   const presets=[
     {l:'Этот месяц',  f:fd(new Date(y,m,1)),   t:fd(new Date(y,m+1,0))},
@@ -695,11 +710,12 @@ async function renderAnalytics(){
   const render=()=>{
     const pFrom=APeriod.from, pTo=APeriod.to;
 
-    // Фильтрация по рекрутеру и доп.фильтрам
+    // Фильтрация по рекрутеру и доп.фильтрам (пустой мультивыбор = все)
     let base=allV;
-    if(ARecFilter!=='Все')base=base.filter(v=>v.current_recruiter_name===ARecFilter);
-    if(AGroupFilter!=='Все')base=base.filter(v=>v.vacancy_group===AGroupFilter);
-    if(ADeptFilter!=='Все')base=base.filter(v=>v.department===ADeptFilter);
+    if(ARec.length)base=base.filter(v=>ARec.includes(v.current_recruiter_name));
+    if(AGrp.length)base=base.filter(v=>v.vacancy_group&&AGrp.includes(v.vacancy_group));
+    if(ADept.length)base=base.filter(v=>v.department&&ADept.includes(v.department));
+    if(AStat.length)base=base.filter(v=>AStat.includes(v.status));
     if(ANameFilter){const q=ANameFilter.toLowerCase();base=base.filter(v=>v.name.toLowerCase().includes(q));}
 
     // === МЕТРИКИ ПЕРИОДА ===
@@ -741,8 +757,10 @@ async function renderAnalytics(){
     // === ПО РЕКРУТЕРАМ ===
     const byRec={};
     allV.forEach(v=>{
-      if(AGroupFilter!=='Все'&&v.vacancy_group!==AGroupFilter)return;
-      if(ADeptFilter!=='Все'&&v.department!==ADeptFilter)return;
+      if(AGrp.length&&!(v.vacancy_group&&AGrp.includes(v.vacancy_group)))return;
+      if(ADept.length&&!(v.department&&ADept.includes(v.department)))return;
+      if(AStat.length&&!AStat.includes(v.status))return;
+      if(ARec.length&&!ARec.includes(v.current_recruiter_name))return;
       if(ANameFilter&&!v.name.toLowerCase().includes(ANameFilter.toLowerCase()))return;
       const k=v.current_recruiter_id||v.recruiter_id;
       const nm=v.current_recruiter_name||v.recruiter_name;
@@ -866,9 +884,14 @@ async function renderAnalytics(){
     </div>
     <div class="toolbar" style="margin-bottom:16px">
       <span class="tbar-lbl">Фильтры</span>
-      <select class="fsel" id="a-rec">${recNames.map(r=>`<option>${r}</option>`).join('')}</select>
-      <select class="fsel" id="a-grp">${groups.map(g=>`<option>${g}</option>`).join('')}</select>
-      <select class="fsel" id="a-dept">${deptNames.map(d=>`<option>${d}</option>`).join('')}</select>
+      <div class="fsel-hint">Статусы</div>
+      <select multiple class="fsel fsel-multi" id="a-st">${optMultiA(FILTER_STATUS_OPTS,AStat)}</select>
+      <div class="fsel-hint">Рекрутеры</div>
+      <select multiple class="fsel fsel-multi" id="a-rec">${optMultiA(recNames,ARec)}</select>
+      <div class="fsel-hint">Группы</div>
+      <select multiple class="fsel fsel-multi" id="a-grp">${optMultiA(groups,AGrp)}</select>
+      <div class="fsel-hint">Подразделения</div>
+      <select multiple class="fsel fsel-multi" id="a-dept">${optMultiA(deptNames,ADept)}</select>
       <div class="fsearch" style="flex:1 1 120px;min-width:100px">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input id="a-name" placeholder="Название...">
@@ -893,9 +916,11 @@ async function renderAnalytics(){
     if(f&&t&&f<=t){APeriod={from:f,to:t};document.querySelectorAll('.pbtn[data-f]').forEach(b=>{if(b.id.startsWith('ap-'))b.classList.remove('on')});render();}
     else toast('Укажи корректный диапазон дат','err');
   };
-  document.getElementById('a-rec').onchange=e=>{ARecFilter=e.target.value;render()};
-  document.getElementById('a-grp').onchange=e=>{AGroupFilter=e.target.value;render()};
-  document.getElementById('a-dept').onchange=e=>{ADeptFilter=e.target.value;render()};
+  const readMA=id=>{const x=document.getElementById(id);if(!x)return[];return Array.from(x.selectedOptions).map(o=>o.value);};
+  document.getElementById('a-st').onchange=()=>{AStat=readMA('a-st');render()};
+  document.getElementById('a-rec').onchange=()=>{ARec=readMA('a-rec');render()};
+  document.getElementById('a-grp').onchange=()=>{AGrp=readMA('a-grp');render()};
+  document.getElementById('a-dept').onchange=()=>{ADept=readMA('a-dept');render()};
   document.getElementById('a-name').oninput=e=>{ANameFilter=e.target.value;render()};
   render();
 }
@@ -912,6 +937,7 @@ let CL_STATE={vacancyId:'',vacancyName:'',candidateName:'',interviewDate:'',answ
 
 async function renderChecklist(){
   const el=document.getElementById('content');
+  if(!U||!U.role){if(el)el.innerHTML='<div class="empty" style="padding:40px"><p>Сессия недоступна</p></div>';return;}
   const[ar,vr]=await Promise.all([
     api('getAssessments',{role:U.role,recruiter_id:U.id}),
     api('getVacancies',{role:U.role,recruiter_id:U.id}),
@@ -943,8 +969,6 @@ function renderAssessmentList(el){
       :`<div class="card"><div class="tbl-wrap"><table>
           <thead><tr><th>Кандидат</th><th>Вакансия</th><th>Рекрутер</th><th>Дата</th><th>Балл</th><th>Рекомендация</th><th></th></tr></thead>
           <tbody>${ASSESSMENTS.map(a=>{
-            const rc=a.recommendation==='Рекомендован'?'sw':a.recommendation==='Не рекомендован'?'sca':'sp';
-            const pct=a.max_score>0?Math.round(a.total_score/a.max_score*100):0;
             return`<tr>
               <td><div style="font-weight:600;font-size:13px">${a.candidate_name}</div></td>
               <td><div style="font-size:12px;color:var(--ink2)">${a.vacancy_name||'—'}</div></td>
@@ -1405,15 +1429,26 @@ function initEscClose(){
 
 function exportCsvVacancies(){
   const rows = applyF();
-  const cols = ['num','date_opened','name','status','vacancy_group','current_recruiter_name','salary_offer','days_total','norm_days'];
+  const spec = [
+    {k:'num',h:'№'},
+    {k:'date_opened',h:'Дата открытия'},
+    {k:'name',h:'Вакансия'},
+    {k:'status',h:'Статус'},
+    {k:'fact_date',h:'Дата закрытия (отмены)'},
+    {k:'vacancy_group',h:'Группа'},
+    {k:'current_recruiter_name',h:'Рекрутер'},
+    {k:'salary_offer',h:'ЗП оффер'},
+    {k:'days_total',h:'Дней'},
+    {k:'norm_days',h:'Норматив'},
+  ];
   const escField = (v)=>{
     const t = (v==null?'':String(v));
     if(/[;"\n\r]/.test(t)) return '"' + t.replace(/"/g,'""') + '"';
     return t;
   };
-  let csv = '\ufeff' + cols.join(';') + '\n';
+  let csv = '\ufeff' + spec.map(x=>x.h).join(';') + '\n';
   for(const v of rows){
-    csv += cols.map(c=>escField(v[c])).join(';') + '\n';
+    csv += spec.map(x=>escField(v[x.k])).join(';') + '\n';
   }
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const a = document.createElement('a');

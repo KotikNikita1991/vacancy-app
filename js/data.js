@@ -33,7 +33,7 @@ const ROLES={
   admin:    {l:'Администратор',c:'#7B5EA7',bg:'#F0EBF8'},
 };
 const NCFG={
-  recruiter:[{id:'dashboard',lbl:'Дашборд',ic:'home'},{id:'checklist',lbl:'Оценка кандидата',ic:'cl'}],
+  recruiter:[{id:'dashboard',lbl:'Дашборд',ic:'home'},{id:'analytics',lbl:'Аналитика',ic:'ch'},{id:'checklist',lbl:'Оценка кандидата',ic:'cl'}],
   manager:  [{id:'dashboard',lbl:'Дашборд',ic:'home'},{id:'analytics',lbl:'Аналитика',ic:'ch'},{id:'checklist',lbl:'Оценка кандидата',ic:'cl'}],
   admin:    [{id:'dashboard',lbl:'Дашборд',ic:'home'},{id:'analytics',lbl:'Аналитика',ic:'ch'},{id:'checklist',lbl:'Оценка кандидата',ic:'cl'},{id:'users',lbl:'Пользователи',ic:'us'}],
 };
