@@ -189,7 +189,7 @@ function buildNav(){
 function navigate(page){
   PAGE=page;
   document.querySelectorAll('.ni').forEach(el=>el.classList.toggle('active',el.id===`ni-${page}`));
-  const ttls={dashboard:'Дашборд',analytics:'Аналитика',checklist:'Оценка кандидата',users:'Пользователи'};
+  const ttls={dashboard:'Дашборд',analytics:'Аналитика',checklist:'Оценка кандидата',values:'Оценка ценностей',users:'Пользователи'};
   document.getElementById('httl').textContent=ttls[page]||page;
   document.getElementById('content').innerHTML=`<div class="loading"><span class="spin spd"></span> Загружаем...</div>`;
   renderPage(page);
@@ -215,6 +215,7 @@ async function renderPage(p){
   if(p==='dashboard')await renderDash();
   else if(p==='analytics')await renderAnalytics();
   else if(p==='checklist')await renderChecklist();
+  else if(p==='values')await renderValues();
   else if(p==='users')await renderUsers();
   else renderSoon(p);
 }
@@ -1317,6 +1318,216 @@ function clBC(step){
   </div>`;
 }
 
+// ══ VALUES (PVQ-RR) ═════════════════════════════════
+let VLIST=[];
+let V_RESULT_CHARTS={bar:null,circle:null};
+
+async function renderValues(){
+  const el=document.getElementById('content');
+  if(!U||!U.role){if(el)el.innerHTML='<div class="empty" style="padding:40px"><p>Сессия недоступна</p></div>';return;}
+  const [rr,vr]=await Promise.all([
+    api('getValueAssessments',{role:U.role,recruiter_id:U.id}),
+    api('getVacancies',{role:U.role,recruiter_id:U.id}),
+  ]);
+  VLIST=rr?.ok?(rr.items||[]):[];
+  if(vr?.ok)VACS=vr.vacancies;
+  if(!VACS.length)VACS=U.role==='recruiter'?DV.filter(v=>v.recruiter_id===U.id||v.current_recruiter_id===U.id):DV;
+  renderValuesList(el);
+}
+
+function renderValuesList(el){
+  const statusBadge=s=>{
+    if(s==='completed')return'<span class="badge sc2">Завершён</span>';
+    if(s==='expired')return'<span class="badge sca">Истёк</span>';
+    return'<span class="badge sw">Отправлен</span>';
+  };
+  el.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div>
+        <h2 style="font-size:18px;font-weight:700">Оценка ценностей (PVQ-RR)</h2>
+        <p style="font-size:13px;color:var(--ink3);margin-top:2px">57 вопросов, одноразовая ссылка на 7 дней, диаграмма + круг ценностей</p>
+      </div>
+      <button type="button" class="btn-primary" data-act="val-new">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Новая оценка ценностей
+      </button>
+    </div>
+    ${VLIST.length===0
+      ?`<div class="card"><div class="empty" style="padding:60px">
+        <div class="empty-ico" style="background:var(--accbg)"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--acc)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${IC.val}</svg></div>
+        <h3>Нет отправленных опросов</h3><p>Создайте оценку и отправьте кандидату персональную ссылку.</p>
+      </div></div>`
+      :`<div class="card"><div class="tbl-wrap"><table>
+        <thead><tr><th>Кандидат</th><th>Вакансия</th><th>Рекрутер</th><th>Дата отправки</th><th>Статус</th><th>Действия</th></tr></thead>
+        <tbody>${VLIST.map(v=>`
+          <tr>
+            <td><div style="font-weight:600;font-size:13px">${escapeHtml(v.candidate_name||'')}</div><div style="font-size:11px;color:var(--ink3)">${escapeHtml(v.candidate_email||'')}</div></td>
+            <td><div style="font-size:12px;color:var(--ink2)">${escapeHtml(v.vacancy_name||'—')}</div></td>
+            <td><div style="font-size:12px;color:var(--ink2)">${escapeHtml(v.recruiter_name||'')}</div></td>
+            <td><div style="font-size:12px;color:var(--ink3)">${escapeHtml(v.sent_at||'')}</div></td>
+            <td>${statusBadge(v.status)}</td>
+            <td style="white-space:nowrap"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+              <button type="button" class="btn-sm" data-act="val-view" data-vid="${escapeHtml(v.id)}"${v.has_result?'':' disabled'}>Результат</button>
+              ${canDelete()?`<button type="button" class="btn-danger" data-act="val-del" data-vid="${escapeHtml(v.id)}">✕</button>`:''}
+            </div></td>
+          </tr>
+        `).join('')}</tbody>
+      </table></div></div>`
+    }`;
+}
+
+function openValueModal(){
+  const availVacs=VACS.filter(v=>ASSESS_STATUSES.includes(v.status));
+  const html=`<div class="modal-overlay" id="val-modal" data-act="val-overlay">
+    <div class="modal" style="max-width:620px">
+      <div class="modal-hdr">
+        <span class="modal-ttl">Новая оценка ценностей</span>
+        <button type="button" class="modal-close" data-act="close-val-modal">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="fg full">
+            <label class="flbl">Вакансия <span class="req">*</span></label>
+            <select id="val-vac" class="finp">
+              <option value="">— выберите вакансию —</option>
+              ${availVacs.map(v=>`<option value="${escapeHtml(v.id)}" data-name="${escapeHtml(v.name)}">${escapeHtml(v.num)} — ${escapeHtml(v.name)} (${escapeHtml(v.status)})</option>`).join('')}
+            </select>
+            <span class="field-note">Доступны вакансии со статусом «В работе» и «Приостановлена»</span>
+          </div>
+          <div class="fg full">
+            <label class="flbl">ФИО кандидата <span class="req">*</span></label>
+            <input id="val-name" class="finp" placeholder="Иванов Иван Иванович">
+          </div>
+          <div class="fg">
+            <label class="flbl">Дата направления <span class="req">*</span></label>
+            <input id="val-date" class="finp" type="date" value="${today()}">
+          </div>
+          <div class="fg">
+            <label class="flbl">Пол <span class="req">*</span></label>
+            <select id="val-gender" class="finp">
+              <option value="">— выберите —</option>
+              <option value="male">Мужчина</option>
+              <option value="female">Женщина</option>
+            </select>
+          </div>
+          <div class="fg full">
+            <label class="flbl">Email кандидата <span class="req">*</span></label>
+            <input id="val-email" class="finp" type="email" placeholder="candidate@example.com">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div></div>
+        <div style="display:flex;gap:10px">
+          <button type="button" class="btn-cancel" data-act="close-val-modal">Отмена</button>
+          <button type="button" class="btn-save" id="btn-send-val" data-act="val-send">Отправить ссылку</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend',html);
+}
+
+function closeValueModal(){
+  const m=document.getElementById('val-modal');
+  if(m)m.remove();
+}
+
+async function sendValueInvite(){
+  const vacEl=document.getElementById('val-vac');
+  const vacId=vacEl?.value||'';
+  const vacName=vacId?vacEl.options[vacEl.selectedIndex].dataset.name:'';
+  const candidateName=(document.getElementById('val-name')?.value||'').trim();
+  const sentDate=document.getElementById('val-date')?.value||'';
+  const gender=document.getElementById('val-gender')?.value||'';
+  const email=(document.getElementById('val-email')?.value||'').trim();
+  if(!vacId||!candidateName||!sentDate||!gender||!email){
+    toast('Заполните все обязательные поля','err');return;
+  }
+  const btn=document.getElementById('btn-send-val');
+  if(btn){btn.disabled=true;btn.innerHTML='<span class="spin"></span>';}
+  const res=await api('createValueAssessmentInvite',{
+    vacancy_id:vacId,vacancy_name:vacName,candidate_name:candidateName,sent_date:sentDate,
+    gender,email,recruiter_id:U.id,recruiter_name:U.name,
+  });
+  if(res?.ok){
+    toast('Ссылка отправлена кандидату ✓');
+    closeValueModal();
+    await renderValues();
+  }else{
+    toast(res?.error||'Не удалось отправить ссылку','err');
+    if(btn){btn.disabled=false;btn.textContent='Отправить ссылку';}
+  }
+}
+
+async function deleteValueAssessment(id){
+  if(!canDelete()||!id)return;
+  if(!confirm('Удалить эту оценку ценностей? Действие необратимо.'))return;
+  const res=await api('deleteValueAssessment',{id,caller_role:U.role});
+  if(res?.ok||res===null){
+    toast('Оценка удалена');
+    await renderValues();
+  }else toast(res?.error||'Ошибка','err');
+}
+
+function ensureChartJs(){
+  return new Promise((resolve,reject)=>{
+    if(window.Chart)return resolve();
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/chart.js';
+    s.onload=()=>resolve();
+    s.onerror=()=>reject(new Error('Chart.js не загрузился'));
+    document.head.appendChild(s);
+  });
+}
+
+async function viewValueResult(id){
+  const res=await api('getValueAssessmentResult',{id});
+  if(!res?.ok){toast(res?.error||'Результат не найден','err');return;}
+  const inv=res.invite||{};
+  const r=res.result||{};
+  document.getElementById('content').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <div>
+        <h2 style="font-size:18px;font-weight:700">${escapeHtml(inv.candidate_name||'')}</h2>
+        <p style="font-size:13px;color:var(--ink3)">${escapeHtml(inv.vacancy_name||'')} · ${escapeHtml(inv.submitted_at||'')}</p>
+      </div>
+      <button type="button" class="btn-cancel" data-act="val-list">← К списку</button>
+    </div>
+    <div class="card" style="padding:14px 18px;margin-bottom:12px">
+      <div style="font-size:13px;color:var(--ink2);line-height:1.7">${escapeHtml(r.interpretation||'Интерпретация будет доступна после обработки')}</div>
+    </div>
+    <div class="card" style="padding:16px;margin-bottom:12px">
+      <div class="ct" style="margin-bottom:10px">Столбчатая диаграмма ценностей</div>
+      <canvas id="val-bar" height="180"></canvas>
+    </div>
+    <div class="card" style="padding:16px">
+      <div class="ct" style="margin-bottom:10px">Круг ценностей</div>
+      <canvas id="val-circle" height="200"></canvas>
+    </div>`;
+  try{
+    await ensureChartJs();
+    if(V_RESULT_CHARTS.bar)V_RESULT_CHARTS.bar.destroy();
+    if(V_RESULT_CHARTS.circle)V_RESULT_CHARTS.circle.destroy();
+    const bar=r.bar_chart||{};
+    const circle=r.circle_chart||{};
+    V_RESULT_CHARTS.bar=new Chart(document.getElementById('val-bar').getContext('2d'),{
+      type:'bar',
+      data:{labels:bar.labels||[],datasets:[{label:'Баллы (центрированные)',data:bar.data||[],backgroundColor:'#7B5EA7'}]},
+      options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:false}}}
+    });
+    V_RESULT_CHARTS.circle=new Chart(document.getElementById('val-circle').getContext('2d'),{
+      type:'radar',
+      data:{labels:circle.labels||[],datasets:[{label:'Круг ценностей',data:circle.data||[],borderColor:'#7B5EA7',backgroundColor:'rgba(123,94,167,.15)',pointBackgroundColor:'#7B5EA7'}]},
+      options:{responsive:true,plugins:{legend:{display:false}},scales:{r:{angleLines:{color:'#e6e1f0'},grid:{color:'#e6e1f0'}}}}
+    });
+  }catch(e){
+    toast('Не удалось построить диаграммы','err');
+  }
+}
+
 // ══ SOON ═════════════════════════════════════════════
 function renderSoon(page){
   document.getElementById('content').innerHTML=`
@@ -1528,6 +1739,20 @@ function initGlobalActs(){
       clSubmit();
     } else if(act==='cl-del'){
       deleteAssessment(el.dataset.aid);
+    } else if(act==='val-new'){
+      openValueModal();
+    } else if(act==='val-overlay'){
+      if(ev.target===el)closeValueModal();
+    } else if(act==='close-val-modal'){
+      closeValueModal();
+    } else if(act==='val-send'){
+      sendValueInvite();
+    } else if(act==='val-view'){
+      viewValueResult(el.dataset.vid);
+    } else if(act==='val-list'){
+      renderValues();
+    } else if(act==='val-del'){
+      deleteValueAssessment(el.dataset.vid);
     } else if(act==='user-toggle'){
       const uid = el.getAttribute('data-uid');
       const ua = el.getAttribute('data-uactive')==='1';
@@ -1548,6 +1773,7 @@ function initEscClose(){
     if(e.key !== 'Escape') return;
     closeAllFilterDd();
     if(document.getElementById('vac-modal')) closeModal();
+    if(document.getElementById('val-modal')) closeValueModal();
     if(document.getElementById('user-modal')) closeUserModal();
   });
 }
