@@ -1,11 +1,12 @@
 (function(g){
   var C = {
-    // Прямой Apps Script (часто доступен там, где Cloudflare Workers режется)
-    DEFAULT_API_URL: 'https://script.google.com/macros/s/AKfycbz5jIKT_KALX1xBBG3r79D2023k0g5YBqgzRiNtplcWAJ1QppZ2WQKmxt3i0EnwQlZolw/exec',
+    // Актуальный деплой веб-приложения (при смене — обновите и задеплойте фронт).
+    DEFAULT_API_URL: 'https://script.google.com/macros/s/AKfycbxjmPL5FS2kHh3eeYUmy_DFii3h6vJH8ETC7aj9V7gzRI3IeSTMfUuoFUKWZadUPNuf_w/exec',
     // Только рабочий деплой. Не добавляйте сюда «запасные» URL без проверки — иначе клиент
     // будет долго перебирать мёртвые адреса (404 / connection reset).
     API_URL_FALLBACKS: [],
-    LS_API_URL: 'vacancy_app_api_url',
+    // v2: смена ключа сбрасывает старый URL из localStorage (частая причина «Неизвестный action»).
+    LS_API_URL: 'vacancy_app_api_url_v2',
     LS_API_LAST_OK: 'vacancy_app_api_last_ok',
     LS_DASH_PREFS: 'vacancy_app_dash_prefs',
     LS_PLANS: 'vacancy_app_plans',
