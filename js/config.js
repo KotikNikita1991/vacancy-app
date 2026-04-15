@@ -1,7 +1,7 @@
 (function(g){
   var C = {
     // Прямой Apps Script (часто доступен там, где Cloudflare Workers режется)
-    DEFAULT_API_URL: 'https://script.google.com/macros/s/AKfycbz5jIKT_KALX1xBBG3r79D2023k0g5YBqgzRiNtplcWAJ1QppZ2WQKmxt3i0EnwQlZolw/exec',
+    DEFAULT_API_URL: 'https://script.google.com/macros/s/AKfycbxjmPL5FS2kHh3eeYUmy_DFii3h6vJH8ETC7aj9V7gzRI3IeSTMfUuoFUKWZadUPNuf_w/exec',
     // Только рабочий деплой. Не добавляйте сюда «запасные» URL без проверки — иначе клиент
     // будет долго перебирать мёртвые адреса (404 / connection reset).
     API_URL_FALLBACKS: [],
