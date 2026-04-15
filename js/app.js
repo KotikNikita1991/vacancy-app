@@ -1383,6 +1383,45 @@ function pickBarModeData(result){
   return { centered, base };
 }
 
+function extractOverallMean(result){
+  const keys = ['overall_mean','respondent_mean','mean_response','mean_all','ips_mean','grand_mean'];
+  for(const k of keys){
+    const v = Number(result?.[k]);
+    if(Number.isFinite(v)) return v;
+  }
+  return null;
+}
+
+function computeBaseFromCentered(result, centered){
+  if(!centered || !Array.isArray(centered.labels) || !Array.isArray(centered.data)) return null;
+  const m = extractOverallMean(result);
+  if(!Number.isFinite(m)) return null;
+  return {
+    labels: centered.labels.slice(),
+    data: centered.data.map(v => Number((Number(v) + m).toFixed(3))),
+  };
+}
+
+function computeBaseFromRawObject(result, centered){
+  const rawObj = result?.raw_scores || result?.base_scores || result?.values_raw || null;
+  if(!rawObj || typeof rawObj !== 'object' || Array.isArray(rawObj) || !centered?.labels?.length) return null;
+  const labels = centered.labels.slice();
+  const data = labels.map(lbl=>{
+    const v = Number(rawObj[lbl]);
+    return Number.isFinite(v) ? v : null;
+  });
+  if(data.some(v=>v==null)) return null;
+  return { labels, data };
+}
+
+function getBaseBarData(result, centered){
+  const direct = result?.bar_chart_base || result?.bar_chart_raw || result?.bar_chart_absolute || null;
+  if(direct) return direct;
+  const rawBased = computeBaseFromRawObject(result, centered);
+  if(rawBased) return rawBased;
+  return computeBaseFromCentered(result, centered);
+}
+
 function sortBarChartDesc(chart){
   const labels = Array.isArray(chart?.labels) ? chart.labels.slice() : [];
   const data = Array.isArray(chart?.data) ? chart.data.slice() : [];
@@ -1542,34 +1581,36 @@ async function viewValueResult(id){
       </div>
       <button type="button" class="btn-cancel" data-act="val-list">← К списку</button>
     </div>
-    <div class="card" style="padding:14px 18px;margin-bottom:12px">
+    <div class="card" style="padding:12px 14px;margin-bottom:10px">
       <div style="font-size:13px;color:var(--ink2);line-height:1.7">${escapeHtml(r.interpretation||'Интерпретация будет доступна после обработки')}</div>
     </div>
-    <div class="card" style="padding:12px 16px;margin-bottom:12px">
+    <div class="card" style="padding:10px 12px;margin-bottom:10px">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span style="font-size:12px;color:var(--ink3)">Показатель:</span>
         <button type="button" class="btn-sm" data-act="val-chart-mode" data-mode="centered">Центрированные</button>
-        <button type="button" class="btn-sm" data-act="val-chart-mode" data-mode="base"${(r.bar_chart_base||r.bar_chart_raw||r.bar_chart_absolute)?'':' disabled'}>Базовые средние</button>
+        <button type="button" class="btn-sm" data-act="val-chart-mode" data-mode="base">Базовые средние</button>
       </div>
-      ${!(r.bar_chart_base||r.bar_chart_raw||r.bar_chart_absolute)
-        ?'<div style="margin-top:8px;font-size:12px;color:var(--ink3)">Базовые средние backend пока не вернул — показаны центрированные значения.</div>'
-        :''
-      }
+      <div id="val-base-note" style="margin-top:8px;font-size:12px;color:var(--ink3);display:none"></div>
     </div>
-    <div class="card" style="padding:16px;margin-bottom:12px">
+    <div class="card" style="padding:12px;margin-bottom:10px">
       <div class="ct" style="margin-bottom:10px">Столбчатая диаграмма ценностей</div>
-      <canvas id="val-bar" height="180"></canvas>
+      <canvas id="val-bar" height="130"></canvas>
     </div>
-    <div class="card" style="padding:16px">
+    <div class="card" style="padding:12px">
       <div class="ct" style="margin-bottom:10px">Круг ценностей</div>
-      <canvas id="val-circle" height="200"></canvas>
+      <canvas id="val-circle" height="150"></canvas>
     </div>`;
   try{
     await ensureChartJs();
     if(V_RESULT_CHARTS.bar)V_RESULT_CHARTS.bar.destroy();
     if(V_RESULT_CHARTS.circle)V_RESULT_CHARTS.circle.destroy();
     const barModes=pickBarModeData(r);
-    V_RESULT_VIEW={mode:'centered',centered:barModes.centered,base:barModes.base};
+    V_RESULT_VIEW={mode:'centered',centered:barModes.centered,base:getBaseBarData(r, barModes.centered)};
+    const noteEl=document.getElementById('val-base-note');
+    if(noteEl && !V_RESULT_VIEW.base){
+      noteEl.style.display='block';
+      noteEl.textContent='Базовые средние не удалось восстановить: backend не вернул ни сырые значения, ни общий средний балл. Показаны центрированные данные.';
+    }
     renderValueBarChart();
     const circle=r.circle_chart||{};
     V_RESULT_CHARTS.circle=new Chart(document.getElementById('val-circle').getContext('2d'),{
