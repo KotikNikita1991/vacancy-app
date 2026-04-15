@@ -9,10 +9,11 @@ async function api(action, body){
     return null;
   }
   var lastErr = null;
+  var lastNet = null;
   for(var i = 0; i < urls.length; i++){
     var url = urls[i];
     var ctrl = new AbortController();
-    var ms = cfg.API_TIMEOUT_MS || 20000;
+    var ms = cfg.API_TIMEOUT_MS || 120000;
     var t = setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, ms);
     try{
       var r = await fetch(url, {
@@ -44,10 +45,12 @@ async function api(action, body){
       return parsed;
     }catch(e){
       clearTimeout(t);
-      var msg = e && e.name === 'AbortError' ? 'Таймаут запроса' : String(e && (e.message || e) || e);
+      var msg = e && e.name === 'AbortError' ? 'Таймаут запроса к серверу (попробуйте ещё раз)' : String(e && (e.message || e) || e);
+      lastNet = msg;
       if(i === urls.length - 1){
-        setBarError(msg);
-        return null;
+        var human = lastErr && lastErr.error ? lastErr.error : (lastNet || 'Сервер недоступен');
+        setBarError(human);
+        return { ok: false, error: human };
       }
     }
   }
@@ -55,6 +58,6 @@ async function api(action, body){
     setBarError(lastErr.error);
     return lastErr;
   }
-  return null;
+  return { ok: false, error: lastNet || 'Сервер недоступен' };
 }
 
