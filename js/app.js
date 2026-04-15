@@ -1452,6 +1452,7 @@ function renderValueBarChart(){
     },
     options:{
       responsive:true,
+      maintainAspectRatio:false,
       plugins:{legend:{display:false}},
       scales:{
         x:{ticks:{maxRotation:60,minRotation:45}},
@@ -1592,13 +1593,13 @@ async function viewValueResult(id){
       </div>
       <div id="val-base-note" style="margin-top:8px;font-size:12px;color:var(--ink3);display:none"></div>
     </div>
-    <div class="card" style="padding:12px;margin-bottom:10px">
+    <div class="card" style="padding:12px;margin-bottom:10px;max-width:980px;margin-left:auto;margin-right:auto">
       <div class="ct" style="margin-bottom:10px">Столбчатая диаграмма ценностей</div>
-      <canvas id="val-bar" height="130"></canvas>
+      <div style="height:260px"><canvas id="val-bar"></canvas></div>
     </div>
-    <div class="card" style="padding:12px">
+    <div class="card" style="padding:12px;max-width:980px;margin-left:auto;margin-right:auto">
       <div class="ct" style="margin-bottom:10px">Круг ценностей</div>
-      <canvas id="val-circle" height="150"></canvas>
+      <div style="height:360px"><canvas id="val-circle"></canvas></div>
     </div>`;
   try{
     await ensureChartJs();
@@ -1616,7 +1617,7 @@ async function viewValueResult(id){
     V_RESULT_CHARTS.circle=new Chart(document.getElementById('val-circle').getContext('2d'),{
       type:'radar',
       data:{labels:circle.labels||[],datasets:[{label:'Круг ценностей',data:circle.data||[],borderColor:'#7B5EA7',backgroundColor:'rgba(123,94,167,.15)',pointBackgroundColor:'#7B5EA7'}]},
-      options:{responsive:true,plugins:{legend:{display:false}},scales:{r:{angleLines:{color:'#e6e1f0'},grid:{color:'#e6e1f0'}}}}
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{r:{angleLines:{color:'#e6e1f0'},grid:{color:'#e6e1f0'}}}}
     });
   }catch(e){
     toast('Не удалось построить диаграммы','err');
