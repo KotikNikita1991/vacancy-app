@@ -1321,6 +1321,7 @@ function clBC(step){
 // ══ VALUES (PVQ-RR) ═════════════════════════════════
 let VLIST=[];
 let V_RESULT_CHARTS={bar:null,circle:null};
+let V_RESULT_VIEW={mode:'centered',centered:null,base:null};
 
 async function renderValues(){
   const el=document.getElementById('content');
@@ -1367,13 +1368,58 @@ function renderValuesList(el){
             <td><div style="font-size:12px;color:var(--ink3)">${escapeHtml(v.sent_at||'')}</div></td>
             <td>${statusBadge(v.status)}</td>
             <td style="white-space:nowrap"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-              <button type="button" class="btn-sm" data-act="val-view" data-vid="${escapeHtml(v.id)}"${v.has_result?'':' disabled'}>Результат</button>
+              <button type="button" class="btn-sm" data-act="val-view" data-vid="${escapeHtml(v.id)}"${(v.has_result||v.status==='completed')?'':' disabled'}>Результат</button>
               ${canDelete()?`<button type="button" class="btn-danger" data-act="val-del" data-vid="${escapeHtml(v.id)}">✕</button>`:''}
             </div></td>
           </tr>
         `).join('')}</tbody>
       </table></div></div>`
     }`;
+}
+
+function pickBarModeData(result){
+  const centered = result?.bar_chart || null;
+  const base = result?.bar_chart_base || result?.bar_chart_raw || result?.bar_chart_absolute || null;
+  return { centered, base };
+}
+
+function sortBarChartDesc(chart){
+  const labels = Array.isArray(chart?.labels) ? chart.labels.slice() : [];
+  const data = Array.isArray(chart?.data) ? chart.data.slice() : [];
+  const pairs = labels.map((label, i)=>({ label, value:Number(data[i]) || 0 }));
+  pairs.sort((a,b)=>b.value-a.value);
+  return {
+    labels: pairs.map(x=>x.label),
+    data: pairs.map(x=>x.value),
+  };
+}
+
+function renderValueBarChart(){
+  if(!V_RESULT_VIEW.centered)return;
+  const mode = V_RESULT_VIEW.mode === 'base' && V_RESULT_VIEW.base ? 'base' : 'centered';
+  const src = mode === 'base' ? V_RESULT_VIEW.base : V_RESULT_VIEW.centered;
+  const sorted = sortBarChartDesc(src);
+  const yTitle = mode === 'base' ? 'Средние баллы' : 'Отклонение от среднего';
+  if(V_RESULT_CHARTS.bar)V_RESULT_CHARTS.bar.destroy();
+  V_RESULT_CHARTS.bar=new Chart(document.getElementById('val-bar').getContext('2d'),{
+    type:'bar',
+    data:{
+      labels:sorted.labels,
+      datasets:[{
+        label:mode === 'base' ? 'Баллы (базовые)' : 'Баллы (центрированные)',
+        data:sorted.data,
+        backgroundColor:'#7B5EA7'
+      }]
+    },
+    options:{
+      responsive:true,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{maxRotation:60,minRotation:45}},
+        y:{beginAtZero:false,title:{display:true,text:yTitle}}
+      }
+    }
+  });
 }
 
 function openValueModal(){
@@ -1499,6 +1545,17 @@ async function viewValueResult(id){
     <div class="card" style="padding:14px 18px;margin-bottom:12px">
       <div style="font-size:13px;color:var(--ink2);line-height:1.7">${escapeHtml(r.interpretation||'Интерпретация будет доступна после обработки')}</div>
     </div>
+    <div class="card" style="padding:12px 16px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--ink3)">Показатель:</span>
+        <button type="button" class="btn-sm" data-act="val-chart-mode" data-mode="centered">Центрированные</button>
+        <button type="button" class="btn-sm" data-act="val-chart-mode" data-mode="base"${(r.bar_chart_base||r.bar_chart_raw||r.bar_chart_absolute)?'':' disabled'}>Базовые средние</button>
+      </div>
+      ${!(r.bar_chart_base||r.bar_chart_raw||r.bar_chart_absolute)
+        ?'<div style="margin-top:8px;font-size:12px;color:var(--ink3)">Базовые средние backend пока не вернул — показаны центрированные значения.</div>'
+        :''
+      }
+    </div>
     <div class="card" style="padding:16px;margin-bottom:12px">
       <div class="ct" style="margin-bottom:10px">Столбчатая диаграмма ценностей</div>
       <canvas id="val-bar" height="180"></canvas>
@@ -1511,13 +1568,10 @@ async function viewValueResult(id){
     await ensureChartJs();
     if(V_RESULT_CHARTS.bar)V_RESULT_CHARTS.bar.destroy();
     if(V_RESULT_CHARTS.circle)V_RESULT_CHARTS.circle.destroy();
-    const bar=r.bar_chart||{};
+    const barModes=pickBarModeData(r);
+    V_RESULT_VIEW={mode:'centered',centered:barModes.centered,base:barModes.base};
+    renderValueBarChart();
     const circle=r.circle_chart||{};
-    V_RESULT_CHARTS.bar=new Chart(document.getElementById('val-bar').getContext('2d'),{
-      type:'bar',
-      data:{labels:bar.labels||[],datasets:[{label:'Баллы (центрированные)',data:bar.data||[],backgroundColor:'#7B5EA7'}]},
-      options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:false}}}
-    });
     V_RESULT_CHARTS.circle=new Chart(document.getElementById('val-circle').getContext('2d'),{
       type:'radar',
       data:{labels:circle.labels||[],datasets:[{label:'Круг ценностей',data:circle.data||[],borderColor:'#7B5EA7',backgroundColor:'rgba(123,94,167,.15)',pointBackgroundColor:'#7B5EA7'}]},
@@ -1749,6 +1803,12 @@ function initGlobalActs(){
       sendValueInvite();
     } else if(act==='val-view'){
       viewValueResult(el.dataset.vid);
+    } else if(act==='val-chart-mode'){
+      const mode=el.dataset.mode;
+      if(mode==='centered' || mode==='base'){
+        V_RESULT_VIEW.mode=mode;
+        renderValueBarChart();
+      }
     } else if(act==='val-list'){
       renderValues();
     } else if(act==='val-del'){
