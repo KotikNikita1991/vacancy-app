@@ -1120,8 +1120,9 @@ function renderCLStep1(){
             <select id="cl-vac" class="finp">
               <option value="">— выберите вакансию —</option>
               ${availVacs.map(v=>`<option value="${v.id}" data-name="${v.name}"${v.id===CL_STATE.vacancyId?' selected':''}>${v.num} — ${v.name} (${v.status})</option>`).join('')}
+              <option value="__active_employee__" data-name="Действующий сотрудник"${CL_STATE.vacancyId==='__active_employee__'?' selected':''}>Действующий сотрудник</option>
             </select>
-            <span class="field-note">Доступны вакансии со статусом «В работе» и «Приостановлена»</span>
+            <span class="field-note">Доступны вакансии со статусом «В работе» и «Приостановлена», а также «Действующий сотрудник»</span>
           </div>
           <div class="fg">
             <label class="flbl">Дата интервью</label>
@@ -1321,7 +1322,7 @@ function clBC(step){
 // ══ VALUES (PVQ-RR) ═════════════════════════════════
 let VLIST=[];
 let V_RESULT_CHARTS={bar:null,circle:null};
-let V_RESULT_VIEW={mode:'centered',centered:null,base:null};
+let V_RESULT_VIEW={mode:'centered',centered:null,base:null,circleCentered:null,circleBase:null};
 
 async function renderValues(){
   const el=document.getElementById('content');
@@ -1384,7 +1385,7 @@ function pickBarModeData(result){
 }
 
 function extractOverallMean(result){
-  const keys = ['overall_mean','respondent_mean','mean_response','mean_all','ips_mean','grand_mean'];
+  const keys = ['overall_mean','respondent_mean','mean_response','mean_all','ips_mean','grand_mean','mean57'];
   for(const k of keys){
     const v = Number(result?.[k]);
     if(Number.isFinite(v)) return v;
@@ -1462,6 +1463,21 @@ function renderValueBarChart(){
   });
 }
 
+function renderValueCircleChart(){
+  if(!V_RESULT_VIEW.circleCentered)return;
+  const mode = V_RESULT_VIEW.mode === 'base' && V_RESULT_VIEW.circleBase ? 'base' : 'centered';
+  const src = mode === 'base' ? V_RESULT_VIEW.circleBase : V_RESULT_VIEW.circleCentered;
+  if(V_RESULT_CHARTS.circle)V_RESULT_CHARTS.circle.destroy();
+  V_RESULT_CHARTS.circle=new Chart(document.getElementById('val-circle').getContext('2d'),{
+    type:'radar',
+    data:{
+      labels:src.labels||[],
+      datasets:[{label:'Круг ценностей',data:src.data||[],borderColor:'#7B5EA7',backgroundColor:'rgba(123,94,167,.15)',pointBackgroundColor:'#7B5EA7'}],
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{r:{angleLines:{color:'#e6e1f0'},grid:{color:'#e6e1f0'}}}}
+  });
+}
+
 function openValueModal(){
   const availVacs=VACS.filter(v=>ASSESS_STATUSES.includes(v.status));
   const html=`<div class="modal-overlay" id="val-modal" data-act="val-overlay">
@@ -1479,8 +1495,9 @@ function openValueModal(){
             <select id="val-vac" class="finp">
               <option value="">— выберите вакансию —</option>
               ${availVacs.map(v=>`<option value="${escapeHtml(v.id)}" data-name="${escapeHtml(v.name)}">${escapeHtml(v.num)} — ${escapeHtml(v.name)} (${escapeHtml(v.status)})</option>`).join('')}
+              <option value="__active_employee__" data-name="Действующий сотрудник">Действующий сотрудник</option>
             </select>
-            <span class="field-note">Доступны вакансии со статусом «В работе» и «Приостановлена»</span>
+            <span class="field-note">Доступны вакансии со статусом «В работе» и «Приостановлена», а также «Действующий сотрудник»</span>
           </div>
           <div class="fg full">
             <label class="flbl">ФИО кандидата <span class="req">*</span></label>
@@ -1606,19 +1623,25 @@ async function viewValueResult(id){
     if(V_RESULT_CHARTS.bar)V_RESULT_CHARTS.bar.destroy();
     if(V_RESULT_CHARTS.circle)V_RESULT_CHARTS.circle.destroy();
     const barModes=pickBarModeData(r);
-    V_RESULT_VIEW={mode:'centered',centered:barModes.centered,base:getBaseBarData(r, barModes.centered)};
+    const mean57=Number(r.mean57||0);
+    const circleCentered=r.circle_chart||{};
+    const circleBase = circleCentered && Array.isArray(circleCentered.data)
+      ? { labels:circleCentered.labels||[], data:circleCentered.data.map(v=>Number(v)+mean57), order:circleCentered.order }
+      : null;
+    V_RESULT_VIEW={
+      mode:'base',
+      centered:barModes.centered,
+      base:getBaseBarData(r, barModes.centered),
+      circleCentered,
+      circleBase
+    };
     const noteEl=document.getElementById('val-base-note');
     if(noteEl && !V_RESULT_VIEW.base){
       noteEl.style.display='block';
       noteEl.textContent='Базовые средние не удалось восстановить: backend не вернул ни сырые значения, ни общий средний балл. Показаны центрированные данные.';
     }
     renderValueBarChart();
-    const circle=r.circle_chart||{};
-    V_RESULT_CHARTS.circle=new Chart(document.getElementById('val-circle').getContext('2d'),{
-      type:'radar',
-      data:{labels:circle.labels||[],datasets:[{label:'Круг ценностей',data:circle.data||[],borderColor:'#7B5EA7',backgroundColor:'rgba(123,94,167,.15)',pointBackgroundColor:'#7B5EA7'}]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{r:{angleLines:{color:'#e6e1f0'},grid:{color:'#e6e1f0'}}}}
-    });
+    renderValueCircleChart();
   }catch(e){
     toast('Не удалось построить диаграммы','err');
   }
@@ -1850,6 +1873,7 @@ function initGlobalActs(){
       if(mode==='centered' || mode==='base'){
         V_RESULT_VIEW.mode=mode;
         renderValueBarChart();
+        renderValueCircleChart();
       }
     } else if(act==='val-list'){
       renderValues();
