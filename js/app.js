@@ -1591,6 +1591,7 @@ async function viewValueResult(id){
   if(!res?.ok){toast(res?.error||'Результат не найден','err');return;}
   const inv=res.invite||{};
   const r=res.result||{};
+  const interpHtml = escapeHtml(r.interpretation||'Интерпретация будет доступна после обработки').replace(/\n/g,'<br>');
   document.getElementById('content').innerHTML=`
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px">
       <div>
@@ -1600,7 +1601,7 @@ async function viewValueResult(id){
       <button type="button" class="btn-cancel" data-act="val-list">← К списку</button>
     </div>
     <div class="card" style="padding:12px 14px;margin-bottom:10px">
-      <div style="font-size:13px;color:var(--ink2);line-height:1.7">${escapeHtml(r.interpretation||'Интерпретация будет доступна после обработки')}</div>
+      <div style="font-size:13px;color:var(--ink2);line-height:1.7">${interpHtml}</div>
     </div>
     <div class="card" style="padding:10px 12px;margin-bottom:10px">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
