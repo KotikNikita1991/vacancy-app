@@ -1321,7 +1321,7 @@ function clBC(step){
 
 // ══ VALUES (PVQ-RR) ═════════════════════════════════
 let VLIST=[];
-let V_RESULT_CHARTS={bar:null,circle:null};
+let V_RESULT_CHARTS={bar:null,circle:null,im:null};
 let V_RESULT_VIEW={mode:'centered',centered:null,base:null,circleCentered:null,circleBase:null};
 
 async function renderValues(){
@@ -1347,7 +1347,7 @@ function renderValuesList(el){
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
       <div>
         <h2 style="font-size:18px;font-weight:700">Оценка ценностей (PVQ-RR)</h2>
-        <p style="font-size:13px;color:var(--ink3);margin-top:2px">57 вопросов, одноразовая ссылка на 7 дней, диаграмма + круг ценностей</p>
+        <p style="font-size:13px;color:var(--ink3);margin-top:2px">67 вопросов (57 PVQ‑RR + 10 контрольных), одноразовая ссылка на 7 дней, диаграмма + круг ценностей</p>
       </div>
       <button type="button" class="btn-primary" data-act="val-new">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -1592,6 +1592,9 @@ async function viewValueResult(id){
   const inv=res.invite||{};
   const r=res.result||{};
   const interpHtml = escapeHtml(r.interpretation||'Интерпретация будет доступна после обработки').replace(/\n/g,'<br>');
+  const im = r.im || {};
+  const imSum = Number(im.sum);
+  const imLevel = String(im.level || '');
   document.getElementById('content').innerHTML=`
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px">
       <div>
@@ -1602,6 +1605,19 @@ async function viewValueResult(id){
     </div>
     <div class="card" style="padding:12px 14px;margin-bottom:10px">
       <div style="font-size:13px;color:var(--ink2);line-height:1.7">${interpHtml}</div>
+    </div>
+    <div class="card" style="padding:12px 14px;margin-bottom:10px">
+      <div class="ct" style="margin-bottom:6px">Контроль социальной желательности (IM)</div>
+      <div style="font-size:12px;color:var(--ink3);line-height:1.6">
+        Этот показатель не влияет на PVQ‑RR и служит контролем «приукрашивания» ответов.
+      </div>
+      <div style="display:flex;gap:12px;align-items:baseline;margin-top:10px;flex-wrap:wrap">
+        <div style="font-size:18px;font-weight:800;color:var(--ink2)">${Number.isFinite(imSum)?imSum:'—'} / 60</div>
+        <div style="font-size:12px;color:var(--ink3)">${escapeHtml(imLevel||'')}</div>
+      </div>
+      <div style="height:120px;margin-top:10px">
+        <canvas id="im-bar"></canvas>
+      </div>
     </div>
     <div class="card" style="padding:10px 12px;margin-bottom:10px">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -1623,6 +1639,7 @@ async function viewValueResult(id){
     await ensureChartJs();
     if(V_RESULT_CHARTS.bar)V_RESULT_CHARTS.bar.destroy();
     if(V_RESULT_CHARTS.circle)V_RESULT_CHARTS.circle.destroy();
+    if(V_RESULT_CHARTS.im)V_RESULT_CHARTS.im.destroy();
     const barModes=pickBarModeData(r);
     const mean57=Number(r.mean57||0);
     const circleCentered=r.circle_chart||{};
@@ -1643,6 +1660,62 @@ async function viewValueResult(id){
     }
     renderValueBarChart();
     renderValueCircleChart();
+
+    // IM chart (simple bar 10..60)
+    const imChart = im?.chart || null;
+    const imData = Array.isArray(imChart?.data) ? imChart.data[0] : (Number.isFinite(imSum)?imSum:null);
+    if(imData != null){
+      const imVal = Number(imData);
+      const imColor = imVal >= 42 ? '#E35B6A' : imVal >= 30 ? '#F2B84B' : '#2FAE7B';
+      // Полупрозрачные зоны по порогам (10–30 / 31–41 / 42–60)
+      const imBandsPlugin = {
+        id: 'imBands',
+        beforeDraw(chart){
+          const y = chart.scales?.y;
+          if(!y) return;
+          const {ctx, chartArea} = chart;
+          if(!ctx || !chartArea) return;
+          const left = chartArea.left;
+          const right = chartArea.right;
+          const top = chartArea.top;
+          const bottom = chartArea.bottom;
+
+          function yPix(v){ return y.getPixelForValue(v); }
+          function band(from, to, fill){
+            const y1 = yPix(from);
+            const y2 = yPix(to);
+            const bt = Math.min(y1, y2);
+            const bb = Math.max(y1, y2);
+            ctx.save();
+            ctx.fillStyle = fill;
+            ctx.fillRect(left, bt, right - left, bb - bt);
+            ctx.restore();
+          }
+
+          // Chart.js рисует ось по y: max сверху, min снизу — но пиксели уже учтены.
+          band(10, 30, 'rgba(47,174,123,.10)');  // green zone
+          band(31, 41, 'rgba(242,184,75,.12)');  // amber zone
+          band(42, 60, 'rgba(227,91,106,.10)');  // red zone
+        }
+      };
+      V_RESULT_CHARTS.im = new Chart(document.getElementById('im-bar').getContext('2d'),{
+        type:'bar',
+        data:{
+          labels:[imChart?.labels?.[0] || 'IM — управление впечатлением'],
+          datasets:[{ data:[imVal], backgroundColor:imColor, borderRadius:8, maxBarThickness:44 }]
+        },
+        options:{
+          responsive:true,
+          maintainAspectRatio:false,
+          plugins:{ legend:{ display:false }, tooltip:{ enabled:true } },
+          scales:{
+            y:{ min:10, max:60, ticks:{ stepSize:5 }, title:{ display:true, text:'Сумма (10–60)' } },
+            x:{ ticks:{ maxRotation:0, minRotation:0 } }
+          }
+        },
+        plugins:[imBandsPlugin]
+      });
+    }
   }catch(e){
     toast('Не удалось построить диаграммы','err');
   }
