@@ -463,7 +463,7 @@ function renderVacTbl(vacs){
       <td>${grpBadge}</td>
       ${showRec?`<td style="font-size:12px;color:var(--ink2);white-space:nowrap">${escapeHtml(v.current_recruiter_name||'')}</td>`:''}
       <td style="vertical-align:middle">
-        <span class="badge ${sc}">${escapeHtml(v.status)}</span>
+        <button type="button" class="badge ${sc}" data-act="quick-status" data-vacid="${escapeHtml(v.id)}" style="border:0;cursor:pointer">${escapeHtml(v.status)}</button>
       </td>
       <td style="font-size:12px;color:var(--ink2);white-space:nowrap">${fru(v.fact_date||'')||'—'}</td>
       <td style="font-size:12px;color:var(--ink2);white-space:nowrap">${escapeHtml(v.salary_offer||'—')}</td>
@@ -661,6 +661,78 @@ function onStatusChange(status){
 function closeModal(){
   const m=document.getElementById('vac-modal');
   if(m)m.remove();
+}
+
+function openQuickStatusModal(vac){
+  if(!vac)return;
+  const statuses=['В работе','Приостановлена','Закрыта','Отменена','Передана'];
+  const recs=DU.filter(u=>u.role==='recruiter'&&u.id!==U.id);
+  const options=statuses.map(s=>`<option${s===vac.status?' selected':''}>${s}</option>`).join('');
+  const recOpts=recs.map(r=>`<option value="${r.id}" data-name="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join('');
+  const html=`<div class="modal-overlay" id="qst-modal" data-act="qst-overlay">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-hdr"><span class="modal-ttl">Быстрая смена статуса</span><button type="button" class="modal-close" data-act="qst-close">✕</button></div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="fg full"><label class="flbl">Вакансия</label><div style="font-size:13px;font-weight:600">${escapeHtml(vac.name||'')}</div></div>
+          <div class="fg"><label class="flbl">Статус</label><select id="qst-status" class="finp">${options}</select></div>
+          <div class="fg" id="qst-date-wrap"><label class="flbl" id="qst-date-lbl">Дата</label><input id="qst-date" type="date" class="finp" value="${vac.fact_date||today()}"></div>
+          <div class="fg" id="qst-rec-wrap" style="display:none"><label class="flbl">Передать рекрутеру</label><select id="qst-rec" class="finp"><option value="">— выберите —</option>${recOpts}</select></div>
+        </div>
+      </div>
+      <div class="modal-footer"><div></div><div style="display:flex;gap:10px"><button type="button" class="btn-cancel" data-act="qst-close">Отмена</button><button type="button" class="btn-save" data-act="qst-save" data-vacid="${escapeHtml(vac.id)}">Сохранить</button></div></div>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend',html);
+  const sync=()=>{
+    const st=document.getElementById('qst-status')?.value;
+    const dw=document.getElementById('qst-date-wrap');
+    const rw=document.getElementById('qst-rec-wrap');
+    const lb=document.getElementById('qst-date-lbl');
+    const isFinal=['Закрыта','Отменена','Передана'].includes(st);
+    if(dw)dw.style.display=isFinal?'':'none';
+    if(rw)rw.style.display=st==='Передана'?'':'none';
+    if(lb)lb.textContent=st==='Закрыта'?'Дата закрытия':(st==='Отменена'?'Дата отмены':'Дата передачи');
+  };
+  document.getElementById('qst-status')?.addEventListener('change',sync);
+  sync();
+}
+
+function closeQuickStatusModal(){
+  const m=document.getElementById('qst-modal');
+  if(m)m.remove();
+}
+
+async function saveQuickStatus(vacId){
+  const vac=VACS.find(v=>String(v.id)===String(vacId));
+  if(!vac)return;
+  const st=document.getElementById('qst-status')?.value;
+  const dt=document.getElementById('qst-date')?.value||'';
+  const recSel=document.getElementById('qst-rec');
+  const recId=recSel?.value||'';
+  const recName=recId && recSel ? (recSel.options[recSel.selectedIndex].dataset.name||'') : '';
+  if(['Закрыта','Отменена','Передана'].includes(st) && !dt){toast('Укажите дату','err');return;}
+  if(st==='Передана' && !recId){toast('Укажите кому передана вакансия','err');return;}
+  const fields={status:st};
+  if(['Закрыта','Отменена','Передана'].includes(st)) fields.fact_date=dt;
+  else fields.fact_date='';
+  if(st==='Передана'){
+    fields.transfer_date=dt;
+    fields.transferred=true;
+    fields.transferred_from_id=U.id;
+    fields.transferred_from_name=U.name;
+    fields.current_recruiter_id=recId;
+    fields.current_recruiter_name=recName;
+  }else{
+    fields.transferred = vac.transferred && st!=='Передана' ? vac.transferred : false;
+  }
+  const res=await api('updateVacancy',{id:vacId,fields});
+  if(res?.ok||res===null){
+    Object.assign(vac,fields,{fact_date:fields.fact_date||vac.fact_date,transfer_date:fields.transfer_date||vac.transfer_date,current_recruiter_id:fields.current_recruiter_id||vac.current_recruiter_id,current_recruiter_name:fields.current_recruiter_name||vac.current_recruiter_name});
+    closeQuickStatusModal();
+    toast('Статус обновлён');
+    refreshDash();
+  }else toast(res?.error||'Не удалось обновить статус','err');
 }
 
 async function saveVac(existingId){
@@ -1323,6 +1395,7 @@ function clBC(step){
 let VLIST=[];
 let V_RESULT_CHARTS={bar:null,circle:null,im:null};
 let V_RESULT_VIEW={mode:'centered',centered:null,base:null,circleCentered:null,circleBase:null};
+let V_RESULT_CONTEXT={invite:null,result:null};
 
 async function renderValues(){
   const el=document.getElementById('content');
@@ -1338,6 +1411,14 @@ async function renderValues(){
 }
 
 function renderValuesList(el){
+  const profileBadge=v=>{
+    const c=v.profile_level;
+    const pct=Number(v.profile_match_pct);
+    if(!c||!Number.isFinite(pct)) return '<span style="font-size:11px;color:var(--ink3)">—</span>';
+    const map={red:['Красный','#E35B6A','#ffe9ec'],yellow:['Жёлтый','#B7791F','#fff6dd'],blue:['Синий','#2B6CB0','#e8f1ff'],green:['Зелёный','#2F855A','#e8fff3']};
+    const m=map[c]||['—','#4a5568','#edf2f7'];
+    return `<span style="font-size:11px;font-weight:700;color:${m[1]};background:${m[2]};padding:3px 8px;border-radius:999px">${m[0]} · ${pct}%</span>`;
+  };
   const statusBadge=s=>{
     if(s==='completed')return'<span class="badge sc2">Завершён</span>';
     if(s==='expired')return'<span class="badge sca">Истёк</span>';
@@ -1360,7 +1441,7 @@ function renderValuesList(el){
         <h3>Нет отправленных опросов</h3><p>Создайте оценку и отправьте кандидату персональную ссылку.</p>
       </div></div>`
       :`<div class="card"><div class="tbl-wrap"><table>
-        <thead><tr><th>Кандидат</th><th>Вакансия</th><th>Рекрутер</th><th>Дата отправки</th><th>Статус</th><th>Действия</th></tr></thead>
+        <thead><tr><th>Кандидат</th><th>Вакансия</th><th>Рекрутер</th><th>Дата отправки</th><th>Статус</th><th>Совпадение</th><th>Действия</th></tr></thead>
         <tbody>${VLIST.map(v=>`
           <tr>
             <td><div style="font-weight:600;font-size:13px">${escapeHtml(v.candidate_name||'')}</div><div style="font-size:11px;color:var(--ink3)">${escapeHtml(v.candidate_email||'')}</div></td>
@@ -1368,6 +1449,7 @@ function renderValuesList(el){
             <td><div style="font-size:12px;color:var(--ink2)">${escapeHtml(v.recruiter_name||'')}</div></td>
             <td><div style="font-size:12px;color:var(--ink3)">${escapeHtml(v.sent_at||'')}</div></td>
             <td>${statusBadge(v.status)}</td>
+            <td>${profileBadge(v)}</td>
             <td style="white-space:nowrap"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
               <button type="button" class="btn-sm" data-act="val-view" data-vid="${escapeHtml(v.id)}"${(v.has_result||v.status==='completed')?'':' disabled'}>Результат</button>
               ${canDelete()?`<button type="button" class="btn-danger" data-act="val-del" data-vid="${escapeHtml(v.id)}">✕</button>`:''}
@@ -1434,29 +1516,115 @@ function sortBarChartDesc(chart){
   };
 }
 
+function renderMetaLegend(containerId, metas, colors){
+  const el=document.getElementById(containerId);
+  if(!el)return;
+  if(!Array.isArray(metas)||!Array.isArray(colors)||!metas.length||metas.length!==colors.length){
+    el.innerHTML='';
+    return;
+  }
+  const uniq=[];
+  for(let i=0;i<metas.length;i++){
+    const m=String(metas[i]||'').trim();
+    const c=String(colors[i]||'').trim();
+    if(!m||!c)continue;
+    if(uniq.some(x=>x.meta===m))continue;
+    uniq.push({meta:m,color:c});
+  }
+  el.innerHTML=uniq.map(x=>`
+    <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:999px;background:#f7f7fb;font-size:11px;color:var(--ink2)">
+      <span style="width:10px;height:10px;border-radius:50%;background:${x.color};display:inline-block"></span>
+      ${escapeHtml(x.meta)}
+    </span>
+  `).join('');
+}
+
+function updateChartModeButtons(){
+  const btns=[...document.querySelectorAll('[data-act="val-chart-mode"]')];
+  btns.forEach(b=>{
+    const on=b.dataset.mode===V_RESULT_VIEW.mode;
+    b.style.background=on?'#7B5EA7':'';
+    b.style.color=on?'#fff':'';
+    b.style.borderColor=on?'#7B5EA7':'';
+  });
+}
+
+function exportValueReport(inv, r){
+  const p=r?.profile||{};
+  const lines=[];
+  lines.push('Отчёт по оценке ценностей');
+  lines.push('');
+  lines.push(`Кандидат: ${inv?.candidate_name||''}`);
+  lines.push(`Вакансия: ${inv?.vacancy_name||''}`);
+  lines.push(`Дата: ${inv?.submitted_at||''}`);
+  lines.push('');
+  lines.push(`Итог: ${p?.level_label||'—'} ${Number.isFinite(Number(p?.match_pct))?`(${p.match_pct}%)`:''}`);
+  lines.push('');
+  lines.push('Интерпретация:');
+  lines.push(String(r?.interpretation||'').replace(/\r/g,''));
+  lines.push('');
+  lines.push('Ведущие ценности:');
+  (p?.lead_values||[]).forEach(x=>lines.push(`- ${x.label} (${x.abbr}): ${x.score}`));
+  lines.push('');
+  lines.push('Ключевые ценности:');
+  (p?.key_values||[]).forEach(x=>lines.push(`- ${x.label} (${x.abbr}): ${x.score} (мин. ${x.min})`));
+  lines.push('');
+  lines.push('Зоны риска:');
+  (p?.risk_values||[]).forEach(x=>lines.push(`- ${x.label} (${x.abbr}): ${x.score} (идеал <= ${x.max})`));
+  lines.push('');
+  lines.push('Критические зоны риска:');
+  (p?.critical_risk_values||[]).forEach(x=>lines.push(`- ${x.label} (${x.abbr}): ${x.score} (ниже ${x.min})`));
+  lines.push('');
+  lines.push(`IM: ${Number(r?.im?.sum)||0}/60 — ${r?.im?.level||''}`);
+  const txt=lines.join('\n');
+  const blob=new Blob([txt],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`value-report-${(inv?.candidate_name||'candidate').replace(/[^\wа-яА-ЯёЁ-]+/g,'_')}.txt`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 function renderValueBarChart(){
   if(!V_RESULT_VIEW.centered)return;
   const mode = V_RESULT_VIEW.mode === 'base' && V_RESULT_VIEW.base ? 'base' : 'centered';
   const src = mode === 'base' ? V_RESULT_VIEW.base : V_RESULT_VIEW.centered;
-  const sorted = sortBarChartDesc(src);
-  const yTitle = mode === 'base' ? 'Средние баллы' : 'Отклонение от среднего';
+  const labels = Array.isArray(src?.labels) ? src.labels.slice() : [];
+  const data = Array.isArray(src?.data) ? src.data.slice() : [];
+  const ideal = mode === 'base'
+    ? (Array.isArray(V_RESULT_VIEW.idealBase) ? V_RESULT_VIEW.idealBase.slice() : null)
+    : (Array.isArray(V_RESULT_VIEW.idealCentered) ? V_RESULT_VIEW.idealCentered.slice() : null);
+  const colors = Array.isArray(V_RESULT_VIEW.colors) ? V_RESULT_VIEW.colors.slice() : [];
+  const yTitle = mode === 'base' ? 'Средние баллы' : 'Отклонение';
   if(V_RESULT_CHARTS.bar)V_RESULT_CHARTS.bar.destroy();
   V_RESULT_CHARTS.bar=new Chart(document.getElementById('val-bar').getContext('2d'),{
     type:'bar',
     data:{
-      labels:sorted.labels,
-      datasets:[{
-        label:mode === 'base' ? 'Баллы (базовые)' : 'Баллы (центрированные)',
-        data:sorted.data,
-        backgroundColor:'#7B5EA7'
-      }]
+      labels,
+      datasets:[
+        {
+          type:'bar',
+          label:mode === 'base' ? 'Профиль' : 'Профиль (центр.)',
+          data,
+          backgroundColor:colors.length===data.length ? colors : '#7B5EA7'
+        },
+        ...(ideal ? [{
+          type:'line',
+          label:'Эталонный профиль',
+          data:ideal,
+          borderColor:'#111827',
+          pointRadius:2,
+          borderWidth:2,
+          tension:0.2
+        }] : [])
+      ]
     },
     options:{
       responsive:true,
       maintainAspectRatio:false,
-      plugins:{legend:{display:false}},
+      plugins:{legend:{display:true,position:'bottom'}},
       scales:{
-        x:{ticks:{maxRotation:60,minRotation:45}},
+        x:{ticks:{maxRotation:0,minRotation:0,font:{size:10}}},
         y:{beginAtZero:false,title:{display:true,text:yTitle}}
       }
     }
@@ -1472,9 +1640,25 @@ function renderValueCircleChart(){
     type:'radar',
     data:{
       labels:src.labels||[],
-      datasets:[{label:'Круг ценностей',data:src.data||[],borderColor:'#7B5EA7',backgroundColor:'rgba(123,94,167,.15)',pointBackgroundColor:'#7B5EA7'}],
+      datasets:[
+        {label:'Профиль',data:src.data||[],borderColor:'#7B5EA7',backgroundColor:'rgba(123,94,167,.15)',pointBackgroundColor:'#7B5EA7'},
+        ...(mode==='base' && Array.isArray(V_RESULT_VIEW.circleIdealBase) ? [{
+          label:'Эталонный профиль',
+          data:V_RESULT_VIEW.circleIdealBase,
+          borderColor:'#111827',
+          backgroundColor:'rgba(17,24,39,.04)',
+          pointBackgroundColor:'#111827'
+        }] : []),
+        ...(mode!=='base' && Array.isArray(V_RESULT_VIEW.circleIdealCentered) ? [{
+          label:'Эталонный профиль',
+          data:V_RESULT_VIEW.circleIdealCentered,
+          borderColor:'#111827',
+          backgroundColor:'rgba(17,24,39,.04)',
+          pointBackgroundColor:'#111827'
+        }] : [])
+      ],
     },
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{r:{angleLines:{color:'#e6e1f0'},grid:{color:'#e6e1f0'}}}}
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'bottom'}},scales:{r:{angleLines:{color:'#e6e1f0'},grid:{color:'#e6e1f0'}}}}
   });
 }
 
@@ -1591,21 +1775,52 @@ async function viewValueResult(id){
   if(!res?.ok){toast(res?.error||'Результат не найден','err');return;}
   const inv=res.invite||{};
   const r=res.result||{};
+  const profile=r.profile||{};
+  V_RESULT_CONTEXT={invite:inv,result:r};
   const interpHtml = escapeHtml(r.interpretation||'Интерпретация будет доступна после обработки').replace(/\n/g,'<br>');
   const im = r.im || {};
   const imSum = Number(im.sum);
   const imLevel = String(im.level || '');
+  function levelBadgeHtml(p){
+    const map={red:['Красный','#E35B6A','#ffe9ec'],yellow:['Жёлтый','#B7791F','#fff6dd'],blue:['Синий','#2B6CB0','#e8f1ff'],green:['Зелёный','#2F855A','#e8fff3']};
+    const t=map[p?.level_code]||['—','#4a5568','#edf2f7'];
+    const pct=Number(p?.match_pct);
+    return `<span style="display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:${t[2]};color:${t[1]};font-weight:700;font-size:12px">${t[0]}${Number.isFinite(pct)?` · ${pct}%`:''}</span>`;
+  }
+  function renderRows(items, kind){
+    if(!Array.isArray(items)||!items.length)return '<div style="font-size:12px;color:var(--ink3)">Нет данных</div>';
+    return items.map(it=>`<div style="padding:8px 0;border-bottom:1px solid var(--bg);font-size:12px;line-height:1.5">
+      <div style="font-weight:700">${escapeHtml(it.label||it.abbr||'')} (${escapeHtml(it.abbr||'')}) — ${Number(it.score||0).toFixed(2)}</div>
+      ${kind==='key'?`<div style="color:var(--ink3)">Минимум: ${it.min}</div><div>В управлении: ${escapeHtml(it.needMgmt||'')}</div>`:''}
+      ${kind==='risk'?`<div style="color:var(--ink3)">Идеальный максимум: ${it.max}</div><div>Конфликт: ${escapeHtml(it.conflict||'')}</div>`:''}
+      ${kind==='critical'?`<div style="color:var(--red)">Ниже минимума ${it.min}</div><div>${escapeHtml(it.recommend||'')}</div>`:''}
+      ${kind==='lead'?`<div style="color:var(--ink3)">${escapeHtml(it.meta||'')} · ${escapeHtml(it.axis1||'')} · ${escapeHtml(it.axis2||'')}</div><div>${escapeHtml(it.goal||'')}</div>`:''}
+    </div>`).join('');
+  }
   document.getElementById('content').innerHTML=`
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px">
       <div>
         <h2 style="font-size:18px;font-weight:700">${escapeHtml(inv.candidate_name||'')}</h2>
         <p style="font-size:13px;color:var(--ink3)">${escapeHtml(inv.vacancy_name||'')} · ${escapeHtml(inv.submitted_at||'')}</p>
       </div>
-      <button type="button" class="btn-cancel" data-act="val-list">← К списку</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn-sm" data-act="val-export">Экспорт отчёта .txt</button>
+        <button type="button" class="btn-cancel" data-act="val-list">← К списку</button>
+      </div>
     </div>
     <div class="card" style="padding:12px 14px;margin-bottom:10px">
       <div style="font-size:13px;color:var(--ink2);line-height:1.7">${interpHtml}</div>
     </div>
+    <div class="card" style="padding:12px 14px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div class="ct">Итог соответствия профилю компании</div>
+        ${levelBadgeHtml(profile)}
+      </div>
+    </div>
+    <div class="card" style="padding:12px 14px;margin-bottom:10px;background:#f8f5ff"><div class="ct">Ведущие ценности</div>${renderRows(profile.lead_values,'lead')}</div>
+    <div class="card" style="padding:12px 14px;margin-bottom:10px;background:#effaf3"><div class="ct">Ключевые ценности</div>${renderRows(profile.key_values,'key')}</div>
+    <div class="card" style="padding:12px 14px;margin-bottom:10px;background:#fff8ea"><div class="ct">Зоны риска</div>${renderRows(profile.risk_values,'risk')}</div>
+    <div class="card" style="padding:12px 14px;margin-bottom:10px;background:#fff0f3"><div class="ct">Критические зоны риска</div>${renderRows(profile.critical_risk_values,'critical')}</div>
     <div class="card" style="padding:12px 14px;margin-bottom:10px">
       <div class="ct" style="margin-bottom:6px">Контроль социальной желательности (IM)</div>
       <div style="font-size:12px;color:var(--ink3);line-height:1.6">
@@ -1622,13 +1837,16 @@ async function viewValueResult(id){
     <div class="card" style="padding:10px 12px;margin-bottom:10px">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span style="font-size:12px;color:var(--ink3)">Показатель:</span>
-        <button type="button" class="btn-sm" data-act="val-chart-mode" data-mode="centered">Центрированные</button>
-        <button type="button" class="btn-sm" data-act="val-chart-mode" data-mode="base">Базовые средние</button>
+        <div style="display:inline-flex;gap:6px;background:#f3f4f6;padding:4px;border-radius:10px">
+          <button type="button" class="btn-sm" data-act="val-chart-mode" data-mode="centered">Центрированные</button>
+          <button type="button" class="btn-sm" data-act="val-chart-mode" data-mode="base">Базовые средние</button>
+        </div>
       </div>
       <div id="val-base-note" style="margin-top:8px;font-size:12px;color:var(--ink3);display:none"></div>
     </div>
     <div class="card" style="padding:12px;margin-bottom:10px;max-width:980px;margin-left:auto;margin-right:auto">
       <div class="ct" style="margin-bottom:10px">Столбчатая диаграмма ценностей</div>
+      <div id="val-meta-legend" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"></div>
       <div style="height:260px"><canvas id="val-bar"></canvas></div>
     </div>
     <div class="card" style="padding:12px;max-width:980px;margin-left:auto;margin-right:auto">
@@ -1650,8 +1868,13 @@ async function viewValueResult(id){
       mode:'base',
       centered:barModes.centered,
       base:getBaseBarData(r, barModes.centered),
+      idealBase:Array.isArray(r?.bar_chart?.ideal_data)?r.bar_chart.ideal_data:null,
+      idealCentered:Array.isArray(r?.bar_chart?.ideal_centered_data)?r.bar_chart.ideal_centered_data:null,
+      colors:Array.isArray(r?.bar_chart?.colors)?r.bar_chart.colors:null,
       circleCentered,
-      circleBase
+      circleBase,
+      circleIdealBase:Array.isArray(r?.circle_chart?.ideal_data)?r.circle_chart.ideal_data:null,
+      circleIdealCentered:Array.isArray(r?.circle_chart?.ideal_centered_data)?r.circle_chart.ideal_centered_data:null
     };
     const noteEl=document.getElementById('val-base-note');
     if(noteEl && !V_RESULT_VIEW.base){
@@ -1660,6 +1883,8 @@ async function viewValueResult(id){
     }
     renderValueBarChart();
     renderValueCircleChart();
+    renderMetaLegend('val-meta-legend', r?.bar_chart?.group_meta, r?.bar_chart?.colors);
+    updateChartModeButtons();
 
     // IM chart (simple bar 10..60)
     const imChart = im?.chart || null;
@@ -1693,9 +1918,9 @@ async function viewValueResult(id){
           }
 
           // Chart.js рисует ось по y: max сверху, min снизу — но пиксели уже учтены.
-          band(10, 30, 'rgba(47,174,123,.10)');  // green zone
-          band(31, 41, 'rgba(242,184,75,.12)');  // amber zone
-          band(42, 60, 'rgba(227,91,106,.10)');  // red zone
+          band(10, 30, 'rgba(47,174,123,.18)');
+          band(31, 41, 'rgba(242,184,75,.22)');
+          band(42, 60, 'rgba(227,91,106,.18)');
         }
       };
       V_RESULT_CHARTS.im = new Chart(document.getElementById('im-bar').getContext('2d'),{
@@ -1709,7 +1934,7 @@ async function viewValueResult(id){
           maintainAspectRatio:false,
           plugins:{ legend:{ display:false }, tooltip:{ enabled:true } },
           scales:{
-            y:{ min:10, max:60, ticks:{ stepSize:5 }, title:{ display:true, text:'Сумма (10–60)' } },
+            y:{ min:10, max:60, ticks:{ stepSize:5 }, title:{ display:false } },
             x:{ ticks:{ maxRotation:0, minRotation:0 } }
           }
         },
@@ -1912,12 +2137,21 @@ function initGlobalActs(){
       if(v) openVacModal(v);
     } else if(act==='del-vac'){
       deleteVac(el.dataset.vacid, el.dataset.force==='1');
+    } else if(act==='quick-status'){
+      const v=VACS.find(x=>String(x.id)===String(el.dataset.vacid));
+      if(v)openQuickStatusModal(v);
     } else if(act==='vac-overlay'){
       if(ev.target===el) closeModal();
     } else if(act==='close-vac-modal'){
       closeModal();
     } else if(act==='vac-save'){
       saveVac(el.dataset.vacid || '');
+    } else if(act==='qst-overlay'){
+      if(ev.target===el) closeQuickStatusModal();
+    } else if(act==='qst-close'){
+      closeQuickStatusModal();
+    } else if(act==='qst-save'){
+      saveQuickStatus(el.dataset.vacid);
     } else if(act==='cl-new'){
       startNewAssessment();
     } else if(act==='cl-view'){
@@ -1948,7 +2182,10 @@ function initGlobalActs(){
         V_RESULT_VIEW.mode=mode;
         renderValueBarChart();
         renderValueCircleChart();
+        updateChartModeButtons();
       }
+    } else if(act==='val-export'){
+      exportValueReport(V_RESULT_CONTEXT.invite||{}, V_RESULT_CONTEXT.result||{});
     } else if(act==='val-list'){
       renderValues();
     } else if(act==='val-del'){
@@ -1973,6 +2210,7 @@ function initEscClose(){
     if(e.key !== 'Escape') return;
     closeAllFilterDd();
     if(document.getElementById('vac-modal')) closeModal();
+    if(document.getElementById('qst-modal')) closeQuickStatusModal();
     if(document.getElementById('val-modal')) closeValueModal();
     if(document.getElementById('user-modal')) closeUserModal();
   });
