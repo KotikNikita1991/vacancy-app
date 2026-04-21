@@ -1511,7 +1511,7 @@ function renderValuesList(el){
             <td>${statusBadge(v.status)}</td>
             <td>${profileBadge(v)}</td>
             <td style="white-space:nowrap"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-              <button type="button" class="btn-sm" data-act="val-view" data-vid="${escapeHtml(v.id)}"${(v.has_result||v.status==='completed')?'':' disabled'}>Результат</button>
+              <button type="button" class="btn-sm" data-act="val-view" data-vid="${escapeHtml(v.id)}"${(v.has_result||v.status==='completed') && U.role!=='recruiter'?'':' disabled'}>Результат</button>
               ${canDelete()?`<button type="button" class="btn-danger" data-act="val-del" data-vid="${escapeHtml(v.id)}">✕</button>`:''}
             </div></td>
           </tr>
@@ -1841,7 +1841,11 @@ function ensureChartJs(){
 }
 
 async function viewValueResult(id){
-  const res=await api('getValueAssessmentResult',{id});
+  if(U?.role==='recruiter'){
+    toast('Детальный результат доступен только Администратору и Руководителю','err');
+    return;
+  }
+  const res=await api('getValueAssessmentResult',{id,role:U?.role,recruiter_id:U?.id});
   if(!res?.ok){toast(res?.error||'Результат не найден','err');return;}
   const inv=res.invite||{};
   const r=res.result||{};
@@ -2275,6 +2279,10 @@ function initGlobalActs(){
     } else if(act==='val-send'){
       sendValueInvite();
     } else if(act==='val-view'){
+      if(U?.role==='recruiter'){
+        toast('Детальный результат доступен только Администратору и Руководителю','err');
+        return;
+      }
       viewValueResult(el.dataset.vid);
     } else if(act==='val-chart-mode'){
       const mode=el.dataset.mode;
