@@ -666,7 +666,8 @@ function closeModal(){
 function openQuickStatusModal(vac){
   if(!vac)return;
   const statuses=['В работе','Приостановлена','Закрыта','Отменена','Передана'];
-  const recs=DU.filter(u=>u.role==='recruiter'&&u.id!==U.id);
+  const source=(Array.isArray(UL)&&UL.length)?UL:DU;
+  const recs=source.filter(u=>u && u.active!==false && String(u.id)!==String(U.id));
   const options=statuses.map(s=>`<option${s===vac.status?' selected':''}>${s}</option>`).join('');
   const recOpts=recs.map(r=>`<option value="${r.id}" data-name="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join('');
   const html=`<div class="modal-overlay" id="qst-modal" data-act="qst-overlay">
@@ -677,7 +678,7 @@ function openQuickStatusModal(vac){
           <div class="fg full"><label class="flbl">Вакансия</label><div style="font-size:13px;font-weight:600">${escapeHtml(vac.name||'')}</div></div>
           <div class="fg"><label class="flbl">Статус</label><select id="qst-status" class="finp">${options}</select></div>
           <div class="fg" id="qst-date-wrap"><label class="flbl" id="qst-date-lbl">Дата</label><input id="qst-date" type="date" class="finp" value="${vac.fact_date||today()}"></div>
-          <div class="fg" id="qst-rec-wrap" style="display:none"><label class="flbl">Передать рекрутеру</label><select id="qst-rec" class="finp"><option value="">— выберите —</option>${recOpts}</select></div>
+          <div class="fg" id="qst-rec-wrap" style="display:none"><label class="flbl">Передать пользователю</label><select id="qst-rec" class="finp"><option value="">— выберите —</option>${recOpts}</select></div>
         </div>
       </div>
       <div class="modal-footer"><div></div><div style="display:flex;gap:10px"><button type="button" class="btn-cancel" data-act="qst-close">Отмена</button><button type="button" class="btn-save" data-act="qst-save" data-vacid="${escapeHtml(vac.id)}">Сохранить</button></div></div>
@@ -1393,9 +1394,23 @@ function clBC(step){
 
 // ══ VALUES (PVQ-RR) ═════════════════════════════════
 let VLIST=[];
+let V_PROFILE_FILTER='all';
 let V_RESULT_CHARTS={bar:null,circle:null,im:null};
 let V_RESULT_VIEW={mode:'centered',centered:null,base:null,circleCentered:null,circleBase:null};
 let V_RESULT_CONTEXT={invite:null,result:null};
+const VALUE_SHORT_LABEL_BY_ABBR={
+  SDT:'Самостоятельность (М)', SDA:'Самостоятельность (П)', ST:'Стимуляция', HE:'Гедонизм', AC:'Достижение',
+  POD:'Власть (Д)', POR:'Власть (Р)', FAC:'Репутация', SEP:'Безопасность (Л)', SES:'Безопасность (О)',
+  TR:'Традиция', COR:'Конформизм (П)', COI:'Конформизм (М)', HUM:'Скромность',
+  BEC:'Благожелательность (З)', BED:'Благожелательность (ЧД)', UNC:'Забота о других', UNN:'Забота о природе', UNT:'Толерантность'
+};
+const VALUE_ABBR_BY_ID_FRONT={
+  self_direction_thought:'SDT', self_direction_action:'SDA', stimulation:'ST', hedonism:'HE', achievement:'AC',
+  power_dominance:'POD', power_resources:'POR', reputation:'FAC', security_personal:'SEP', security_societal:'SES',
+  tradition:'TR', conformity_rules:'COR', conformity_interpersonal:'COI', humility:'HUM',
+  benevolence_dependability:'BED', benevolence_caring:'BEC', universalism_concern:'UNC',
+  universalism_nature:'UNN', universalism_tolerance:'UNT'
+};
 
 async function renderValues(){
   const el=document.getElementById('content');
@@ -1411,6 +1426,9 @@ async function renderValues(){
 }
 
 function renderValuesList(el){
+  const filtered = V_PROFILE_FILTER==='all'
+    ? VLIST
+    : VLIST.filter(v=>String(v.profile_level||'')===V_PROFILE_FILTER);
   const profileBadge=v=>{
     const c=v.profile_level;
     const pct=Number(v.profile_match_pct);
@@ -1435,14 +1453,23 @@ function renderValuesList(el){
         Новая оценка ценностей
       </button>
     </div>
-    ${VLIST.length===0
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+      ${[
+        ['all','Все'],
+        ['red','Красный'],
+        ['yellow','Жёлтый'],
+        ['blue','Синий'],
+        ['green','Зелёный']
+      ].map(([id,label])=>`<button type="button" class="btn-sm" data-act="val-filter" data-filter="${id}" style="${V_PROFILE_FILTER===id?'background:#7B5EA7;color:#fff;border-color:#7B5EA7':''}">${label}</button>`).join('')}
+    </div>
+    ${filtered.length===0
       ?`<div class="card"><div class="empty" style="padding:60px">
         <div class="empty-ico" style="background:var(--accbg)"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--acc)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${IC.val}</svg></div>
-        <h3>Нет отправленных опросов</h3><p>Создайте оценку и отправьте кандидату персональную ссылку.</p>
+        <h3>${VLIST.length===0?'Нет отправленных опросов':'Нет данных по фильтру'}</h3><p>Измените фильтр или отправьте новый опрос.</p>
       </div></div>`
       :`<div class="card"><div class="tbl-wrap"><table>
         <thead><tr><th>Кандидат</th><th>Вакансия</th><th>Рекрутер</th><th>Дата отправки</th><th>Статус</th><th>Совпадение</th><th>Действия</th></tr></thead>
-        <tbody>${VLIST.map(v=>`
+        <tbody>${filtered.map(v=>`
           <tr>
             <td><div style="font-weight:600;font-size:13px">${escapeHtml(v.candidate_name||'')}</div><div style="font-size:11px;color:var(--ink3)">${escapeHtml(v.candidate_email||'')}</div></td>
             <td><div style="font-size:12px;color:var(--ink2)">${escapeHtml(v.vacancy_name||'—')}</div></td>
@@ -1589,7 +1616,8 @@ function renderValueBarChart(){
   if(!V_RESULT_VIEW.centered)return;
   const mode = V_RESULT_VIEW.mode === 'base' && V_RESULT_VIEW.base ? 'base' : 'centered';
   const src = mode === 'base' ? V_RESULT_VIEW.base : V_RESULT_VIEW.centered;
-  const labels = Array.isArray(src?.labels) ? src.labels.slice() : [];
+  const abbrs = Array.isArray(V_RESULT_VIEW.abbrs) ? V_RESULT_VIEW.abbrs.slice() : [];
+  const labels = abbrs.length ? abbrs.map(a=>VALUE_SHORT_LABEL_BY_ABBR[a]||a) : (Array.isArray(src?.labels) ? src.labels.slice() : []);
   const data = Array.isArray(src?.data) ? src.data.slice() : [];
   const ideal = mode === 'base'
     ? (Array.isArray(V_RESULT_VIEW.idealBase) ? V_RESULT_VIEW.idealBase.slice() : null)
@@ -1612,9 +1640,10 @@ function renderValueBarChart(){
           type:'line',
           label:'Эталонный профиль',
           data:ideal,
-          borderColor:'#111827',
-          pointRadius:2,
-          borderWidth:2,
+          borderColor:'#E11D48',
+          pointBackgroundColor:'#E11D48',
+          pointRadius:3,
+          borderWidth:3,
           tension:0.2
         }] : [])
       ]
@@ -1624,8 +1653,8 @@ function renderValueBarChart(){
       maintainAspectRatio:false,
       plugins:{legend:{display:true,position:'bottom'}},
       scales:{
-        x:{ticks:{maxRotation:0,minRotation:0,font:{size:10}}},
-        y:{beginAtZero:false,title:{display:true,text:yTitle}}
+        x:{ticks:{autoSkip:false,maxRotation:45,minRotation:45,font:{size:9}}},
+        y:{min:1,max:6,beginAtZero:false,title:{display:true,text:yTitle}}
       }
     }
   });
@@ -1635,30 +1664,32 @@ function renderValueCircleChart(){
   if(!V_RESULT_VIEW.circleCentered)return;
   const mode = V_RESULT_VIEW.mode === 'base' && V_RESULT_VIEW.circleBase ? 'base' : 'centered';
   const src = mode === 'base' ? V_RESULT_VIEW.circleBase : V_RESULT_VIEW.circleCentered;
+  const abbrs = Array.isArray(V_RESULT_VIEW.circleAbbrs) ? V_RESULT_VIEW.circleAbbrs : [];
+  const labels = abbrs.length ? abbrs.map(a=>VALUE_SHORT_LABEL_BY_ABBR[a]||a) : (src.labels||[]);
   if(V_RESULT_CHARTS.circle)V_RESULT_CHARTS.circle.destroy();
   V_RESULT_CHARTS.circle=new Chart(document.getElementById('val-circle').getContext('2d'),{
     type:'radar',
     data:{
-      labels:src.labels||[],
+      labels,
       datasets:[
         {label:'Профиль',data:src.data||[],borderColor:'#7B5EA7',backgroundColor:'rgba(123,94,167,.15)',pointBackgroundColor:'#7B5EA7'},
         ...(mode==='base' && Array.isArray(V_RESULT_VIEW.circleIdealBase) ? [{
           label:'Эталонный профиль',
           data:V_RESULT_VIEW.circleIdealBase,
-          borderColor:'#111827',
-          backgroundColor:'rgba(17,24,39,.04)',
-          pointBackgroundColor:'#111827'
+          borderColor:'#E11D48',
+          backgroundColor:'rgba(225,29,72,.04)',
+          pointBackgroundColor:'#E11D48'
         }] : []),
         ...(mode!=='base' && Array.isArray(V_RESULT_VIEW.circleIdealCentered) ? [{
           label:'Эталонный профиль',
           data:V_RESULT_VIEW.circleIdealCentered,
-          borderColor:'#111827',
-          backgroundColor:'rgba(17,24,39,.04)',
-          pointBackgroundColor:'#111827'
+          borderColor:'#E11D48',
+          backgroundColor:'rgba(225,29,72,.04)',
+          pointBackgroundColor:'#E11D48'
         }] : [])
       ],
     },
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'bottom'}},scales:{r:{angleLines:{color:'#e6e1f0'},grid:{color:'#e6e1f0'}}}}
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'bottom'}},scales:{r:{min:1,max:6,angleLines:{color:'#e6e1f0'},grid:{color:'#e6e1f0'}}}}
   });
 }
 
@@ -1775,7 +1806,23 @@ async function viewValueResult(id){
   if(!res?.ok){toast(res?.error||'Результат не найден','err');return;}
   const inv=res.invite||{};
   const r=res.result||{};
-  const profile=r.profile||{};
+  const profileRaw=r.profile||{};
+  const profile=(profileRaw && Object.keys(profileRaw).length) ? profileRaw : (function(){
+    const scores=r?.scores||{};
+    const mean=Number(r?.mean57||0);
+    const toBase=id=>Number(scores?.[id]||0)+mean;
+    const keyDefs=[['UNC','universalism_concern',5.0],['BEC','benevolence_caring',5.0],['BED','benevolence_dependability',4.5],['AC','achievement',4.0],['SDA','self_direction_action',4.0],['SDT','self_direction_thought',4.0],['ST','stimulation',3.5]];
+    const riskDefs=[['POD','power_dominance',3.0],['TR','tradition',3.0],['FAC','reputation',4.0],['COR','conformity_rules',3.5]];
+    const lead=Object.keys(scores).map(id=>({id,score:toBase(id)})).sort((a,b)=>b.score-a.score).slice(0,5).map(x=>({abbr:VALUE_ABBR_BY_ID_FRONT[x.id]||x.id,label:VALUE_SHORT_LABEL_BY_ABBR[VALUE_ABBR_BY_ID_FRONT[x.id]]||x.id,score:Number(x.score.toFixed(2))}));
+    const keyVals=keyDefs.map(([abbr,id,min])=>({abbr,label:VALUE_SHORT_LABEL_BY_ABBR[abbr],score:Number(toBase(id).toFixed(2)),min}));
+    const riskVals=riskDefs.map(([abbr,id,max])=>({abbr,label:VALUE_SHORT_LABEL_BY_ABBR[abbr],score:Number(toBase(id).toFixed(2)),max})).sort((a,b)=>b.score-a.score);
+    const critical=keyVals.filter(x=>x.score<x.min);
+    const pts=[...keyVals.map(x=>Math.max(0,Math.min(1,x.score/x.min))),...riskVals.map(x=>x.score<=x.max?1:Math.max(0,Math.min(1,x.max/x.score)))];
+    const pct=Math.round((pts.reduce((s,v)=>s+v,0)/(pts.length||1))*100);
+    const code=pct>=75?'green':pct>=50?'blue':pct>=25?'yellow':'red';
+    const label=code==='green'?'Зелёный':code==='blue'?'Синий':code==='yellow'?'Жёлтый':'Красный';
+    return {match_pct:pct,level_code:code,level_label:label,lead_values:lead,key_values:keyVals,risk_values:riskVals,critical_risk_values:critical};
+  })();
   V_RESULT_CONTEXT={invite:inv,result:r};
   const interpHtml = escapeHtml(r.interpretation||'Интерпретация будет доступна после обработки').replace(/\n/g,'<br>');
   const im = r.im || {};
@@ -1828,7 +1875,7 @@ async function viewValueResult(id){
       </div>
       <div style="display:flex;gap:12px;align-items:baseline;margin-top:10px;flex-wrap:wrap">
         <div style="font-size:18px;font-weight:800;color:var(--ink2)">${Number.isFinite(imSum)?imSum:'—'} / 60</div>
-        <div style="font-size:12px;color:var(--ink3)">${escapeHtml(imLevel||'')}</div>
+        <div style="font-size:12px;color:var(--ink3)">${escapeHtml(imLevel||(!Number.isFinite(imSum)?'Для этого результата IM не записан в источнике данных':''))}</div>
       </div>
       <div style="height:120px;margin-top:10px">
         <canvas id="im-bar"></canvas>
@@ -1846,7 +1893,6 @@ async function viewValueResult(id){
     </div>
     <div class="card" style="padding:12px;margin-bottom:10px;max-width:980px;margin-left:auto;margin-right:auto">
       <div class="ct" style="margin-bottom:10px">Столбчатая диаграмма ценностей</div>
-      <div id="val-meta-legend" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"></div>
       <div style="height:260px"><canvas id="val-bar"></canvas></div>
     </div>
     <div class="card" style="padding:12px;max-width:980px;margin-left:auto;margin-right:auto">
@@ -1871,8 +1917,10 @@ async function viewValueResult(id){
       idealBase:Array.isArray(r?.bar_chart?.ideal_data)?r.bar_chart.ideal_data:null,
       idealCentered:Array.isArray(r?.bar_chart?.ideal_centered_data)?r.bar_chart.ideal_centered_data:null,
       colors:Array.isArray(r?.bar_chart?.colors)?r.bar_chart.colors:null,
+      abbrs:Array.isArray(r?.bar_chart?.abbrs)?r.bar_chart.abbrs:null,
       circleCentered,
       circleBase,
+      circleAbbrs:Array.isArray(r?.circle_chart?.order)?r.circle_chart.order.map(id=>VALUE_ABBR_BY_ID_FRONT[id]||id):null,
       circleIdealBase:Array.isArray(r?.circle_chart?.ideal_data)?r.circle_chart.ideal_data:null,
       circleIdealCentered:Array.isArray(r?.circle_chart?.ideal_centered_data)?r.circle_chart.ideal_centered_data:null
     };
@@ -1883,7 +1931,6 @@ async function viewValueResult(id){
     }
     renderValueBarChart();
     renderValueCircleChart();
-    renderMetaLegend('val-meta-legend', r?.bar_chart?.group_meta, r?.bar_chart?.colors);
     updateChartModeButtons();
 
     // IM chart (simple bar 10..60)
@@ -1980,6 +2027,7 @@ async function renderUsers(){
       +'<td style="white-space:nowrap;display:flex;gap:6px">'
       +'<button class="btn-edit" data-uidx="'+di+'" data-act="user-edit">Изменить</button>'
       +(!isMe?'<button class="btn-sm" data-uid="'+u.id+'" data-uactive="'+(u.active!==false?'1':'0')+'" data-act="user-toggle">'+(u.active?'Деактив.':'Активировать')+'</button>':'')
+      +(!isMe?'<button class="btn-danger" data-uid="'+u.id+'" data-uname="'+escapeHtml(u.name||'')+'" data-act="user-delete">✕</button>':'')
       +'</td></tr>';
   }
 
@@ -2103,6 +2151,18 @@ async function toggleUserActive(id,currentActive){
   }
 }
 
+async function deleteUserAccount(id, name){
+  if(!id)return;
+  if(!confirm(`Удалить пользователя "${name||id}"? Действие необратимо.`))return;
+  const res=await api('deleteUser',{caller_role:U.role,caller_id:U.id,id});
+  if(res?.ok || res===null){
+    toast('Пользователь удалён');
+    navigate('users');
+  }else{
+    toast(res?.error||'Ошибка удаления','err');
+  }
+}
+
 
 function initNavDelegation(){
   const nav = document.getElementById('nav');
@@ -2184,6 +2244,9 @@ function initGlobalActs(){
         renderValueCircleChart();
         updateChartModeButtons();
       }
+    } else if(act==='val-filter'){
+      V_PROFILE_FILTER=el.dataset.filter||'all';
+      renderValuesList(document.getElementById('content'));
     } else if(act==='val-export'){
       exportValueReport(V_RESULT_CONTEXT.invite||{}, V_RESULT_CONTEXT.result||{});
     } else if(act==='val-list'){
@@ -2194,6 +2257,8 @@ function initGlobalActs(){
       const uid = el.getAttribute('data-uid');
       const ua = el.getAttribute('data-uactive')==='1';
       toggleUserActive(uid, ua);
+    } else if(act==='user-delete'){
+      deleteUserAccount(el.getAttribute('data-uid'), el.getAttribute('data-uname'));
     } else if(act==='user-new'){
       openUserModal();
     } else if(act==='user-edit'){
