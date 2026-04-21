@@ -1641,7 +1641,7 @@ function renderValueBarChart(){
   const dataRaw = Array.isArray(src?.data) ? src.data.slice() : [];
   const idealRaw = mode === 'base'
     ? (Array.isArray(V_RESULT_VIEW.idealBase) ? V_RESULT_VIEW.idealBase.slice() : null)
-    : (Array.isArray(V_RESULT_VIEW.idealCentered) ? V_RESULT_VIEW.idealCentered.slice() : null);
+    : null;
   const pairs = labelsRaw.map((label,i)=>({label,value:Number(dataRaw[i])||0,ideal:idealRaw?Number(idealRaw[i])||0:null}));
   pairs.sort((a,b)=>b.value-a.value);
   const labels = pairs.map(p=>p.label);
@@ -1715,7 +1715,7 @@ function renderValueCircleChart(){
         }] : [])
       ],
     },
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'bottom'}},scales:{r:{min:1,max:6,angleLines:{color:'#e6e1f0'},grid:{color:'#e6e1f0'}}}}
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'top'}},scales:{r:{min:1,max:6,angleLines:{color:'#e6e1f0'},grid:{color:'#e6e1f0'}}}}
   });
 }
 
@@ -1867,7 +1867,7 @@ async function viewValueResult(id){
       ${kind==='key'?`<div style="color:var(--ink3)">Минимум: ${it.min}</div><div>В управлении: ${escapeHtml(it.needMgmt||'Поддерживать поведение, усиливающее ценность через регулярную обратную связь и практику.')}</div><div>Рекомендация: ${escapeHtml(it.recommend||'При расхождении с профилем компании задайте конкретные поведенческие кейсы и договоритесь о шагах развития.')}</div>`:''}
       ${kind==='risk'?`<div style="color:var(--ink3)">Идеальный максимум: ${it.max}</div><div>Конфликт: ${escapeHtml(it.conflict||'Может конфликтовать с ценностями сотрудничества, гибкости и человекоцентричности.')}</div><div>Рекомендация: ${escapeHtml(it.recommend||'Сбалансируйте управленческие ожидания: добавьте прозрачные правила и критерии взаимодействия.')}</div>`:''}
       ${kind==='critical'?`<div style="color:var(--red)">Ниже минимума ${it.min}</div><div>${escapeHtml(it.recommend||'Нужна приоритетная развивающая работа: уточнить барьеры и закрепить конкретные поведенческие практики.')}</div>`:''}
-      ${kind==='lead'?`<div style="color:var(--ink3)">${escapeHtml(it.meta||'Метаценность: уточняется')}${it.axis1?' · '+escapeHtml(it.axis1):' · Ось 1: уточняется'}${it.axis2?' · '+escapeHtml(it.axis2):' · Ось 2: уточняется'}</div><div>${escapeHtml(it.goal||'Мотивационная цель: выраженное стремление действовать согласно данной ценности.')}</div>`:''}
+      ${kind==='lead'?`${(it.meta||it.axis1||it.axis2)?`<div style="color:var(--ink3)">${escapeHtml(it.meta||'')}${it.axis1?' · '+escapeHtml(it.axis1):''}${it.axis2?' · '+escapeHtml(it.axis2):''}</div>`:''}<div>${escapeHtml(it.goal||'Мотивационная цель: выраженное стремление действовать согласно данной ценности.')}</div>`:''}
     </div>`).join('');
   }
   document.getElementById('content').innerHTML=`
