@@ -8,6 +8,7 @@ let DASH_SORT={key:'date_opened',dir:'desc'};
 // Планы: {recruiterId: {month(YYYY-MM): count}}
 let PLANS = {};
 let UL = [];
+let ACTIVE_TRANSFER_USERS = [];
 
 function filterDdHtml(ddId,label,opts,selected){
   const boxes=opts.map(o=>{
@@ -177,7 +178,18 @@ async function startApp(){
   initDocFilterDdClose();
   const rr=await api('getReference');
   if(rr?.ok){REF=rr.reference;updateGroupNorm();}
+  await refreshActiveTransferUsers();
   navigate('dashboard');
+}
+
+async function refreshActiveTransferUsers(){
+  const res=await api('getUsers',{role:U.role});
+  if(res?.ok && Array.isArray(res.users)){
+    UL=res.users;
+    ACTIVE_TRANSFER_USERS=res.users.filter(u=>u && u.active!==false && String(u.id)!==String(U.id));
+    return;
+  }
+  ACTIVE_TRANSFER_USERS=[];
 }
 function buildNav(){
   document.getElementById('nav').innerHTML=(NCFG[U.role]||[]).map(it=>`
@@ -230,7 +242,7 @@ function canSetPlan(){return U.role==='manager'||U.role==='admin'}
 // ══ DASHBOARD ════════════════════════════════════════
 async function renderDash(){
   const vr=await api('getVacancies',{role:U.role,recruiter_id:U.id});
-  VACS=vr?.ok?vr.vacancies:(U.role==='recruiter'?DV.filter(v=>v.recruiter_id===U.id||v.current_recruiter_id===U.id):DV);
+  VACS=vr?.ok?(vr.vacancies||[]):[];
   const recNames=[...new Set(VACS.map(v=>v.current_recruiter_name).filter(Boolean))];
   const groups=[...VAC_GROUPS];
   try{
@@ -482,7 +494,7 @@ function renderVacTbl(vacs){
 }
 
 // ══ VACANCY MODAL ════════════════════════════════════
-function openVacModal(vac=null){
+async function openVacModal(vac=null){
   const isEdit=!!vac;
   const v=vac||{};
   const isRecruiter=U.role==='recruiter';
@@ -494,7 +506,8 @@ function openVacModal(vac=null){
   const statuses=['В работе','Приостановлена','Закрыта','Отменена','Передана'];
 
   // Список рекрутеров для передачи
-  const recruiters=DU.filter(u=>u.role==='recruiter'&&u.id!==U.id);
+  if(!ACTIVE_TRANSFER_USERS.length) await refreshActiveTransferUsers();
+  const recruiters=ACTIVE_TRANSFER_USERS;
 
   const opt=(arr,sel)=>arr.map(a=>`<option${a===sel?' selected':''}>${a}</option>`).join('');
   const dis=isEdit&&isRecruiter; // для полей которые рекрутер не может трогать при редактировании
@@ -663,11 +676,11 @@ function closeModal(){
   if(m)m.remove();
 }
 
-function openQuickStatusModal(vac){
+async function openQuickStatusModal(vac){
   if(!vac)return;
   const statuses=['В работе','Приостановлена','Закрыта','Отменена','Передана'];
-  const source=(Array.isArray(UL)&&UL.length)?UL:DU;
-  const recs=source.filter(u=>u && u.active!==false && String(u.id)!==String(U.id));
+  if(!ACTIVE_TRANSFER_USERS.length) await refreshActiveTransferUsers();
+  const recs=ACTIVE_TRANSFER_USERS;
   const options=statuses.map(s=>`<option${s===vac.status?' selected':''}>${s}</option>`).join('');
   const recOpts=recs.map(r=>`<option value="${r.id}" data-name="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join('');
   const html=`<div class="modal-overlay" id="qst-modal" data-act="qst-overlay">
@@ -867,7 +880,7 @@ async function deleteVac(id,fromModal=false){
 async function renderAnalytics(){
   const el=document.getElementById('content');
   const vr=await api('getVacancies',{role:U.role,recruiter_id:U.id});
-  const allV=vr?.ok?vr.vacancies:DV;
+  const allV=vr?.ok?(vr.vacancies||[]):[];
 
   let APeriod={...PERIOD};
   let AStat=[], AGrp=[], ADept=[], ARec=[];
@@ -1128,7 +1141,7 @@ async function renderChecklist(){
   ]);
   ASSESSMENTS=ar?.ok?ar.assessments:[];
   if(vr?.ok)VACS=vr.vacancies;
-  if(!VACS.length)VACS=U.role==='recruiter'?DV.filter(v=>v.recruiter_id===U.id||v.current_recruiter_id===U.id):DV;
+  if(!VACS)VACS=[];
   renderAssessmentList(el);
 }
 
@@ -1429,7 +1442,7 @@ async function renderValues(){
   ]);
   VLIST=rr?.ok?(rr.items||[]):[];
   if(vr?.ok)VACS=vr.vacancies;
-  if(!VACS.length)VACS=U.role==='recruiter'?DV.filter(v=>v.recruiter_id===U.id||v.current_recruiter_id===U.id):DV;
+  if(!VACS)VACS=[];
   renderValuesList(el);
 }
 
@@ -2034,7 +2047,7 @@ function renderSoon(page){
 async function renderUsers(){
   const el=document.getElementById('content');
   const res=await api('getUsers',{role:U.role});
-  const users=res?.ok?res.users:DU;
+  const users=res?.ok?(res.users||[]):[];
   UL=users;
 
   function userRow(u){
@@ -2166,10 +2179,9 @@ async function toggleUserActive(id,currentActive){
   const action = wantActive ? 'activateUser' : 'deactivateUser';
   const res = await api(action,{caller_role:U.role,id});
   if(res?.ok || res===null){
-    const u = DU.find(x=>String(x.id)===String(id));
-    if(u) u.active = wantActive;
     const i = typeof UL !== 'undefined' ? UL.findIndex(x=>String(x.id)===String(id)) : -1;
     if(i >= 0) UL[i] = {...UL[i], active: wantActive};
+    ACTIVE_TRANSFER_USERS=UL.filter(u=>u && u.active!==false && String(u.id)!==String(U.id));
     toast(wantActive?'Пользователь активирован':'Пользователь деактивирован');
     navigate('users');
   }else{
@@ -2182,6 +2194,8 @@ async function deleteUserAccount(id, name){
   if(!confirm(`Удалить пользователя "${name||id}"? Действие необратимо.`))return;
   const res=await api('deleteUser',{caller_role:U.role,caller_id:U.id,id});
   if(res?.ok || res===null){
+    UL=UL.filter(u=>String(u.id)!==String(id));
+    ACTIVE_TRANSFER_USERS=UL.filter(u=>u && u.active!==false && String(u.id)!==String(U.id));
     toast('Пользователь удалён');
     navigate('users');
   }else{
