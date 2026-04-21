@@ -1404,6 +1404,14 @@ const VALUE_SHORT_LABEL_BY_ABBR={
   TR:'Традиция', COR:'Конформизм (П)', COI:'Конформизм (М)', HUM:'Скромность',
   BEC:'Благожелательность (З)', BED:'Благожелательность (ЧД)', UNC:'Забота о других', UNN:'Забота о природе', UNT:'Толерантность'
 };
+const VALUE_FULL_LABEL_BY_ABBR={
+  SDT:'Самостоятельность мысли', SDA:'Самостоятельность поступков', ST:'Стимуляция', HE:'Гедонизм', AC:'Достижение',
+  POD:'Власть — доминирование', POR:'Власть — ресурсы', FAC:'Репутация',
+  SEP:'Личная безопасность', SES:'Общественная безопасность', TR:'Традиция',
+  COR:'Конформизм — правила', COI:'Конформизм — межличностная', HUM:'Скромность',
+  BEC:'Благожелательность — забота', BED:'Благожелательность — чувство долга',
+  UNC:'Забота о других', UNN:'Забота о природе', UNT:'Толерантность'
+};
 const VALUE_ABBR_BY_ID_FRONT={
   self_direction_thought:'SDT', self_direction_action:'SDA', stimulation:'ST', hedonism:'HE', achievement:'AC',
   power_dominance:'POD', power_resources:'POR', reputation:'FAC', security_personal:'SEP', security_societal:'SES',
@@ -1430,8 +1438,20 @@ function renderValuesList(el){
     ? VLIST
     : VLIST.filter(v=>String(v.profile_level||'')===V_PROFILE_FILTER);
   const profileBadge=v=>{
-    const c=v.profile_level;
-    const pct=Number(v.profile_match_pct);
+    let c=v.profile_level;
+    let pct=Number(v.profile_match_pct);
+    if((!c||!Number.isFinite(pct)) && typeof v.interpretation==='string'){
+      const t=v.interpretation;
+      const m=t.match(/(Зел[её]ный|Синий|Ж[её]лтый|Красный)\s*\(?(\d{1,3})?%?\)?/i);
+      if(m){
+        const l=m[1].toLowerCase();
+        if(l.includes('зел')) c='green';
+        else if(l.includes('син')) c='blue';
+        else if(l.includes('ж')) c='yellow';
+        else if(l.includes('крас')) c='red';
+        if(m[2]) pct=Number(m[2]);
+      }
+    }
     if(!c||!Number.isFinite(pct)) return '<span style="font-size:11px;color:var(--ink3)">—</span>';
     const map={red:['Красный','#E35B6A','#ffe9ec'],yellow:['Жёлтый','#B7791F','#fff6dd'],blue:['Синий','#2B6CB0','#e8f1ff'],green:['Зелёный','#2F855A','#e8fff3']};
     const m=map[c]||['—','#4a5568','#edf2f7'];
@@ -1617,12 +1637,16 @@ function renderValueBarChart(){
   const mode = V_RESULT_VIEW.mode === 'base' && V_RESULT_VIEW.base ? 'base' : 'centered';
   const src = mode === 'base' ? V_RESULT_VIEW.base : V_RESULT_VIEW.centered;
   const abbrs = Array.isArray(V_RESULT_VIEW.abbrs) ? V_RESULT_VIEW.abbrs.slice() : [];
-  const labels = abbrs.length ? abbrs.map(a=>VALUE_SHORT_LABEL_BY_ABBR[a]||a) : (Array.isArray(src?.labels) ? src.labels.slice() : []);
-  const data = Array.isArray(src?.data) ? src.data.slice() : [];
-  const ideal = mode === 'base'
+  const labelsRaw = abbrs.length ? abbrs.map(a=>VALUE_SHORT_LABEL_BY_ABBR[a]||a) : (Array.isArray(src?.labels) ? src.labels.slice() : []);
+  const dataRaw = Array.isArray(src?.data) ? src.data.slice() : [];
+  const idealRaw = mode === 'base'
     ? (Array.isArray(V_RESULT_VIEW.idealBase) ? V_RESULT_VIEW.idealBase.slice() : null)
     : (Array.isArray(V_RESULT_VIEW.idealCentered) ? V_RESULT_VIEW.idealCentered.slice() : null);
-  const colors = Array.isArray(V_RESULT_VIEW.colors) ? V_RESULT_VIEW.colors.slice() : [];
+  const pairs = labelsRaw.map((label,i)=>({label,value:Number(dataRaw[i])||0,ideal:idealRaw?Number(idealRaw[i])||0:null}));
+  pairs.sort((a,b)=>b.value-a.value);
+  const labels = pairs.map(p=>p.label);
+  const data = pairs.map(p=>p.value);
+  const ideal = idealRaw ? pairs.map(p=>p.ideal) : null;
   const yTitle = mode === 'base' ? 'Средние баллы' : 'Отклонение';
   if(V_RESULT_CHARTS.bar)V_RESULT_CHARTS.bar.destroy();
   V_RESULT_CHARTS.bar=new Chart(document.getElementById('val-bar').getContext('2d'),{
@@ -1634,7 +1658,8 @@ function renderValueBarChart(){
           type:'bar',
           label:mode === 'base' ? 'Профиль' : 'Профиль (центр.)',
           data,
-          backgroundColor:colors.length===data.length ? colors : '#7B5EA7'
+          backgroundColor:'#7B5EA7',
+          order:10
         },
         ...(ideal ? [{
           type:'line',
@@ -1644,14 +1669,15 @@ function renderValueBarChart(){
           pointBackgroundColor:'#E11D48',
           pointRadius:3,
           borderWidth:3,
-          tension:0.2
+          tension:0.2,
+          order:0
         }] : [])
       ]
     },
     options:{
       responsive:true,
       maintainAspectRatio:false,
-      plugins:{legend:{display:true,position:'bottom'}},
+      plugins:{legend:{display:true,position:'top'}},
       scales:{
         x:{ticks:{autoSkip:false,maxRotation:45,minRotation:45,font:{size:9}}},
         y:{min:1,max:6,beginAtZero:false,title:{display:true,text:yTitle}}
@@ -1813,9 +1839,9 @@ async function viewValueResult(id){
     const toBase=id=>Number(scores?.[id]||0)+mean;
     const keyDefs=[['UNC','universalism_concern',5.0],['BEC','benevolence_caring',5.0],['BED','benevolence_dependability',4.5],['AC','achievement',4.0],['SDA','self_direction_action',4.0],['SDT','self_direction_thought',4.0],['ST','stimulation',3.5]];
     const riskDefs=[['POD','power_dominance',3.0],['TR','tradition',3.0],['FAC','reputation',4.0],['COR','conformity_rules',3.5]];
-    const lead=Object.keys(scores).map(id=>({id,score:toBase(id)})).sort((a,b)=>b.score-a.score).slice(0,5).map(x=>({abbr:VALUE_ABBR_BY_ID_FRONT[x.id]||x.id,label:VALUE_SHORT_LABEL_BY_ABBR[VALUE_ABBR_BY_ID_FRONT[x.id]]||x.id,score:Number(x.score.toFixed(2))}));
-    const keyVals=keyDefs.map(([abbr,id,min])=>({abbr,label:VALUE_SHORT_LABEL_BY_ABBR[abbr],score:Number(toBase(id).toFixed(2)),min}));
-    const riskVals=riskDefs.map(([abbr,id,max])=>({abbr,label:VALUE_SHORT_LABEL_BY_ABBR[abbr],score:Number(toBase(id).toFixed(2)),max})).sort((a,b)=>b.score-a.score);
+    const lead=Object.keys(scores).map(id=>({id,score:toBase(id)})).sort((a,b)=>b.score-a.score).slice(0,5).map(x=>({abbr:VALUE_ABBR_BY_ID_FRONT[x.id]||x.id,label:VALUE_FULL_LABEL_BY_ABBR[VALUE_ABBR_BY_ID_FRONT[x.id]]||x.id,score:Number(x.score.toFixed(2))}));
+    const keyVals=keyDefs.map(([abbr,id,min])=>({abbr,label:VALUE_FULL_LABEL_BY_ABBR[abbr],score:Number(toBase(id).toFixed(2)),min}));
+    const riskVals=riskDefs.map(([abbr,id,max])=>({abbr,label:VALUE_FULL_LABEL_BY_ABBR[abbr],score:Number(toBase(id).toFixed(2)),max})).sort((a,b)=>b.score-a.score);
     const critical=keyVals.filter(x=>x.score<x.min);
     const pts=[...keyVals.map(x=>Math.max(0,Math.min(1,x.score/x.min))),...riskVals.map(x=>x.score<=x.max?1:Math.max(0,Math.min(1,x.max/x.score)))];
     const pct=Math.round((pts.reduce((s,v)=>s+v,0)/(pts.length||1))*100);
@@ -1835,13 +1861,13 @@ async function viewValueResult(id){
     return `<span style="display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:${t[2]};color:${t[1]};font-weight:700;font-size:12px">${t[0]}${Number.isFinite(pct)?` · ${pct}%`:''}</span>`;
   }
   function renderRows(items, kind){
-    if(!Array.isArray(items)||!items.length)return '<div style="font-size:12px;color:var(--ink3)">Нет данных</div>';
+    if(!Array.isArray(items)||!items.length)return '<div style="font-size:12px;color:var(--ink3)">Данные недоступны для этой записи. Используйте повторную оценку для полного профиля.</div>';
     return items.map(it=>`<div style="padding:8px 0;border-bottom:1px solid var(--bg);font-size:12px;line-height:1.5">
-      <div style="font-weight:700">${escapeHtml(it.label||it.abbr||'')} (${escapeHtml(it.abbr||'')}) — ${Number(it.score||0).toFixed(2)}</div>
-      ${kind==='key'?`<div style="color:var(--ink3)">Минимум: ${it.min}</div><div>В управлении: ${escapeHtml(it.needMgmt||'')}</div>`:''}
-      ${kind==='risk'?`<div style="color:var(--ink3)">Идеальный максимум: ${it.max}</div><div>Конфликт: ${escapeHtml(it.conflict||'')}</div>`:''}
-      ${kind==='critical'?`<div style="color:var(--red)">Ниже минимума ${it.min}</div><div>${escapeHtml(it.recommend||'')}</div>`:''}
-      ${kind==='lead'?`<div style="color:var(--ink3)">${escapeHtml(it.meta||'')} · ${escapeHtml(it.axis1||'')} · ${escapeHtml(it.axis2||'')}</div><div>${escapeHtml(it.goal||'')}</div>`:''}
+      <div style="font-weight:700">${escapeHtml(VALUE_FULL_LABEL_BY_ABBR[it.abbr]||it.label||it.abbr||'')} — ${Number(it.score||0).toFixed(2)}</div>
+      ${kind==='key'?`<div style="color:var(--ink3)">Минимум: ${it.min}</div><div>В управлении: ${escapeHtml(it.needMgmt||'Поддерживать поведение, усиливающее ценность через регулярную обратную связь и практику.')}</div><div>Рекомендация: ${escapeHtml(it.recommend||'При расхождении с профилем компании задайте конкретные поведенческие кейсы и договоритесь о шагах развития.')}</div>`:''}
+      ${kind==='risk'?`<div style="color:var(--ink3)">Идеальный максимум: ${it.max}</div><div>Конфликт: ${escapeHtml(it.conflict||'Может конфликтовать с ценностями сотрудничества, гибкости и человекоцентричности.')}</div><div>Рекомендация: ${escapeHtml(it.recommend||'Сбалансируйте управленческие ожидания: добавьте прозрачные правила и критерии взаимодействия.')}</div>`:''}
+      ${kind==='critical'?`<div style="color:var(--red)">Ниже минимума ${it.min}</div><div>${escapeHtml(it.recommend||'Нужна приоритетная развивающая работа: уточнить барьеры и закрепить конкретные поведенческие практики.')}</div>`:''}
+      ${kind==='lead'?`<div style="color:var(--ink3)">${escapeHtml(it.meta||'Метаценность: уточняется')}${it.axis1?' · '+escapeHtml(it.axis1):' · Ось 1: уточняется'}${it.axis2?' · '+escapeHtml(it.axis2):' · Ось 2: уточняется'}</div><div>${escapeHtml(it.goal||'Мотивационная цель: выраженное стремление действовать согласно данной ценности.')}</div>`:''}
     </div>`).join('');
   }
   document.getElementById('content').innerHTML=`
@@ -1875,7 +1901,7 @@ async function viewValueResult(id){
       </div>
       <div style="display:flex;gap:12px;align-items:baseline;margin-top:10px;flex-wrap:wrap">
         <div style="font-size:18px;font-weight:800;color:var(--ink2)">${Number.isFinite(imSum)?imSum:'—'} / 60</div>
-        <div style="font-size:12px;color:var(--ink3)">${escapeHtml(imLevel||(!Number.isFinite(imSum)?'Для этого результата IM не записан в источнике данных':''))}</div>
+        <div style="font-size:12px;color:var(--ink3)">${escapeHtml(imLevel||(!Number.isFinite(imSum)?'IM не записан для этой записи (старый формат результата или старый backend).':''))}</div>
       </div>
       <div style="height:120px;margin-top:10px">
         <canvas id="im-bar"></canvas>
