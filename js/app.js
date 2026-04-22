@@ -1653,18 +1653,23 @@ async function exportValueReport(inv, r){
     const wrap=document.createElement('div');
     wrap.id='value-export-hidden';
     wrap.style.position='fixed';
-    wrap.style.left='-100000px';
+    wrap.style.left='0';
     wrap.style.top='0';
     wrap.style.width='1000px';
+    wrap.style.background='#ffffff';
+    wrap.style.opacity='0.01';
+    wrap.style.pointerEvents='none';
+    wrap.style.zIndex='-1';
     wrap.innerHTML=html;
     document.body.appendChild(wrap);
+    await new Promise(res=>setTimeout(res,120));
 
     const filename=`value-report-${(inv?.candidate_name||'employee').replace(/[^\wа-яА-ЯёЁ-]+/g,'_')}.pdf`;
     await window.html2pdf().set({
       margin:[8,8,8,8],
       filename,
       image:{type:'jpeg',quality:0.98},
-      html2canvas:{scale:2,useCORS:true},
+      html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff'},
       jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
     }).from(wrap).save();
     wrap.remove();
