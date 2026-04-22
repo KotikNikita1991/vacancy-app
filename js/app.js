@@ -1607,7 +1607,7 @@ function updateChartModeButtons(){
 
 async function exportValueReport(inv, r){
   try{
-    await ensureHtml2Pdf();
+    await ensureJsPdf();
     const waitFrame=()=>new Promise(res=>requestAnimationFrame(()=>res()));
     const prevMode=V_RESULT_VIEW?.mode||'base';
     V_RESULT_VIEW.mode='base'; renderValueBarChart(); renderValueCircleChart(); updateChartModeButtons(); await waitFrame();
@@ -1710,6 +1710,8 @@ async function exportValueReport(inv, r){
     pdf.save(filename);
     toast('PDF сформирован и загружен');
   }catch(e){
+    console.error('PDF export error:', e);
+    toast(`Ошибка экспорта PDF: ${e?.message||'неизвестная ошибка'}`,'err');
     throw e;
   }
 }
@@ -1935,6 +1937,26 @@ function ensureHtml2Pdf(){
     s.onload=()=>resolve();
     s.onerror=()=>reject(new Error('html2pdf не загрузился'));
     document.head.appendChild(s);
+  });
+}
+
+function ensureJsPdf(){
+  return new Promise((resolve,reject)=>{
+    if(window.jspdf?.jsPDF) return resolve();
+    const urls=[
+      'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+      'https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js'
+    ];
+    let idx=0;
+    const loadNext=()=>{
+      if(idx>=urls.length) return reject(new Error('jsPDF не загрузился'));
+      const s=document.createElement('script');
+      s.src=urls[idx++];
+      s.onload=()=>window.jspdf?.jsPDF ? resolve() : loadNext();
+      s.onerror=()=>loadNext();
+      document.head.appendChild(s);
+    };
+    loadNext();
   });
 }
 
@@ -2394,7 +2416,7 @@ function initGlobalActs(){
       V_PROFILE_FILTER=el.dataset.filter||'all';
       renderValuesList(document.getElementById('content'));
     } else if(act==='val-export'){
-      exportValueReport(V_RESULT_CONTEXT.invite||{}, V_RESULT_CONTEXT.result||{}).catch(()=>toast('Не удалось подготовить PDF-экспорт','err'));
+      exportValueReport(V_RESULT_CONTEXT.invite||{}, V_RESULT_CONTEXT.result||{}).catch((e)=>toast(e?.message||'Не удалось подготовить PDF-экспорт','err'));
     } else if(act==='val-list'){
       renderValues();
     } else if(act==='val-del'){
