@@ -1609,11 +1609,24 @@ async function exportValueReport(inv, r){
   try{
     await ensurePdfMake();
     const waitFrame=()=>new Promise(res=>requestAnimationFrame(()=>res()));
+    const waitMs=(ms)=>new Promise(res=>setTimeout(res,ms));
+    const flushChartsForSnapshot=async()=>{
+      if(V_RESULT_CHARTS.bar){
+        V_RESULT_CHARTS.bar.options.animation=false;
+        V_RESULT_CHARTS.bar.update('none');
+      }
+      if(V_RESULT_CHARTS.circle){
+        V_RESULT_CHARTS.circle.options.animation=false;
+        V_RESULT_CHARTS.circle.update('none');
+      }
+      await waitFrame();
+      await waitMs(80);
+    };
     const prevMode=V_RESULT_VIEW?.mode||'base';
-    V_RESULT_VIEW.mode='base'; renderValueBarChart(); renderValueCircleChart(); updateChartModeButtons(); await waitFrame();
+    V_RESULT_VIEW.mode='base'; renderValueBarChart(); renderValueCircleChart(); updateChartModeButtons(); await flushChartsForSnapshot();
     const baseBarImg=document.getElementById('val-bar')?.toDataURL('image/png')||'';
     const radarImg=document.getElementById('val-circle')?.toDataURL('image/png')||'';
-    V_RESULT_VIEW.mode='centered'; renderValueBarChart(); updateChartModeButtons(); await waitFrame();
+    V_RESULT_VIEW.mode='centered'; renderValueBarChart(); updateChartModeButtons(); await flushChartsForSnapshot();
     const centeredBarImg=document.getElementById('val-bar')?.toDataURL('image/png')||'';
     V_RESULT_VIEW.mode=prevMode; renderValueBarChart(); renderValueCircleChart(); updateChartModeButtons();
 
