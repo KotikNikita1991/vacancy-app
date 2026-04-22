@@ -1619,64 +1619,97 @@ async function exportValueReport(inv, r){
 
     const p=r?.profile||{};
     const imSum=Number(r?.im?.sum)||0;
-    const zoneStyle={ key:['#effaf3','#2f855a','Ключевая ценность'], risk:['#fff8ea','#b7791f','Зона риска'], critical:['#fff0f3','#c53030','Критическая зона'] };
+    const zoneLabel={ key:'Ключевая ценность', risk:'Зона риска', critical:'Критическая зона' };
     const allValues=Array.isArray(p?.all_values)?p.all_values:[];
-    const valueBlocks=allValues.map(v=>{
-      const z=zoneStyle[v.zone]||zoneStyle.key;
-      const nm=VALUE_FULL_LABEL_BY_ABBR[v.abbr]||v.label||v.abbr||'Ценность';
-      return `<div style="border:1px solid ${z[0]};background:${z[0]};border-left:6px solid ${z[1]};border-radius:10px;padding:10px 12px;margin:8px 0;break-inside:avoid;">
-        <div style="font-size:13px;font-weight:700;color:#1a202c">${escapeHtml(nm)} — ${Number(v.score||0).toFixed(2)}</div>
-        <div style="font-size:11px;color:${z[1]};font-weight:700;margin-top:2px">${z[2]}</div>
-        <div style="font-size:11px;color:#4a5568;margin-top:6px"><b>Описание:</b> ${escapeHtml(v.goal||'Ценность отражает устойчивый мотивационный ориентир сотрудника.')}</div>
-        <div style="font-size:11px;color:#4a5568;margin-top:4px"><b>В управлении:</b> ${escapeHtml(v.needMgmt||'Поддерживать практики, усиливающие проявление этой ценности в рабочих задачах.')}</div>
-        <div style="font-size:11px;color:#4a5568;margin-top:4px"><b>Рекомендация:</b> ${escapeHtml(v.recommend||'Согласовать ожидаемые поведенческие индикаторы и закрепить их в регулярной обратной связи.')}</div>
-        <div style="font-size:11px;color:#4a5568;margin-top:4px"><b>Конфликт:</b> ${escapeHtml(v.conflict||'Значимых конфликтов не выявлено; важен баланс с другими ценностями профиля.')}</div>
-      </div>`;
-    }).join('');
-    const html=`<div style="font-family:Arial,sans-serif;color:#1a202c;padding:10px 6px;">
-      <div style="margin-bottom:18px;break-inside:avoid"><div style="font-size:16px;font-weight:700;margin:0 0 8px">Краткое резюме</div>
-        <div style="font-size:12px;line-height:1.5"><b>Сотрудник:</b> ${escapeHtml(inv?.candidate_name||'')}</div>
-        <div style="font-size:12px;line-height:1.5"><b>Подразделение:</b> ${escapeHtml(inv?.department||'—')}</div>
-        <div style="font-size:12px;line-height:1.5"><b>Группа:</b> ${escapeHtml(inv?.employee_group||'—')}</div>
-        <div style="font-size:12px;line-height:1.5"><b>Итог соответствия профилю компании:</b> ${escapeHtml(p?.level_label||'—')} ${Number.isFinite(Number(p?.match_pct))?`(${p.match_pct}%)`:''}</div>
-        <div style="font-size:12px;line-height:1.5">${escapeHtml(String(r?.interpretation||'').replace(/\n+/g,' '))}</div>
-      </div>
-      <div style="margin-bottom:18px;break-inside:avoid"><div style="font-size:16px;font-weight:700;margin:0 0 8px">Контроль социальной желательности (IM)</div>
-        <div style="font-size:12px;line-height:1.5"><b>Результат:</b> ${imSum} / 60 · ${escapeHtml(String(r?.im?.level||''))}</div>
-      </div>
-      ${baseBarImg?`<div style="margin-bottom:18px;break-inside:avoid"><div style="font-size:16px;font-weight:700;margin:0 0 8px">Столбчатая диаграмма (базовые средние)</div><img style="width:100%;max-width:980px;border:1px solid #e2e8f0;border-radius:10px;padding:8px;box-sizing:border-box;background:#fff" src="${baseBarImg}" /></div>`:''}
-      ${centeredBarImg?`<div style="margin-bottom:18px;break-inside:avoid"><div style="font-size:16px;font-weight:700;margin:0 0 8px">Столбчатая диаграмма (центрирование)</div><img style="width:100%;max-width:980px;border:1px solid #e2e8f0;border-radius:10px;padding:8px;box-sizing:border-box;background:#fff" src="${centeredBarImg}" /></div>`:''}
-      ${radarImg?`<div style="margin-bottom:18px;break-inside:avoid"><div style="font-size:16px;font-weight:700;margin:0 0 8px">Радар с эталонным профилем</div><img style="width:100%;max-width:980px;border:1px solid #e2e8f0;border-radius:10px;padding:8px;box-sizing:border-box;background:#fff" src="${radarImg}" /></div>`:''}
-      <div style="margin-bottom:18px"><div style="font-size:16px;font-weight:700;margin:0 0 8px">Блоки ценностей (19)</div>${valueBlocks||'<div style="font-size:12px;line-height:1.5">Нет данных для этой записи.</div>'}</div>
-    </div>`;
 
-    const wrap=document.createElement('div');
-    wrap.id='value-export-hidden';
-    wrap.style.position='fixed';
-    wrap.style.left='0';
-    wrap.style.top='0';
-    wrap.style.width='1000px';
-    wrap.style.background='#ffffff';
-    wrap.style.opacity='0.01';
-    wrap.style.pointerEvents='none';
-    wrap.style.zIndex='-1';
-    wrap.innerHTML=html;
-    document.body.appendChild(wrap);
-    await new Promise(res=>setTimeout(res,120));
+    const jsPDFCtor = window.jspdf?.jsPDF;
+    if(!jsPDFCtor) throw new Error('jsPDF недоступен');
+    const pdf = new jsPDFCtor({ unit:'mm', format:'a4', orientation:'portrait' });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const margin = 10;
+    const maxW = pageW - margin * 2;
+    let y = margin;
+
+    const ensureSpace = (need=10)=>{
+      if(y + need > pageH - margin){
+        pdf.addPage();
+        y = margin;
+      }
+    };
+    const addTitle = (t)=>{
+      ensureSpace(8);
+      pdf.setFont('helvetica','bold');
+      pdf.setFontSize(13);
+      pdf.text(t, margin, y);
+      y += 6;
+    };
+    const addText = (t, size=10)=>{
+      const text = String(t || '');
+      if(!text) return;
+      pdf.setFont('helvetica','normal');
+      pdf.setFontSize(size);
+      const lines = pdf.splitTextToSize(text, maxW);
+      ensureSpace(lines.length * 4 + 2);
+      pdf.text(lines, margin, y);
+      y += lines.length * 4 + 1.5;
+    };
+    const addImageBlock = (title, dataUrl, h=60)=>{
+      if(!dataUrl) return;
+      addTitle(title);
+      ensureSpace(h + 4);
+      pdf.addImage(dataUrl, 'PNG', margin, y, maxW, h);
+      y += h + 4;
+    };
+
+    addTitle('Краткое резюме и итог соответствия');
+    addText(`Сотрудник: ${inv?.candidate_name||''}`);
+    addText(`Подразделение: ${inv?.department||'—'}`);
+    addText(`Группа: ${inv?.employee_group||'—'}`);
+    addText(`Итог соответствия профилю компании: ${p?.level_label||'—'} ${Number.isFinite(Number(p?.match_pct))?`(${p.match_pct}%)`:''}`);
+    addText(String(r?.interpretation||'').replace(/\n+/g,' '), 9);
+
+    addTitle('Контроль социальной желательности (IM)');
+    addText(`Результат: ${imSum} / 60 · ${String(r?.im?.level||'')}`);
+
+    addImageBlock('Столбчатая диаграмма (базовые средние)', baseBarImg, 62);
+    addImageBlock('Столбчатая диаграмма (центрирование)', centeredBarImg, 62);
+    addImageBlock('Радар с эталонным профилем', radarImg, 90);
+
+    addTitle('Блоки ценностей (19)');
+    if(!allValues.length){
+      addText('Нет данных для этой записи.');
+    }else{
+      allValues.forEach(v=>{
+        const nm = VALUE_FULL_LABEL_BY_ABBR[v.abbr]||v.label||v.abbr||'Ценность';
+        const zone = zoneLabel[v.zone] || zoneLabel.key;
+        const parts = [
+          `${nm} — ${Number(v.score||0).toFixed(2)} (${zone})`,
+          `Описание: ${v.goal||'Ценность отражает устойчивый мотивационный ориентир сотрудника.'}`,
+          `В управлении: ${v.needMgmt||'Поддерживать практики, усиливающие проявление этой ценности в рабочих задачах.'}`,
+          `Рекомендация: ${v.recommend||'Согласовать ожидаемые поведенческие индикаторы и закрепить их в регулярной обратной связи.'}`,
+          `Конфликт: ${v.conflict||'Значимых конфликтов не выявлено; важен баланс с другими ценностями профиля.'}`,
+        ];
+        pdf.setDrawColor(225,231,236);
+        ensureSpace(6);
+        pdf.line(margin, y, pageW - margin, y);
+        y += 3;
+        pdf.setFont('helvetica','bold');
+        pdf.setFontSize(10);
+        addText(parts[0], 10);
+        pdf.setFont('helvetica','normal');
+        addText(parts[1], 9);
+        addText(parts[2], 9);
+        addText(parts[3], 9);
+        addText(parts[4], 9);
+        y += 1;
+      });
+    }
 
     const filename=`value-report-${(inv?.candidate_name||'employee').replace(/[^\wа-яА-ЯёЁ-]+/g,'_')}.pdf`;
-    await window.html2pdf().set({
-      margin:[8,8,8,8],
-      filename,
-      image:{type:'jpeg',quality:0.98},
-      html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff'},
-      jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
-    }).from(wrap).save();
-    wrap.remove();
+    pdf.save(filename);
     toast('PDF сформирован и загружен');
   }catch(e){
-    const wrap=document.getElementById('value-export-hidden');
-    if(wrap) wrap.remove();
     throw e;
   }
 }
