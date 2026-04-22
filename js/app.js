@@ -1610,30 +1610,105 @@ async function exportValueReport(inv, r){
     await ensurePdfMake();
     const waitFrame=()=>new Promise(res=>requestAnimationFrame(()=>res()));
     const waitMs=(ms)=>new Promise(res=>setTimeout(res,ms));
-    const flushChartsForSnapshot=async()=>{
-      if(V_RESULT_CHARTS.bar){
-        V_RESULT_CHARTS.bar.options.animation=false;
-        V_RESULT_CHARTS.bar.update('none');
+    const barBuild=(mode, fixedOrder)=>{
+      const src = mode==='base' ? V_RESULT_VIEW.base : V_RESULT_VIEW.centered;
+      const abbrs = Array.isArray(V_RESULT_VIEW.abbrs) ? V_RESULT_VIEW.abbrs.slice() : [];
+      const labelsRaw = abbrs.length ? abbrs.map(a=>VALUE_SHORT_LABEL_BY_ABBR[a]||a) : (Array.isArray(src?.labels) ? src.labels.slice() : []);
+      const dataRaw = Array.isArray(src?.data) ? src.data.slice() : [];
+      const idealRaw = mode==='base' && Array.isArray(V_RESULT_VIEW.idealBase) ? V_RESULT_VIEW.idealBase.slice() : null;
+      const pairs = labelsRaw.map((label,i)=>({label,value:Number(dataRaw[i])||0,ideal:idealRaw?Number(idealRaw[i])||0:null}));
+      if(mode==='base'){
+        pairs.sort((a,b)=>b.value-a.value);
+      }else if(Array.isArray(fixedOrder) && fixedOrder.length){
+        const rank={}; fixedOrder.forEach((x,i)=>{ rank[x]=i; });
+        pairs.sort((a,b)=>(rank[a.label]??999)-(rank[b.label]??999));
+      }else{
+        pairs.sort((a,b)=>b.value-a.value);
       }
-      if(V_RESULT_CHARTS.circle){
-        V_RESULT_CHARTS.circle.options.animation=false;
-        V_RESULT_CHARTS.circle.update('none');
-      }
-      await waitFrame();
-      await waitMs(80);
+      return {
+        labels:pairs.map(p=>p.label),
+        data:pairs.map(p=>p.value),
+        ideal:idealRaw ? pairs.map(p=>p.ideal) : null
+      };
     };
-    const prevMode=V_RESULT_VIEW?.mode||'base';
-    V_RESULT_VIEW.mode='base'; renderValueBarChart(); renderValueCircleChart(); updateChartModeButtons(); await flushChartsForSnapshot();
-    const baseBarImg=document.getElementById('val-bar')?.toDataURL('image/png')||'';
-    const radarImg=document.getElementById('val-circle')?.toDataURL('image/png')||'';
-    V_RESULT_VIEW.mode='centered'; renderValueBarChart(); updateChartModeButtons(); await flushChartsForSnapshot();
-    const centeredBarImg=document.getElementById('val-bar')?.toDataURL('image/png')||'';
-    V_RESULT_VIEW.mode=prevMode; renderValueBarChart(); renderValueCircleChart(); updateChartModeButtons();
+    const makeChartImage=async(cfg)=>{
+      const c=document.createElement('canvas');
+      c.width=cfg.width||1700;
+      c.height=cfg.height||760;
+      const chart=new Chart(c.getContext('2d'),{
+        type:cfg.type,
+        data:cfg.data,
+        options:Object.assign({responsive:false,maintainAspectRatio:false,animation:false}, cfg.options||{})
+      });
+      chart.update('none');
+      await waitFrame();
+      await waitMs(60);
+      const img=c.toDataURL('image/png');
+      chart.destroy();
+      return img;
+    };
+
+    const baseSeries=barBuild('base');
+    const centeredSeries=barBuild('centered', baseSeries.labels);
+    const baseBarImg=await makeChartImage({
+      type:'bar',
+      width:1800,
+      height:760,
+      data:{
+        labels:baseSeries.labels,
+        datasets:[
+          { type:'bar', label:'Профиль', data:baseSeries.data, backgroundColor:'#7B5EA7', borderRadius:2, order:1 },
+          ...(baseSeries.ideal ? [{ type:'line', label:'Эталонный профиль', data:baseSeries.ideal, borderColor:'#E11D48', backgroundColor:'rgba(225,29,72,.1)', pointBackgroundColor:'#E11D48', pointRadius:4, borderWidth:3, tension:0, fill:false, order:10 }] : [])
+        ]
+      },
+      options:{
+        plugins:{ legend:{display:true,position:'top'} },
+        scales:{
+          x:{ ticks:{autoSkip:false,maxRotation:50,minRotation:50,font:{size:12}} },
+          y:{ min:1,max:6,title:{display:true,text:'Средние баллы'} }
+        }
+      }
+    });
+    const centeredBarImg=await makeChartImage({
+      type:'bar',
+      width:1800,
+      height:760,
+      data:{ labels:centeredSeries.labels, datasets:[{ type:'bar', label:'Профиль (центр.)', data:centeredSeries.data, backgroundColor:'#7B5EA7', borderRadius:2 }] },
+      options:{
+        plugins:{ legend:{display:true,position:'top'} },
+        scales:{
+          x:{ ticks:{autoSkip:false,maxRotation:50,minRotation:50,font:{size:12}} },
+          y:{ min:-3,max:3,beginAtZero:true,title:{display:true,text:'Отклонение'} }
+        }
+      }
+    });
+    const radarSrc={
+      labels: Array.isArray(V_RESULT_VIEW.circleAbbrs) ? V_RESULT_VIEW.circleAbbrs.map(a=>VALUE_SHORT_LABEL_BY_ABBR[a]||a) : (V_RESULT_VIEW.circleBase?.labels||[]),
+      profile: Array.isArray(V_RESULT_VIEW.circleBase?.data) ? V_RESULT_VIEW.circleBase.data : [],
+      ideal: Array.isArray(V_RESULT_VIEW.circleIdealBase) ? V_RESULT_VIEW.circleIdealBase : []
+    };
+    const radarImg=await makeChartImage({
+      type:'radar',
+      width:1500,
+      height:950,
+      data:{
+        labels:radarSrc.labels,
+        datasets:[
+          {label:'Профиль',data:radarSrc.profile,borderColor:'#7B5EA7',backgroundColor:'rgba(123,94,167,.15)',pointBackgroundColor:'#7B5EA7'},
+          {label:'Эталонный профиль',data:radarSrc.ideal,borderColor:'#E11D48',backgroundColor:'rgba(225,29,72,.05)',pointBackgroundColor:'#E11D48'}
+        ]
+      },
+      options:{ plugins:{legend:{display:true,position:'top'}}, scales:{ r:{min:1,max:6} } }
+    });
 
     const p=r?.profile||{};
     const imSum=Number(r?.im?.sum)||0;
     const zoneLabel={ key:'Ключевая ценность', risk:'Зона риска', critical:'Критическая зона' };
     const allValues=Array.isArray(p?.all_values)?p.all_values:[];
+    const idealByAbbr={
+      SDT:5.2,SDA:5.2,ST:4.8,HE:3.8,AC:5.1,UNC:5.4,BEC:5.4,BED:5.2,UNT:4.8,HUM:4.5,
+      SEP:4.0,SES:3.8,UNN:3.5,COI:3.5,TR:2.3,COR:2.8,FAC:2.8,POR:2.8,POD:2.0
+    };
 
     const filename=`value-report-${(inv?.candidate_name||'employee').replace(/[^\wа-яА-ЯёЁ-]+/g,'_')}.pdf`;
     const content=[
@@ -1646,9 +1721,9 @@ async function exportValueReport(inv, r){
       { text:'Контроль социальной желательности (IM)', style:'h2' },
       { text:`Результат: ${imSum} / 60 · ${String(r?.im?.level||'')}`, margin:[0,0,0,10] }
     ];
-    if(baseBarImg){ content.push({ text:'Столбчатая диаграмма (базовые средние)', style:'h2' }); content.push({ image:baseBarImg, width:500, margin:[0,2,0,10] }); }
-    if(centeredBarImg){ content.push({ text:'Столбчатая диаграмма (центрирование)', style:'h2' }); content.push({ image:centeredBarImg, width:500, margin:[0,2,0,10] }); }
-    if(radarImg){ content.push({ text:'Радар с эталонным профилем', style:'h2' }); content.push({ image:radarImg, width:500, margin:[0,2,0,10] }); }
+    if(baseBarImg){ content.push({ text:'Столбчатая диаграмма (базовые средние)', style:'h2' }); content.push({ image:baseBarImg, fit:[520,250], margin:[0,2,0,10] }); }
+    if(centeredBarImg){ content.push({ text:'Столбчатая диаграмма (центрирование)', style:'h2' }); content.push({ image:centeredBarImg, fit:[520,250], margin:[0,2,0,10] }); }
+    if(radarImg){ content.push({ text:'Радар с эталонным профилем', style:'h2' }); content.push({ image:radarImg, fit:[470,360], margin:[0,2,0,10] }); }
     content.push({ text:'Блоки ценностей (19)', style:'h2' });
     if(!allValues.length){
       content.push({ text:'Нет данных для этой записи.' });
@@ -1656,15 +1731,34 @@ async function exportValueReport(inv, r){
       allValues.forEach(v=>{
         const nm = VALUE_FULL_LABEL_BY_ABBR[v.abbr]||v.label||v.abbr||'Ценность';
         const zone = zoneLabel[v.zone] || zoneLabel.key;
+        const ideal = Number(idealByAbbr[v.abbr]);
+        const diff = Number.isFinite(ideal) ? Math.abs((Number(v.score)||0) - ideal) : 0;
+        const bg = !Number.isFinite(ideal) ? '#eef2ff' : (diff <= 0.7 ? '#e8f7ee' : diff <= 1.4 ? '#fff6df' : '#ffe9e9');
+        const border = !Number.isFinite(ideal) ? '#818cf8' : (diff <= 0.7 ? '#2f855a' : diff <= 1.4 ? '#b7791f' : '#c53030');
         content.push({
           margin:[0,2,0,6],
-          stack:[
-            { text:`${nm} — ${Number(v.score||0).toFixed(2)} (${zone})`, bold:true },
-            { text:`Описание: ${v.goal||'Ценность отражает устойчивый мотивационный ориентир сотрудника.'}`, fontSize:9 },
-            { text:`В управлении: ${v.needMgmt||'Поддерживать практики, усиливающие проявление этой ценности в рабочих задачах.'}`, fontSize:9 },
-            { text:`Рекомендация: ${v.recommend||'Согласовать ожидаемые поведенческие индикаторы и закрепить их в регулярной обратной связи.'}`, fontSize:9 },
-            { text:`Конфликт: ${v.conflict||'Значимых конфликтов не выявлено; важен баланс с другими ценностями профиля.'}`, fontSize:9 },
-          ]
+          table:{
+            widths:['*'],
+            body:[[
+              {
+                fillColor:bg,
+                margin:[8,7,8,7],
+                stack:[
+                  { text:`${nm} — ${Number(v.score||0).toFixed(2)} (${zone})`, bold:true, color:border },
+                  { text:`Описание: ${v.goal||'Ценность отражает устойчивый мотивационный ориентир сотрудника.'}`, fontSize:9 },
+                  { text:`В управлении: ${v.needMgmt||'Поддерживать практики, усиливающие проявление этой ценности в рабочих задачах.'}`, fontSize:9 },
+                  { text:`Рекомендация: ${v.recommend||'Согласовать ожидаемые поведенческие индикаторы и закрепить их в регулярной обратной связи.'}`, fontSize:9 },
+                  { text:`Конфликт: ${v.conflict||'Значимых конфликтов не выявлено; важен баланс с другими ценностями профиля.'}`, fontSize:9 },
+                ]
+              }
+            ]]
+          },
+          layout:{
+            hLineWidth:()=>1,
+            vLineWidth:()=>1,
+            hLineColor:()=>border,
+            vLineColor:()=>border
+          }
         });
       });
     }
