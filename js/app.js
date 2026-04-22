@@ -1606,6 +1606,12 @@ function updateChartModeButtons(){
 }
 
 async function exportValueReport(inv, r){
+  const w=window.open('','_blank','noopener,noreferrer,width=1100,height=900');
+  if(!w){toast('Разрешите всплывающие окна для PDF-экспорта','err');return;}
+  w.document.open();
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Подготовка PDF</title></head><body style="font-family:Arial,sans-serif;padding:20px;color:#334155">Формируем PDF-отчёт...</body></html>');
+  w.document.close();
+  try{
   const waitFrame=()=>new Promise(res=>requestAnimationFrame(()=>res()));
   const prevMode=V_RESULT_VIEW?.mode||'base';
   V_RESULT_VIEW.mode='base'; renderValueBarChart(); renderValueCircleChart(); updateChartModeButtons(); await waitFrame();
@@ -1630,8 +1636,6 @@ async function exportValueReport(inv, r){
       <div style="font-size:11px;color:#4a5568;margin-top:4px"><b>Конфликт:</b> ${escapeHtml(v.conflict||'Значимых конфликтов не выявлено; важен баланс с другими ценностями профиля.')}</div>
     </div>`;
   }).join('');
-  const w=window.open('','_blank','noopener,noreferrer,width=1100,height=900');
-  if(!w){toast('Разрешите всплывающие окна для PDF-экспорта','err');return;}
   const html=`<!doctype html><html><head><meta charset="utf-8"><title>Экспорт оценки ценностей</title>
   <style>body{font-family:Arial,sans-serif;color:#1a202c;margin:22px}.sec{margin-bottom:18px;break-inside:avoid}.h{font-size:16px;font-weight:700;margin:0 0 8px}.p{font-size:12px;line-height:1.5;margin:2px 0}.img{width:100%;max-width:980px;border:1px solid #e2e8f0;border-radius:10px;padding:8px;box-sizing:border-box;background:#fff} @media print{button{display:none} body{margin:12mm}}</style>
   </head><body>
@@ -1652,6 +1656,14 @@ async function exportValueReport(inv, r){
   <div class="sec"><div class="h">Блоки ценностей (19)</div>${valueBlocks||'<div class="p">Нет данных для этой записи.</div>'}</div>
   </body></html>`;
   w.document.open(); w.document.write(html); w.document.close();
+  }catch(e){
+    try{
+      w.document.open();
+      w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Ошибка экспорта</title></head><body style="font-family:Arial,sans-serif;padding:20px"><h3 style="margin:0 0 10px">Не удалось сформировать PDF</h3><div style="font-size:13px;color:#475569">Попробуйте снова. Если ошибка повторяется, обновите страницу и повторите экспорт.</div></body></html>');
+      w.document.close();
+    }catch(_){}
+    throw e;
+  }
 }
 
 function renderValueBarChart(){
