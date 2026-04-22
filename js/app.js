@@ -1729,7 +1729,7 @@ async function exportValueReport(inv, r){
       { text:`Подразделение: ${inv?.department||'—'}` },
       { text:`Группа: ${inv?.employee_group||'—'}` },
       { text:`Итог соответствия профилю компании: ${p?.level_label||'—'} ${Number.isFinite(Number(p?.match_pct))?`(${p.match_pct}%)`:''}` },
-      { text:'Расчёт: 75% — близость к эталонному профилю по 19 ценностям, 25% — выполнение порогов риска.', fontSize:9, color:'#6b7280', margin:[0,2,0,8] },
+      { text:'Совпадение считается по двум частям: близость к эталону по 19 ценностям и отсутствие выходов за критические пороги риска.', fontSize:9, color:'#6b7280', margin:[0,2,0,8] },
       ...(interpText ? [{ text:interpText, margin:[0,2,0,10] }] : []),
       {
         margin:[0,0,0,10],
@@ -2135,7 +2135,7 @@ async function viewValueResult(id){
         ${levelBadgeHtml(profile)}
       </div>
       <div style="margin-top:6px;font-size:11px;color:var(--ink3)">
-        Расчёт: 75% — близость к эталонному профилю по 19 ценностям, 25% — выполнение порогов риска.
+        Совпадение считается по двум частям: насколько профиль по всем 19 ценностям близок к эталону и нет ли выходов за критические пороги риска.
       </div>
     </div>
     <div class="card" style="padding:12px 14px;margin-bottom:10px;background:#f8f5ff"><div class="ct">Ведущие ценности</div>${renderRows(profile.lead_values,'lead')}</div>
