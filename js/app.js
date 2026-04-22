@@ -1607,7 +1607,7 @@ function updateChartModeButtons(){
 
 async function exportValueReport(inv, r){
   try{
-    await ensureJsPdf();
+    await ensurePdfMake();
     const waitFrame=()=>new Promise(res=>requestAnimationFrame(()=>res()));
     const prevMode=V_RESULT_VIEW?.mode||'base';
     V_RESULT_VIEW.mode='base'; renderValueBarChart(); renderValueCircleChart(); updateChartModeButtons(); await waitFrame();
@@ -1622,92 +1622,46 @@ async function exportValueReport(inv, r){
     const zoneLabel={ key:'Ключевая ценность', risk:'Зона риска', critical:'Критическая зона' };
     const allValues=Array.isArray(p?.all_values)?p.all_values:[];
 
-    const jsPDFCtor = window.jspdf?.jsPDF;
-    if(!jsPDFCtor) throw new Error('jsPDF недоступен');
-    const pdf = new jsPDFCtor({ unit:'mm', format:'a4', orientation:'portrait' });
-    const pageW = pdf.internal.pageSize.getWidth();
-    const pageH = pdf.internal.pageSize.getHeight();
-    const margin = 10;
-    const maxW = pageW - margin * 2;
-    let y = margin;
-
-    const ensureSpace = (need=10)=>{
-      if(y + need > pageH - margin){
-        pdf.addPage();
-        y = margin;
-      }
-    };
-    const addTitle = (t)=>{
-      ensureSpace(8);
-      pdf.setFont('helvetica','bold');
-      pdf.setFontSize(13);
-      pdf.text(t, margin, y);
-      y += 6;
-    };
-    const addText = (t, size=10)=>{
-      const text = String(t || '');
-      if(!text) return;
-      pdf.setFont('helvetica','normal');
-      pdf.setFontSize(size);
-      const lines = pdf.splitTextToSize(text, maxW);
-      ensureSpace(lines.length * 4 + 2);
-      pdf.text(lines, margin, y);
-      y += lines.length * 4 + 1.5;
-    };
-    const addImageBlock = (title, dataUrl, h=60)=>{
-      if(!dataUrl) return;
-      addTitle(title);
-      ensureSpace(h + 4);
-      pdf.addImage(dataUrl, 'PNG', margin, y, maxW, h);
-      y += h + 4;
-    };
-
-    addTitle('Краткое резюме и итог соответствия');
-    addText(`Сотрудник: ${inv?.candidate_name||''}`);
-    addText(`Подразделение: ${inv?.department||'—'}`);
-    addText(`Группа: ${inv?.employee_group||'—'}`);
-    addText(`Итог соответствия профилю компании: ${p?.level_label||'—'} ${Number.isFinite(Number(p?.match_pct))?`(${p.match_pct}%)`:''}`);
-    addText(String(r?.interpretation||'').replace(/\n+/g,' '), 9);
-
-    addTitle('Контроль социальной желательности (IM)');
-    addText(`Результат: ${imSum} / 60 · ${String(r?.im?.level||'')}`);
-
-    addImageBlock('Столбчатая диаграмма (базовые средние)', baseBarImg, 62);
-    addImageBlock('Столбчатая диаграмма (центрирование)', centeredBarImg, 62);
-    addImageBlock('Радар с эталонным профилем', radarImg, 90);
-
-    addTitle('Блоки ценностей (19)');
+    const filename=`value-report-${(inv?.candidate_name||'employee').replace(/[^\wа-яА-ЯёЁ-]+/g,'_')}.pdf`;
+    const content=[
+      { text:'Краткое резюме и итог соответствия', style:'h2' },
+      { text:`Сотрудник: ${inv?.candidate_name||''}` },
+      { text:`Подразделение: ${inv?.department||'—'}` },
+      { text:`Группа: ${inv?.employee_group||'—'}` },
+      { text:`Итог соответствия профилю компании: ${p?.level_label||'—'} ${Number.isFinite(Number(p?.match_pct))?`(${p.match_pct}%)`:''}` },
+      { text:String(r?.interpretation||'').replace(/\n+/g,' '), margin:[0,2,0,10] },
+      { text:'Контроль социальной желательности (IM)', style:'h2' },
+      { text:`Результат: ${imSum} / 60 · ${String(r?.im?.level||'')}`, margin:[0,0,0,10] }
+    ];
+    if(baseBarImg){ content.push({ text:'Столбчатая диаграмма (базовые средние)', style:'h2' }); content.push({ image:baseBarImg, width:500, margin:[0,2,0,10] }); }
+    if(centeredBarImg){ content.push({ text:'Столбчатая диаграмма (центрирование)', style:'h2' }); content.push({ image:centeredBarImg, width:500, margin:[0,2,0,10] }); }
+    if(radarImg){ content.push({ text:'Радар с эталонным профилем', style:'h2' }); content.push({ image:radarImg, width:500, margin:[0,2,0,10] }); }
+    content.push({ text:'Блоки ценностей (19)', style:'h2' });
     if(!allValues.length){
-      addText('Нет данных для этой записи.');
+      content.push({ text:'Нет данных для этой записи.' });
     }else{
       allValues.forEach(v=>{
         const nm = VALUE_FULL_LABEL_BY_ABBR[v.abbr]||v.label||v.abbr||'Ценность';
         const zone = zoneLabel[v.zone] || zoneLabel.key;
-        const parts = [
-          `${nm} — ${Number(v.score||0).toFixed(2)} (${zone})`,
-          `Описание: ${v.goal||'Ценность отражает устойчивый мотивационный ориентир сотрудника.'}`,
-          `В управлении: ${v.needMgmt||'Поддерживать практики, усиливающие проявление этой ценности в рабочих задачах.'}`,
-          `Рекомендация: ${v.recommend||'Согласовать ожидаемые поведенческие индикаторы и закрепить их в регулярной обратной связи.'}`,
-          `Конфликт: ${v.conflict||'Значимых конфликтов не выявлено; важен баланс с другими ценностями профиля.'}`,
-        ];
-        pdf.setDrawColor(225,231,236);
-        ensureSpace(6);
-        pdf.line(margin, y, pageW - margin, y);
-        y += 3;
-        pdf.setFont('helvetica','bold');
-        pdf.setFontSize(10);
-        addText(parts[0], 10);
-        pdf.setFont('helvetica','normal');
-        addText(parts[1], 9);
-        addText(parts[2], 9);
-        addText(parts[3], 9);
-        addText(parts[4], 9);
-        y += 1;
+        content.push({
+          margin:[0,2,0,6],
+          stack:[
+            { text:`${nm} — ${Number(v.score||0).toFixed(2)} (${zone})`, bold:true },
+            { text:`Описание: ${v.goal||'Ценность отражает устойчивый мотивационный ориентир сотрудника.'}`, fontSize:9 },
+            { text:`В управлении: ${v.needMgmt||'Поддерживать практики, усиливающие проявление этой ценности в рабочих задачах.'}`, fontSize:9 },
+            { text:`Рекомендация: ${v.recommend||'Согласовать ожидаемые поведенческие индикаторы и закрепить их в регулярной обратной связи.'}`, fontSize:9 },
+            { text:`Конфликт: ${v.conflict||'Значимых конфликтов не выявлено; важен баланс с другими ценностями профиля.'}`, fontSize:9 },
+          ]
+        });
       });
     }
-
-    const filename=`value-report-${(inv?.candidate_name||'employee').replace(/[^\wа-яА-ЯёЁ-]+/g,'_')}.pdf`;
-    pdf.save(filename);
+    window.pdfMake.createPdf({
+      pageSize:'A4',
+      pageMargins:[24,24,24,24],
+      defaultStyle:{ fontSize:10 },
+      styles:{ h2:{ fontSize:13, bold:true, margin:[0,4,0,4] } },
+      content
+    }).download(filename);
     toast('PDF сформирован и загружен');
   }catch(e){
     console.error('PDF export error:', e);
@@ -1776,7 +1730,9 @@ function renderValueBarChart(){
       plugins:{legend:{display:true,position:'top'}},
       scales:{
         x:{ticks:{autoSkip:false,maxRotation:45,minRotation:45,font:{size:9}}},
-        y:{min:1,max:6,beginAtZero:false,title:{display:true,text:yTitle}}
+        y: mode === 'base'
+          ? { min:1,max:6,beginAtZero:false,title:{display:true,text:yTitle} }
+          : { min:-3,max:3,beginAtZero:true,title:{display:true,text:yTitle} }
       }
     }
   });
@@ -1957,6 +1913,23 @@ function ensureJsPdf(){
       document.head.appendChild(s);
     };
     loadNext();
+  });
+}
+
+function ensurePdfMake(){
+  return new Promise((resolve,reject)=>{
+    if(window.pdfMake?.createPdf) return resolve();
+    const load=(src)=>new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src=src;
+      s.onload=()=>res();
+      s.onerror=()=>rej(new Error(`Не загрузился ${src}`));
+      document.head.appendChild(s);
+    });
+    load('https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/pdfmake.min.js')
+      .then(()=>load('https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/vfs_fonts.min.js'))
+      .then(()=>window.pdfMake?.createPdf ? resolve() : reject(new Error('pdfMake недоступен')))
+      .catch(reject);
   });
 }
 
