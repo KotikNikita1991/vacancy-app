@@ -1436,13 +1436,8 @@ const VALUE_ABBR_BY_ID_FRONT={
 async function renderValues(){
   const el=document.getElementById('content');
   if(!U||!U.role){if(el)el.innerHTML='<div class="empty" style="padding:40px"><p>Сессия недоступна</p></div>';return;}
-  const [rr,vr]=await Promise.all([
-    api('getValueAssessments',{role:U.role,recruiter_id:U.id}),
-    api('getVacancies',{role:U.role,recruiter_id:U.id}),
-  ]);
+  const rr=await api('getValueAssessments',{role:U.role,recruiter_id:U.id});
   VLIST=rr?.ok?(rr.items||[]):[];
-  if(vr?.ok)VACS=vr.vacancies;
-  if(!VACS)VACS=[];
   renderValuesList(el);
 }
 
@@ -1501,11 +1496,12 @@ function renderValuesList(el){
         <h3>${VLIST.length===0?'Нет отправленных опросов':'Нет данных по фильтру'}</h3><p>Измените фильтр или отправьте новый опрос.</p>
       </div></div>`
       :`<div class="card"><div class="tbl-wrap"><table>
-        <thead><tr><th>Кандидат</th><th>Вакансия</th><th>Рекрутер</th><th>Дата отправки</th><th>Статус</th><th>Совпадение</th><th>Действия</th></tr></thead>
+        <thead><tr><th>Сотрудник</th><th>Подразделение</th><th>Группа</th><th>Рекрутер</th><th>Дата отправки</th><th>Статус</th><th>Совпадение</th><th>Действия</th></tr></thead>
         <tbody>${filtered.map(v=>`
           <tr>
             <td><div style="font-weight:600;font-size:13px">${escapeHtml(v.candidate_name||'')}</div><div style="font-size:11px;color:var(--ink3)">${escapeHtml(v.candidate_email||'')}</div></td>
-            <td><div style="font-size:12px;color:var(--ink2)">${escapeHtml(v.vacancy_name||'—')}</div></td>
+            <td><div style="font-size:12px;color:var(--ink2)">${escapeHtml(v.department||'—')}</div></td>
+            <td><div style="font-size:12px;color:var(--ink2)">${escapeHtml(v.employee_group||'—')}</div></td>
             <td><div style="font-size:12px;color:var(--ink2)">${escapeHtml(v.recruiter_name||'')}</div></td>
             <td><div style="font-size:12px;color:var(--ink3)">${escapeHtml(v.sent_at||'')}</div></td>
             <td>${statusBadge(v.status)}</td>
@@ -1609,40 +1605,53 @@ function updateChartModeButtons(){
   });
 }
 
-function exportValueReport(inv, r){
+async function exportValueReport(inv, r){
+  const waitFrame=()=>new Promise(res=>requestAnimationFrame(()=>res()));
+  const prevMode=V_RESULT_VIEW?.mode||'base';
+  V_RESULT_VIEW.mode='base'; renderValueBarChart(); renderValueCircleChart(); updateChartModeButtons(); await waitFrame();
+  const baseBarImg=document.getElementById('val-bar')?.toDataURL('image/png')||'';
+  const radarImg=document.getElementById('val-circle')?.toDataURL('image/png')||'';
+  V_RESULT_VIEW.mode='centered'; renderValueBarChart(); updateChartModeButtons(); await waitFrame();
+  const centeredBarImg=document.getElementById('val-bar')?.toDataURL('image/png')||'';
+  V_RESULT_VIEW.mode=prevMode; renderValueBarChart(); renderValueCircleChart(); updateChartModeButtons();
   const p=r?.profile||{};
-  const lines=[];
-  lines.push('Отчёт по оценке ценностей');
-  lines.push('');
-  lines.push(`Кандидат: ${inv?.candidate_name||''}`);
-  lines.push(`Вакансия: ${inv?.vacancy_name||''}`);
-  lines.push(`Дата: ${inv?.submitted_at||''}`);
-  lines.push('');
-  lines.push(`Итог: ${p?.level_label||'—'} ${Number.isFinite(Number(p?.match_pct))?`(${p.match_pct}%)`:''}`);
-  lines.push('');
-  lines.push('Интерпретация:');
-  lines.push(String(r?.interpretation||'').replace(/\r/g,''));
-  lines.push('');
-  lines.push('Ведущие ценности:');
-  (p?.lead_values||[]).forEach(x=>lines.push(`- ${x.label} (${x.abbr}): ${x.score}`));
-  lines.push('');
-  lines.push('Ключевые ценности:');
-  (p?.key_values||[]).forEach(x=>lines.push(`- ${x.label} (${x.abbr}): ${x.score} (мин. ${x.min})`));
-  lines.push('');
-  lines.push('Зоны риска:');
-  (p?.risk_values||[]).forEach(x=>lines.push(`- ${x.label} (${x.abbr}): ${x.score} (идеал <= ${x.max})`));
-  lines.push('');
-  lines.push('Критические зоны риска:');
-  (p?.critical_risk_values||[]).forEach(x=>lines.push(`- ${x.label} (${x.abbr}): ${x.score} (ниже ${x.min})`));
-  lines.push('');
-  lines.push(`IM: ${Number(r?.im?.sum)||0}/60 — ${r?.im?.level||''}`);
-  const txt=lines.join('\n');
-  const blob=new Blob([txt],{type:'text/plain;charset=utf-8'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download=`value-report-${(inv?.candidate_name||'candidate').replace(/[^\wа-яА-ЯёЁ-]+/g,'_')}.txt`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  const imSum=Number(r?.im?.sum)||0;
+  const zoneStyle={ key:['#effaf3','#2f855a','Ключевая ценность'], risk:['#fff8ea','#b7791f','Зона риска'], critical:['#fff0f3','#c53030','Критическая зона'] };
+  const allValues=Array.isArray(p?.all_values)?p.all_values:[];
+  const valueBlocks=allValues.map(v=>{
+    const z=zoneStyle[v.zone]||zoneStyle.key;
+    const nm=VALUE_FULL_LABEL_BY_ABBR[v.abbr]||v.label||v.abbr||'Ценность';
+    return `<div style="border:1px solid ${z[0]};background:${z[0]};border-left:6px solid ${z[1]};border-radius:10px;padding:10px 12px;margin:8px 0;break-inside:avoid;">
+      <div style="font-size:13px;font-weight:700;color:#1a202c">${escapeHtml(nm)} — ${Number(v.score||0).toFixed(2)}</div>
+      <div style="font-size:11px;color:${z[1]};font-weight:700;margin-top:2px">${z[2]}</div>
+      <div style="font-size:11px;color:#4a5568;margin-top:6px"><b>Описание:</b> ${escapeHtml(v.goal||'Ценность отражает устойчивый мотивационный ориентир сотрудника.')}</div>
+      <div style="font-size:11px;color:#4a5568;margin-top:4px"><b>В управлении:</b> ${escapeHtml(v.needMgmt||'Поддерживать практики, усиливающие проявление этой ценности в рабочих задачах.')}</div>
+      <div style="font-size:11px;color:#4a5568;margin-top:4px"><b>Рекомендация:</b> ${escapeHtml(v.recommend||'Согласовать ожидаемые поведенческие индикаторы и закрепить их в регулярной обратной связи.')}</div>
+      <div style="font-size:11px;color:#4a5568;margin-top:4px"><b>Конфликт:</b> ${escapeHtml(v.conflict||'Значимых конфликтов не выявлено; важен баланс с другими ценностями профиля.')}</div>
+    </div>`;
+  }).join('');
+  const w=window.open('','_blank','noopener,noreferrer,width=1100,height=900');
+  if(!w){toast('Разрешите всплывающие окна для PDF-экспорта','err');return;}
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Экспорт оценки ценностей</title>
+  <style>body{font-family:Arial,sans-serif;color:#1a202c;margin:22px}.sec{margin-bottom:18px;break-inside:avoid}.h{font-size:16px;font-weight:700;margin:0 0 8px}.p{font-size:12px;line-height:1.5;margin:2px 0}.img{width:100%;max-width:980px;border:1px solid #e2e8f0;border-radius:10px;padding:8px;box-sizing:border-box;background:#fff} @media print{button{display:none} body{margin:12mm}}</style>
+  </head><body>
+  <button onclick="window.print()" style="position:fixed;right:16px;top:12px;padding:8px 12px">Сохранить в PDF</button>
+  <div class="sec"><div class="h">Краткое резюме</div>
+    <div class="p"><b>Сотрудник:</b> ${escapeHtml(inv?.candidate_name||'')}</div>
+    <div class="p"><b>Подразделение:</b> ${escapeHtml(inv?.department||'—')}</div>
+    <div class="p"><b>Группа:</b> ${escapeHtml(inv?.employee_group||'—')}</div>
+    <div class="p"><b>Итог соответствия профилю компании:</b> ${escapeHtml(p?.level_label||'—')} ${Number.isFinite(Number(p?.match_pct))?`(${p.match_pct}%)`:''}</div>
+    <div class="p">${escapeHtml(String(r?.interpretation||'').replace(/\n+/g,' '))}</div>
+  </div>
+  <div class="sec"><div class="h">Контроль социальной желательности (IM)</div>
+    <div class="p"><b>Результат:</b> ${imSum} / 60 · ${escapeHtml(String(r?.im?.level||''))}</div>
+  </div>
+  ${baseBarImg?`<div class="sec"><div class="h">Столбчатая диаграмма (базовые средние)</div><img class="img" src="${baseBarImg}" /></div>`:''}
+  ${centeredBarImg?`<div class="sec"><div class="h">Столбчатая диаграмма (центрирование)</div><img class="img" src="${centeredBarImg}" /></div>`:''}
+  ${radarImg?`<div class="sec"><div class="h">Радар с эталонным профилем</div><img class="img" src="${radarImg}" /></div>`:''}
+  <div class="sec"><div class="h">Блоки ценностей (19)</div>${valueBlocks||'<div class="p">Нет данных для этой записи.</div>'}</div>
+  </body></html>`;
+  w.document.open(); w.document.write(html); w.document.close();
 }
 
 function renderValueBarChart(){
@@ -1656,7 +1665,19 @@ function renderValueBarChart(){
     ? (Array.isArray(V_RESULT_VIEW.idealBase) ? V_RESULT_VIEW.idealBase.slice() : null)
     : null;
   const pairs = labelsRaw.map((label,i)=>({label,value:Number(dataRaw[i])||0,ideal:idealRaw?Number(idealRaw[i])||0:null}));
-  pairs.sort((a,b)=>b.value-a.value);
+  if(mode==='base'){
+    pairs.sort((a,b)=>b.value-a.value);
+    V_RESULT_VIEW.baseOrder=pairs.map(p=>p.label);
+  }else if(Array.isArray(V_RESULT_VIEW.baseOrder) && V_RESULT_VIEW.baseOrder.length){
+    const rank={};
+    V_RESULT_VIEW.baseOrder.forEach((lbl,idx)=>{ rank[lbl]=idx; });
+    pairs.sort((a,b)=>{
+      const ra=(rank[a.label]??999), rb=(rank[b.label]??999);
+      return ra-rb;
+    });
+  }else{
+    pairs.sort((a,b)=>b.value-a.value);
+  }
   const labels = pairs.map(p=>p.label);
   const data = pairs.map(p=>p.value);
   const ideal = idealRaw ? pairs.map(p=>p.ideal) : null;
@@ -1733,7 +1754,8 @@ function renderValueCircleChart(){
 }
 
 function openValueModal(){
-  const availVacs=VACS.filter(v=>ASSESS_STATUSES.includes(v.status));
+  const depts=Array.isArray(REF?.['Подразделения'])&&REF['Подразделения'].length?REF['Подразделения']:['IT','Финансы','Продажи','HR','Производство'];
+  const groups=Array.isArray(REF?.['Группы'])&&REF['Группы'].length?REF['Группы']:['ТОП','Офис','Рабочий','Линейный'];
   const html=`<div class="modal-overlay" id="val-modal" data-act="val-overlay">
     <div class="modal" style="max-width:620px">
       <div class="modal-hdr">
@@ -1745,17 +1767,22 @@ function openValueModal(){
       <div class="modal-body">
         <div class="form-grid">
           <div class="fg full">
-            <label class="flbl">Вакансия <span class="req">*</span></label>
-            <select id="val-vac" class="finp">
-              <option value="">— выберите вакансию —</option>
-              ${availVacs.map(v=>`<option value="${escapeHtml(v.id)}" data-name="${escapeHtml(v.name)}">${escapeHtml(v.num)} — ${escapeHtml(v.name)} (${escapeHtml(v.status)})</option>`).join('')}
-              <option value="__active_employee__" data-name="Действующий сотрудник">Действующий сотрудник</option>
-            </select>
-            <span class="field-note">Доступны вакансии со статусом «В работе» и «Приостановлена», а также «Действующий сотрудник»</span>
-          </div>
-          <div class="fg full">
-            <label class="flbl">ФИО кандидата <span class="req">*</span></label>
+            <label class="flbl">ФИО сотрудника <span class="req">*</span></label>
             <input id="val-name" class="finp" placeholder="Иванов Иван Иванович">
+          </div>
+          <div class="fg">
+            <label class="flbl">Подразделение <span class="req">*</span></label>
+            <select id="val-dept" class="finp">
+              <option value="">— выберите подразделение —</option>
+              ${depts.map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="fg">
+            <label class="flbl">Группа <span class="req">*</span></label>
+            <select id="val-group" class="finp">
+              <option value="">— выберите группу —</option>
+              ${groups.map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join('')}
+            </select>
           </div>
           <div class="fg">
             <label class="flbl">Дата направления <span class="req">*</span></label>
@@ -1770,7 +1797,7 @@ function openValueModal(){
             </select>
           </div>
           <div class="fg full">
-            <label class="flbl">Email кандидата <span class="req">*</span></label>
+            <label class="flbl">Email сотрудника <span class="req">*</span></label>
             <input id="val-email" class="finp" type="email" placeholder="candidate@example.com">
           </div>
         </div>
@@ -1793,20 +1820,20 @@ function closeValueModal(){
 }
 
 async function sendValueInvite(){
-  const vacEl=document.getElementById('val-vac');
-  const vacId=vacEl?.value||'';
-  const vacName=vacId?vacEl.options[vacEl.selectedIndex].dataset.name:'';
   const candidateName=(document.getElementById('val-name')?.value||'').trim();
+  const department=(document.getElementById('val-dept')?.value||'').trim();
+  const employeeGroup=(document.getElementById('val-group')?.value||'').trim();
   const sentDate=document.getElementById('val-date')?.value||'';
   const gender=document.getElementById('val-gender')?.value||'';
   const email=(document.getElementById('val-email')?.value||'').trim();
-  if(!vacId||!candidateName||!sentDate||!gender||!email){
+  if(!candidateName||!department||!employeeGroup||!sentDate||!gender||!email){
     toast('Заполните все обязательные поля','err');return;
   }
   const btn=document.getElementById('btn-send-val');
   if(btn){btn.disabled=true;btn.innerHTML='<span class="spin"></span>';}
   const res=await api('createValueAssessmentInvite',{
-    vacancy_id:vacId,vacancy_name:vacName,candidate_name:candidateName,sent_date:sentDate,
+    candidate_name:candidateName,sent_date:sentDate,
+    department,employee_group:employeeGroup,
     gender,email,recruiter_id:U.id,recruiter_name:U.name,
   });
   if(res?.ok){
@@ -1891,10 +1918,10 @@ async function viewValueResult(id){
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px">
       <div>
         <h2 style="font-size:18px;font-weight:700">${escapeHtml(inv.candidate_name||'')}</h2>
-        <p style="font-size:13px;color:var(--ink3)">${escapeHtml(inv.vacancy_name||'')} · ${escapeHtml(inv.submitted_at||'')}</p>
+        <p style="font-size:13px;color:var(--ink3)">${escapeHtml(inv.department||'—')} · ${escapeHtml(inv.employee_group||'—')} · ${escapeHtml(inv.submitted_at||'')}</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button type="button" class="btn-sm" data-act="val-export">Экспорт отчёта .txt</button>
+        <button type="button" class="btn-sm" data-act="val-export">Экспорт отчёта PDF</button>
         <button type="button" class="btn-cancel" data-act="val-list">← К списку</button>
       </div>
     </div>
@@ -2296,7 +2323,7 @@ function initGlobalActs(){
       V_PROFILE_FILTER=el.dataset.filter||'all';
       renderValuesList(document.getElementById('content'));
     } else if(act==='val-export'){
-      exportValueReport(V_RESULT_CONTEXT.invite||{}, V_RESULT_CONTEXT.result||{});
+      exportValueReport(V_RESULT_CONTEXT.invite||{}, V_RESULT_CONTEXT.result||{}).catch(()=>toast('Не удалось подготовить PDF-экспорт','err'));
     } else if(act==='val-list'){
       renderValues();
     } else if(act==='val-del'){
