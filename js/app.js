@@ -1605,6 +1605,16 @@ function updateChartModeButtons(){
   });
 }
 
+function stripInterpretationSummary(text){
+  const raw=String(text||'').replace(/\r/g,'');
+  const lines=raw.split('\n').map(s=>s.trim()).filter(Boolean);
+  const cleaned=lines.filter(line=>
+    !/^Итог соответствия ценностному профилю компании:/i.test(line) &&
+    !/^Цветовая шкала:/i.test(line)
+  );
+  return cleaned.join('\n').trim();
+}
+
 async function exportValueReport(inv, r){
   try{
     await ensurePdfMake();
@@ -1657,14 +1667,14 @@ async function exportValueReport(inv, r){
       data:{
         labels:baseSeries.labels,
         datasets:[
-          { type:'bar', label:'Профиль', data:baseSeries.data, backgroundColor:'#7B5EA7', borderRadius:2, order:1 },
-          ...(baseSeries.ideal ? [{ type:'line', label:'Эталонный профиль', data:baseSeries.ideal, borderColor:'#E11D48', backgroundColor:'rgba(225,29,72,.1)', pointBackgroundColor:'#E11D48', pointRadius:4, borderWidth:3, tension:0, fill:false, order:10 }] : [])
+          { type:'bar', label:'Профиль', data:baseSeries.data, backgroundColor:'#7B5EA7', borderRadius:2, order:10 },
+          ...(baseSeries.ideal ? [{ type:'line', label:'Эталонный профиль', data:baseSeries.ideal, borderColor:'#E11D48', backgroundColor:'rgba(225,29,72,.1)', pointBackgroundColor:'#E11D48', pointRadius:4, borderWidth:3, tension:0, fill:false, order:0 }] : [])
         ]
       },
       options:{
         plugins:{ legend:{display:true,position:'top'} },
         scales:{
-          x:{ ticks:{autoSkip:false,maxRotation:50,minRotation:50,font:{size:12}} },
+          x:{ ticks:{autoSkip:false,maxRotation:50,minRotation:50,font:{size:13}} },
           y:{ min:1,max:6,title:{display:true,text:'Средние баллы'} }
         }
       }
@@ -1677,7 +1687,7 @@ async function exportValueReport(inv, r){
       options:{
         plugins:{ legend:{display:true,position:'top'} },
         scales:{
-          x:{ ticks:{autoSkip:false,maxRotation:50,minRotation:50,font:{size:12}} },
+          x:{ ticks:{autoSkip:false,maxRotation:50,minRotation:50,font:{size:13}} },
           y:{ min:-3,max:3,beginAtZero:true,title:{display:true,text:'Отклонение'} }
         }
       }
@@ -1703,7 +1713,6 @@ async function exportValueReport(inv, r){
 
     const p=r?.profile||{};
     const imSum=Number(r?.im?.sum)||0;
-    const zoneLabel={ key:'Ключевая ценность', risk:'Зона риска', critical:'Критическая зона' };
     const allValues=Array.isArray(p?.all_values)?p.all_values:[];
     const idealByAbbr={
       SDT:5.2,SDA:5.2,ST:4.8,HE:3.8,AC:5.1,UNC:5.4,BEC:5.4,BED:5.2,UNT:4.8,HUM:4.5,
@@ -1711,32 +1720,50 @@ async function exportValueReport(inv, r){
     };
 
     const filename=`value-report-${(inv?.candidate_name||'employee').replace(/[^\wа-яА-ЯёЁ-]+/g,'_')}.pdf`;
+    const interpText=stripInterpretationSummary(r?.interpretation||'');
+    const imBg = imSum>=42 ? '#ffe9e9' : imSum>=31 ? '#fff6df' : '#e8f7ee';
+    const imBorder = imSum>=42 ? '#c53030' : imSum>=31 ? '#b7791f' : '#2f855a';
     const content=[
       { text:'Краткое резюме и итог соответствия', style:'h2' },
       { text:`Сотрудник: ${inv?.candidate_name||''}` },
       { text:`Подразделение: ${inv?.department||'—'}` },
       { text:`Группа: ${inv?.employee_group||'—'}` },
       { text:`Итог соответствия профилю компании: ${p?.level_label||'—'} ${Number.isFinite(Number(p?.match_pct))?`(${p.match_pct}%)`:''}` },
-      { text:String(r?.interpretation||'').replace(/\n+/g,' '), margin:[0,2,0,10] },
-      { text:'Контроль социальной желательности (IM)', style:'h2' },
-      { text:`Результат: ${imSum} / 60 · ${String(r?.im?.level||'')}`, margin:[0,0,0,10] }
+      { text:'Расчёт: 75% — близость к эталонному профилю по 19 ценностям, 25% — выполнение порогов риска.', fontSize:9, color:'#6b7280', margin:[0,2,0,8] },
+      ...(interpText ? [{ text:interpText, margin:[0,2,0,10] }] : []),
+      {
+        margin:[0,0,0,10],
+        unbreakable:true,
+        table:{ widths:['*'], body:[[{
+          fillColor:imBg, margin:[8,8,8,8], stack:[
+            { text:'Контроль социальной желательности (IM)', style:'h2', color:imBorder, margin:[0,0,0,2] },
+            { text:`Результат: ${imSum} / 60 · ${String(r?.im?.level||'')}`, fontSize:10 }
+          ]
+        }]]},
+        layout:{ hLineWidth:()=>1, vLineWidth:()=>1, hLineColor:()=>imBorder, vLineColor:()=>imBorder }
+      }
     ];
-    if(baseBarImg){ content.push({ text:'Столбчатая диаграмма (базовые средние)', style:'h2' }); content.push({ image:baseBarImg, fit:[520,250], margin:[0,2,0,10] }); }
-    if(centeredBarImg){ content.push({ text:'Столбчатая диаграмма (центрирование)', style:'h2' }); content.push({ image:centeredBarImg, fit:[520,250], margin:[0,2,0,10] }); }
-    if(radarImg){ content.push({ text:'Радар с эталонным профилем', style:'h2' }); content.push({ image:radarImg, fit:[470,360], margin:[0,2,0,10] }); }
+    if(baseBarImg){ content.push({ unbreakable:true, stack:[{ text:'Столбчатая диаграмма (базовые средние)', style:'h2' },{ image:baseBarImg, fit:[520,250], margin:[0,2,0,10] }] }); }
+    if(centeredBarImg){ content.push({ unbreakable:true, stack:[{ text:'Столбчатая диаграмма (центрирование)', style:'h2' },{ image:centeredBarImg, fit:[520,250], margin:[0,2,0,10] }] }); }
+    if(radarImg){ content.push({ unbreakable:true, stack:[{ text:'Радар с эталонным профилем', style:'h2' },{ image:radarImg, fit:[470,360], margin:[0,2,0,10] }] }); }
     content.push({ text:'Блоки ценностей (19)', style:'h2' });
     if(!allValues.length){
       content.push({ text:'Нет данных для этой записи.' });
     }else{
       allValues.forEach(v=>{
         const nm = VALUE_FULL_LABEL_BY_ABBR[v.abbr]||v.label||v.abbr||'Ценность';
-        const zone = zoneLabel[v.zone] || zoneLabel.key;
         const ideal = Number(idealByAbbr[v.abbr]);
         const diff = Number.isFinite(ideal) ? Math.abs((Number(v.score)||0) - ideal) : 0;
         const bg = !Number.isFinite(ideal) ? '#eef2ff' : (diff <= 0.7 ? '#e8f7ee' : diff <= 1.4 ? '#fff6df' : '#ffe9e9');
         const border = !Number.isFinite(ideal) ? '#818cf8' : (diff <= 0.7 ? '#2f855a' : diff <= 1.4 ? '#b7791f' : '#c53030');
+        const minMap={UNC:5.0,BEC:5.0,BED:4.5,AC:4.0,SDA:4.0,SDT:4.0,ST:3.5};
+        const maxMap={POD:3.0,TR:3.0,FAC:4.0,COR:3.5};
+        const threshold = Number.isFinite(minMap[v.abbr]) ? `Min ${String(minMap[v.abbr]).replace('.',',')}`
+          : (Number.isFinite(maxMap[v.abbr]) ? `Max ${String(maxMap[v.abbr]).replace('.',',')}`
+          : `Etalon ${Number.isFinite(ideal)?String(ideal.toFixed(1)).replace('.',','):'—'}`);
         content.push({
           margin:[0,2,0,6],
+          unbreakable:true,
           table:{
             widths:['*'],
             body:[[
@@ -1744,7 +1771,7 @@ async function exportValueReport(inv, r){
                 fillColor:bg,
                 margin:[8,7,8,7],
                 stack:[
-                  { text:`${nm} — ${Number(v.score||0).toFixed(2)} (${zone})`, bold:true, color:border },
+                  { text:`${nm} — ${Number(v.score||0).toFixed(2)} · ${threshold}`, bold:true, color:border },
                   { text:`Описание: ${v.goal||'Ценность отражает устойчивый мотивационный ориентир сотрудника.'}`, fontSize:9 },
                   { text:`В управлении: ${v.needMgmt||'Поддерживать практики, усиливающие проявление этой ценности в рабочих задачах.'}`, fontSize:9 },
                   { text:`Рекомендация: ${v.recommend||'Согласовать ожидаемые поведенческие индикаторы и закрепить их в регулярной обратной связи.'}`, fontSize:9 },
@@ -2067,7 +2094,8 @@ async function viewValueResult(id){
     return {match_pct:pct,level_code:code,level_label:label,lead_values:lead,key_values:keyVals,risk_values:riskVals,critical_risk_values:critical};
   })();
   V_RESULT_CONTEXT={invite:inv,result:r};
-  const interpHtml = escapeHtml(r.interpretation||'Интерпретация будет доступна после обработки').replace(/\n/g,'<br>');
+  const interpText = stripInterpretationSummary(r.interpretation||'Интерпретация будет доступна после обработки');
+  const interpHtml = escapeHtml(interpText||'Интерпретация будет доступна после обработки').replace(/\n/g,'<br>');
   const im = r.im || {};
   const imSum = Number(im.sum);
   const imLevel = String(im.level || '');
@@ -2105,6 +2133,9 @@ async function viewValueResult(id){
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
         <div class="ct">Итог соответствия профилю компании</div>
         ${levelBadgeHtml(profile)}
+      </div>
+      <div style="margin-top:6px;font-size:11px;color:var(--ink3)">
+        Расчёт: 75% — близость к эталонному профилю по 19 ценностям, 25% — выполнение порогов риска.
       </div>
     </div>
     <div class="card" style="padding:12px 14px;margin-bottom:10px;background:#f8f5ff"><div class="ct">Ведущие ценности</div>${renderRows(profile.lead_values,'lead')}</div>
