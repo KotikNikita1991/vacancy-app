@@ -1606,62 +1606,72 @@ function updateChartModeButtons(){
 }
 
 async function exportValueReport(inv, r){
-  const w=window.open('','_blank','noopener,noreferrer,width=1100,height=900');
-  if(!w){toast('Разрешите всплывающие окна для PDF-экспорта','err');return;}
-  w.document.open();
-  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Подготовка PDF</title></head><body style="font-family:Arial,sans-serif;padding:20px;color:#334155">Формируем PDF-отчёт...</body></html>');
-  w.document.close();
   try{
-  const waitFrame=()=>new Promise(res=>requestAnimationFrame(()=>res()));
-  const prevMode=V_RESULT_VIEW?.mode||'base';
-  V_RESULT_VIEW.mode='base'; renderValueBarChart(); renderValueCircleChart(); updateChartModeButtons(); await waitFrame();
-  const baseBarImg=document.getElementById('val-bar')?.toDataURL('image/png')||'';
-  const radarImg=document.getElementById('val-circle')?.toDataURL('image/png')||'';
-  V_RESULT_VIEW.mode='centered'; renderValueBarChart(); updateChartModeButtons(); await waitFrame();
-  const centeredBarImg=document.getElementById('val-bar')?.toDataURL('image/png')||'';
-  V_RESULT_VIEW.mode=prevMode; renderValueBarChart(); renderValueCircleChart(); updateChartModeButtons();
-  const p=r?.profile||{};
-  const imSum=Number(r?.im?.sum)||0;
-  const zoneStyle={ key:['#effaf3','#2f855a','Ключевая ценность'], risk:['#fff8ea','#b7791f','Зона риска'], critical:['#fff0f3','#c53030','Критическая зона'] };
-  const allValues=Array.isArray(p?.all_values)?p.all_values:[];
-  const valueBlocks=allValues.map(v=>{
-    const z=zoneStyle[v.zone]||zoneStyle.key;
-    const nm=VALUE_FULL_LABEL_BY_ABBR[v.abbr]||v.label||v.abbr||'Ценность';
-    return `<div style="border:1px solid ${z[0]};background:${z[0]};border-left:6px solid ${z[1]};border-radius:10px;padding:10px 12px;margin:8px 0;break-inside:avoid;">
-      <div style="font-size:13px;font-weight:700;color:#1a202c">${escapeHtml(nm)} — ${Number(v.score||0).toFixed(2)}</div>
-      <div style="font-size:11px;color:${z[1]};font-weight:700;margin-top:2px">${z[2]}</div>
-      <div style="font-size:11px;color:#4a5568;margin-top:6px"><b>Описание:</b> ${escapeHtml(v.goal||'Ценность отражает устойчивый мотивационный ориентир сотрудника.')}</div>
-      <div style="font-size:11px;color:#4a5568;margin-top:4px"><b>В управлении:</b> ${escapeHtml(v.needMgmt||'Поддерживать практики, усиливающие проявление этой ценности в рабочих задачах.')}</div>
-      <div style="font-size:11px;color:#4a5568;margin-top:4px"><b>Рекомендация:</b> ${escapeHtml(v.recommend||'Согласовать ожидаемые поведенческие индикаторы и закрепить их в регулярной обратной связи.')}</div>
-      <div style="font-size:11px;color:#4a5568;margin-top:4px"><b>Конфликт:</b> ${escapeHtml(v.conflict||'Значимых конфликтов не выявлено; важен баланс с другими ценностями профиля.')}</div>
+    await ensureHtml2Pdf();
+    const waitFrame=()=>new Promise(res=>requestAnimationFrame(()=>res()));
+    const prevMode=V_RESULT_VIEW?.mode||'base';
+    V_RESULT_VIEW.mode='base'; renderValueBarChart(); renderValueCircleChart(); updateChartModeButtons(); await waitFrame();
+    const baseBarImg=document.getElementById('val-bar')?.toDataURL('image/png')||'';
+    const radarImg=document.getElementById('val-circle')?.toDataURL('image/png')||'';
+    V_RESULT_VIEW.mode='centered'; renderValueBarChart(); updateChartModeButtons(); await waitFrame();
+    const centeredBarImg=document.getElementById('val-bar')?.toDataURL('image/png')||'';
+    V_RESULT_VIEW.mode=prevMode; renderValueBarChart(); renderValueCircleChart(); updateChartModeButtons();
+
+    const p=r?.profile||{};
+    const imSum=Number(r?.im?.sum)||0;
+    const zoneStyle={ key:['#effaf3','#2f855a','Ключевая ценность'], risk:['#fff8ea','#b7791f','Зона риска'], critical:['#fff0f3','#c53030','Критическая зона'] };
+    const allValues=Array.isArray(p?.all_values)?p.all_values:[];
+    const valueBlocks=allValues.map(v=>{
+      const z=zoneStyle[v.zone]||zoneStyle.key;
+      const nm=VALUE_FULL_LABEL_BY_ABBR[v.abbr]||v.label||v.abbr||'Ценность';
+      return `<div style="border:1px solid ${z[0]};background:${z[0]};border-left:6px solid ${z[1]};border-radius:10px;padding:10px 12px;margin:8px 0;break-inside:avoid;">
+        <div style="font-size:13px;font-weight:700;color:#1a202c">${escapeHtml(nm)} — ${Number(v.score||0).toFixed(2)}</div>
+        <div style="font-size:11px;color:${z[1]};font-weight:700;margin-top:2px">${z[2]}</div>
+        <div style="font-size:11px;color:#4a5568;margin-top:6px"><b>Описание:</b> ${escapeHtml(v.goal||'Ценность отражает устойчивый мотивационный ориентир сотрудника.')}</div>
+        <div style="font-size:11px;color:#4a5568;margin-top:4px"><b>В управлении:</b> ${escapeHtml(v.needMgmt||'Поддерживать практики, усиливающие проявление этой ценности в рабочих задачах.')}</div>
+        <div style="font-size:11px;color:#4a5568;margin-top:4px"><b>Рекомендация:</b> ${escapeHtml(v.recommend||'Согласовать ожидаемые поведенческие индикаторы и закрепить их в регулярной обратной связи.')}</div>
+        <div style="font-size:11px;color:#4a5568;margin-top:4px"><b>Конфликт:</b> ${escapeHtml(v.conflict||'Значимых конфликтов не выявлено; важен баланс с другими ценностями профиля.')}</div>
+      </div>`;
+    }).join('');
+    const html=`<div style="font-family:Arial,sans-serif;color:#1a202c;padding:10px 6px;">
+      <div style="margin-bottom:18px;break-inside:avoid"><div style="font-size:16px;font-weight:700;margin:0 0 8px">Краткое резюме</div>
+        <div style="font-size:12px;line-height:1.5"><b>Сотрудник:</b> ${escapeHtml(inv?.candidate_name||'')}</div>
+        <div style="font-size:12px;line-height:1.5"><b>Подразделение:</b> ${escapeHtml(inv?.department||'—')}</div>
+        <div style="font-size:12px;line-height:1.5"><b>Группа:</b> ${escapeHtml(inv?.employee_group||'—')}</div>
+        <div style="font-size:12px;line-height:1.5"><b>Итог соответствия профилю компании:</b> ${escapeHtml(p?.level_label||'—')} ${Number.isFinite(Number(p?.match_pct))?`(${p.match_pct}%)`:''}</div>
+        <div style="font-size:12px;line-height:1.5">${escapeHtml(String(r?.interpretation||'').replace(/\n+/g,' '))}</div>
+      </div>
+      <div style="margin-bottom:18px;break-inside:avoid"><div style="font-size:16px;font-weight:700;margin:0 0 8px">Контроль социальной желательности (IM)</div>
+        <div style="font-size:12px;line-height:1.5"><b>Результат:</b> ${imSum} / 60 · ${escapeHtml(String(r?.im?.level||''))}</div>
+      </div>
+      ${baseBarImg?`<div style="margin-bottom:18px;break-inside:avoid"><div style="font-size:16px;font-weight:700;margin:0 0 8px">Столбчатая диаграмма (базовые средние)</div><img style="width:100%;max-width:980px;border:1px solid #e2e8f0;border-radius:10px;padding:8px;box-sizing:border-box;background:#fff" src="${baseBarImg}" /></div>`:''}
+      ${centeredBarImg?`<div style="margin-bottom:18px;break-inside:avoid"><div style="font-size:16px;font-weight:700;margin:0 0 8px">Столбчатая диаграмма (центрирование)</div><img style="width:100%;max-width:980px;border:1px solid #e2e8f0;border-radius:10px;padding:8px;box-sizing:border-box;background:#fff" src="${centeredBarImg}" /></div>`:''}
+      ${radarImg?`<div style="margin-bottom:18px;break-inside:avoid"><div style="font-size:16px;font-weight:700;margin:0 0 8px">Радар с эталонным профилем</div><img style="width:100%;max-width:980px;border:1px solid #e2e8f0;border-radius:10px;padding:8px;box-sizing:border-box;background:#fff" src="${radarImg}" /></div>`:''}
+      <div style="margin-bottom:18px"><div style="font-size:16px;font-weight:700;margin:0 0 8px">Блоки ценностей (19)</div>${valueBlocks||'<div style="font-size:12px;line-height:1.5">Нет данных для этой записи.</div>'}</div>
     </div>`;
-  }).join('');
-  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Экспорт оценки ценностей</title>
-  <style>body{font-family:Arial,sans-serif;color:#1a202c;margin:22px}.sec{margin-bottom:18px;break-inside:avoid}.h{font-size:16px;font-weight:700;margin:0 0 8px}.p{font-size:12px;line-height:1.5;margin:2px 0}.img{width:100%;max-width:980px;border:1px solid #e2e8f0;border-radius:10px;padding:8px;box-sizing:border-box;background:#fff} @media print{button{display:none} body{margin:12mm}}</style>
-  </head><body>
-  <button onclick="window.print()" style="position:fixed;right:16px;top:12px;padding:8px 12px">Сохранить в PDF</button>
-  <div class="sec"><div class="h">Краткое резюме</div>
-    <div class="p"><b>Сотрудник:</b> ${escapeHtml(inv?.candidate_name||'')}</div>
-    <div class="p"><b>Подразделение:</b> ${escapeHtml(inv?.department||'—')}</div>
-    <div class="p"><b>Группа:</b> ${escapeHtml(inv?.employee_group||'—')}</div>
-    <div class="p"><b>Итог соответствия профилю компании:</b> ${escapeHtml(p?.level_label||'—')} ${Number.isFinite(Number(p?.match_pct))?`(${p.match_pct}%)`:''}</div>
-    <div class="p">${escapeHtml(String(r?.interpretation||'').replace(/\n+/g,' '))}</div>
-  </div>
-  <div class="sec"><div class="h">Контроль социальной желательности (IM)</div>
-    <div class="p"><b>Результат:</b> ${imSum} / 60 · ${escapeHtml(String(r?.im?.level||''))}</div>
-  </div>
-  ${baseBarImg?`<div class="sec"><div class="h">Столбчатая диаграмма (базовые средние)</div><img class="img" src="${baseBarImg}" /></div>`:''}
-  ${centeredBarImg?`<div class="sec"><div class="h">Столбчатая диаграмма (центрирование)</div><img class="img" src="${centeredBarImg}" /></div>`:''}
-  ${radarImg?`<div class="sec"><div class="h">Радар с эталонным профилем</div><img class="img" src="${radarImg}" /></div>`:''}
-  <div class="sec"><div class="h">Блоки ценностей (19)</div>${valueBlocks||'<div class="p">Нет данных для этой записи.</div>'}</div>
-  </body></html>`;
-  w.document.open(); w.document.write(html); w.document.close();
+
+    const wrap=document.createElement('div');
+    wrap.id='value-export-hidden';
+    wrap.style.position='fixed';
+    wrap.style.left='-100000px';
+    wrap.style.top='0';
+    wrap.style.width='1000px';
+    wrap.innerHTML=html;
+    document.body.appendChild(wrap);
+
+    const filename=`value-report-${(inv?.candidate_name||'employee').replace(/[^\wа-яА-ЯёЁ-]+/g,'_')}.pdf`;
+    await window.html2pdf().set({
+      margin:[8,8,8,8],
+      filename,
+      image:{type:'jpeg',quality:0.98},
+      html2canvas:{scale:2,useCORS:true},
+      jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
+    }).from(wrap).save();
+    wrap.remove();
+    toast('PDF сформирован и загружен');
   }catch(e){
-    try{
-      w.document.open();
-      w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Ошибка экспорта</title></head><body style="font-family:Arial,sans-serif;padding:20px"><h3 style="margin:0 0 10px">Не удалось сформировать PDF</h3><div style="font-size:13px;color:#475569">Попробуйте снова. Если ошибка повторяется, обновите страницу и повторите экспорт.</div></body></html>');
-      w.document.close();
-    }catch(_){}
+    const wrap=document.getElementById('value-export-hidden');
+    if(wrap) wrap.remove();
     throw e;
   }
 }
@@ -1875,6 +1885,17 @@ function ensureChartJs(){
     s.src='https://cdn.jsdelivr.net/npm/chart.js';
     s.onload=()=>resolve();
     s.onerror=()=>reject(new Error('Chart.js не загрузился'));
+    document.head.appendChild(s);
+  });
+}
+
+function ensureHtml2Pdf(){
+  return new Promise((resolve,reject)=>{
+    if(window.html2pdf) return resolve();
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+    s.onload=()=>resolve();
+    s.onerror=()=>reject(new Error('html2pdf не загрузился'));
     document.head.appendChild(s);
   });
 }
