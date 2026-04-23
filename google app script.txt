@@ -1,0 +1,1776 @@
+// ═══════════════════════════════════════════════════════════════════
+//  ПРОЕКТ «ВАКАНСИЯ» — Google Apps Script Backend v4.0
+//  - Вакансии / Оценка кандидата / Пользователи
+//  - Новый блок: Оценка ценностей (PVQ-RR)
+//  - Token link: 7 дней, один submit
+//  - Домен внешнего опроса: https://kotiknikita1991.github.io/Opros_forma/
+// ═══════════════════════════════════════════════════════════════════
+
+const SPREADSHEET_ID = '1m8bF_-ZlH3lwLNkkDEEVKXjPCiKV2iuR-9G12PoZ_1o';
+const APP_BASE_URL = 'https://kotiknikita1991.github.io/Opros_forma/';
+const INVITE_TTL_DAYS = 7;
+
+const SH = {
+  USERS:           'Пользователи',
+  VACANCIES:       'Вакансии',
+  ASSESSMENTS:     'Оценки',
+  REFERENCE:       'Справочник',
+  VALUE_INVITES:   'ОценкаЦенностей_Приглашения',
+  VALUE_RESPONSES: 'ОценкаЦенностей_Ответы',
+  VALUE_RESULTS:   'ОценкаЦенностей_Результаты',
+};
+
+// Для тестов можно "*", в проде лучше ограничить
+const CORS_ALLOW_ORIGIN = '*';
+
+// ───────────────────────────────────────────────────────────────────
+// ИНИЦИАЛИЗАЦИЯ
+// ───────────────────────────────────────────────────────────────────
+function initDatabase() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+  let users = ss.getSheetByName(SH.USERS);
+  if (!users) users = ss.insertSheet(SH.USERS);
+  if (users.getLastRow() === 0) {
+    users.appendRow(['id','login','password','name','role','active','created_at']);
+    users.getRange('1:1').setFontWeight('bold').setBackground('#f3f4f6');
+    const now = new Date().toISOString();
+    users.appendRow([generateId(),'anna',  hashPw('123'),'Анна Смирнова', 'recruiter',true,now]);
+    users.appendRow([generateId(),'maria', hashPw('123'),'Мария Козлова', 'recruiter',true,now]);
+    users.appendRow([generateId(),'igor',  hashPw('123'),'Игорь Петров',  'manager',  true,now]);
+    users.appendRow([generateId(),'admin', hashPw('123'),'Администратор', 'admin',    true,now]);
+  }
+
+  let vacs = ss.getSheetByName(SH.VACANCIES);
+  if (!vacs) vacs = ss.insertSheet(SH.VACANCIES);
+  if (vacs.getLastRow() === 0) {
+    vacs.appendRow([
+      'id','num','recruiter_id','recruiter_name','current_recruiter_id','current_recruiter_name',
+      'date_opened','status','type','name','department','project','contract','initiator','reason',
+      'site_url','salary_offer','salary_request','crm_link','comment','plan_date','norm_days',
+      'fact_date','days_total','days_current','transferred','transferred_from_id','transferred_from_name',
+      'transfer_date','vacancy_group','created_at','updated_at',
+    ]);
+    vacs.getRange('1:1').setFontWeight('bold').setBackground('#f3f4f6');
+    vacs.setFrozenRows(1);
+  }
+
+  let assess = ss.getSheetByName(SH.ASSESSMENTS);
+  if (!assess) assess = ss.insertSheet(SH.ASSESSMENTS);
+  if (assess.getLastRow() === 0) {
+    assess.appendRow([
+      'id','vacancy_id','vacancy_name','recruiter_id','recruiter_name','candidate_name',
+      'interview_date','scores_json','total_score','max_score','pct_score','recommendation',
+      'summary','notes','created_at'
+    ]);
+    assess.getRange('1:1').setFontWeight('bold').setBackground('#f3f4f6');
+    assess.setFrozenRows(1);
+  }
+
+  let ref = ss.getSheetByName(SH.REFERENCE);
+  if (!ref) ref = ss.insertSheet(SH.REFERENCE);
+  if (ref.getLastRow() === 0) {
+    ref.appendRow(['Статусы','Типы','Подразделения','Формат','Причины','Группы']);
+    ref.getRange('1:1').setFontWeight('bold').setBackground('#f3f4f6');
+    [
+      ['В работе',      'Новая',  'IT',            'ТД',  'Расширение штата',   'ИТР'],
+      ['Закрыта',       'Замена', 'Финансы',       'ГПХ', 'Замена сотрудника',  'Рабочий'],
+      ['Приостановлена','',       'Продажи',       '',    'Новый проект',       'Офис'],
+      ['Отменена',      '',       'Строительство', '',    'Увольнение',         'Руководитель среднего звена'],
+      ['Передана',      '',       'HR',            '',    'Декретный отпуск',   'ТОП'],
+      ['',              '',       'Маркетинг',     '',    'Реорганизация',      ''],
+    ].forEach(row => ref.appendRow(row));
+  }
+
+  ensureValueSheets_(ss);
+
+  return '✅ База инициализирована';
+}
+
+function ensureValueSheets_(ss) {
+  let s1 = ss.getSheetByName(SH.VALUE_INVITES);
+  if (!s1) s1 = ss.insertSheet(SH.VALUE_INVITES);
+  if (s1.getLastRow() === 0) {
+    s1.appendRow([
+      'id','token','status','sent_at','expires_at','submitted_at',
+      'vacancy_id','vacancy_name','candidate_name','candidate_gender','candidate_email',
+      'department','employee_group',
+      'recruiter_id','recruiter_name','created_at','updated_at'
+    ]);
+    s1.getRange('1:1').setFontWeight('bold').setBackground('#f3f4f6');
+    s1.setFrozenRows(1);
+  } else {
+    ensureHeaders_(s1, [
+      'id','token','status','sent_at','expires_at','submitted_at',
+      'vacancy_id','vacancy_name','candidate_name','candidate_gender','candidate_email',
+      'department','employee_group',
+      'recruiter_id','recruiter_name','created_at','updated_at'
+    ]);
+  }
+
+  let s2 = ss.getSheetByName(SH.VALUE_RESPONSES);
+  if (!s2) s2 = ss.insertSheet(SH.VALUE_RESPONSES);
+  if (s2.getLastRow() === 0) {
+    const qCols = [];
+    for (let i = 1; i <= 57; i++) qCols.push('q' + i);
+    const imCols = [];
+    for (let i = 1; i <= 10; i++) imCols.push('im' + i);
+    s2.appendRow(['id','invite_id','token','submitted_at'].concat(qCols).concat(imCols).concat(['answers_json']));
+    s2.getRange('1:1').setFontWeight('bold').setBackground('#f3f4f6');
+    s2.setFrozenRows(1);
+  } else {
+    // Если таблица уже создана ранее (57 колонок), добавим IM-колонки в конец.
+    ensureHeaders_(s2, (function(){
+      const qCols = [];
+      for (let i = 1; i <= 57; i++) qCols.push('q' + i);
+      const imCols = [];
+      for (let i = 1; i <= 10; i++) imCols.push('im' + i);
+      return ['id','invite_id','token','submitted_at'].concat(qCols).concat(imCols).concat(['answers_json']);
+    })());
+  }
+
+  let s3 = ss.getSheetByName(SH.VALUE_RESULTS);
+  if (!s3) s3 = ss.insertSheet(SH.VALUE_RESULTS);
+  if (s3.getLastRow() === 0) {
+    s3.appendRow([
+      'id','invite_id','token','candidate_name','vacancy_name','recruiter_name','created_at',
+      'mean57','scores_json','top_values_json','bar_chart_json','circle_chart_json','interpretation',
+      'profile_json','im_sum','im_level','im_chart_json'
+    ]);
+    s3.getRange('1:1').setFontWeight('bold').setBackground('#f3f4f6');
+    s3.setFrozenRows(1);
+  } else {
+    ensureHeaders_(s3, [
+      'id','invite_id','token','candidate_name','vacancy_name','recruiter_name','created_at',
+      'mean57','scores_json','top_values_json','bar_chart_json','circle_chart_json','interpretation',
+      'profile_json','im_sum','im_level','im_chart_json'
+    ]);
+  }
+}
+
+function ensureHeaders_(sheet, desiredHeaders) {
+  if (!sheet || !desiredHeaders || !desiredHeaders.length) return;
+  const lastCol = sheet.getLastColumn();
+  const current = lastCol ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+  const curSet = {};
+  current.forEach(h => { if (h) curSet[String(h)] = true; });
+
+  // Добавляем отсутствующие заголовки в конец (с сохранением существующих данных).
+  const missing = desiredHeaders.filter(h => !curSet[String(h)]);
+  if (!missing.length) return;
+  const startCol = lastCol + 1;
+  sheet.getRange(1, startCol, 1, missing.length).setValues([missing]);
+  sheet.getRange(1, startCol, 1, missing.length).setFontWeight('bold').setBackground('#f3f4f6');
+}
+
+function headerMap_(sheet) {
+  const lastCol = sheet.getLastColumn();
+  const headers = lastCol ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+  const map = {};
+  for (let i = 0; i < headers.length; i++) {
+    const h = String(headers[i] || '').trim();
+    if (!h) continue;
+    // 0-based index for array access
+    map[h] = i;
+  }
+  return map;
+}
+
+function getCellByHeader_(row, map, header, defVal) {
+  const idx = map && map.hasOwnProperty(header) ? map[header] : -1;
+  if (idx < 0) return defVal;
+  return (row && row.length > idx) ? row[idx] : defVal;
+}
+
+// ───────────────────────────────────────────────────────────────────
+// РОУТЕР
+// ───────────────────────────────────────────────────────────────────
+function doGet(e) {
+  const p = (e && e.parameter) ? e.parameter : {};
+  return route(p.action, p);
+}
+
+function doPost(e) {
+  const body = parseBody_(e);
+  return route(body.action, body);
+}
+
+function route(action, data) {
+  try {
+    const handlers = {
+      ping:                    () => ({ ok: true, ts: new Date().toISOString() }),
+      login:                   () => login(data),
+      getReference:            () => getReference(),
+
+      getVacancies:            () => getVacancies(data),
+      getVacancy:              () => getVacancy(data),
+      addVacancy:              () => addVacancy(data),
+      updateVacancy:           () => updateVacancy(data),
+      deleteVacancy:           () => deleteVacancy(data),
+
+      addAssessment:           () => addAssessment(data),
+      getAssessments:          () => getAssessments(data),
+      deleteAssessment:        () => deleteAssessment(data),
+
+      getUsers:                () => getUsers(data),
+      addUser:                 () => addUser(data),
+      updateUser:              () => updateUser(data),
+      activateUser:            () => setUserActive(data, true),
+      deactivateUser:          () => setUserActive(data, false),
+      deleteUser:              () => deleteUser(data),
+
+      // Новый модуль — Оценка ценностей
+      createValueAssessmentInvite: () => createValueAssessmentInvite(data),
+      getValueAssessments:         () => getValueAssessments(data),
+      getValueAssessmentResult:    () => getValueAssessmentResult(data),
+      deleteValueAssessment:       () => deleteValueAssessment(data),
+      startValueSurvey:            () => startValueSurvey(data),
+      submitValueSurvey:           () => submitValueSurvey(data),
+    };
+
+    if (!action || !handlers[action]) {
+      return json({ ok: false, error: 'Неизвестный action: ' + action });
+    }
+    return json(handlers[action]());
+  } catch (err) {
+    return json({ ok: false, error: String(err && err.message || err) });
+  }
+}
+
+function json(data) {
+  return ContentService
+    .createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function parseBody_(e) {
+  let raw = '';
+  try { raw = (e && e.postData && e.postData.contents) ? String(e.postData.contents) : ''; } catch (_) {}
+  if (!raw) return {};
+  try { return JSON.parse(raw); } catch (_) { return {}; }
+}
+
+// ───────────────────────────────────────────────────────────────────
+// AUTH
+// ───────────────────────────────────────────────────────────────────
+function login(data) {
+  const login = data.login;
+  const password = data.password;
+  if (!login || !password) return { ok: false, error: 'Введи логин и пароль' };
+
+  const rows = getSheet(SH.USERS).getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (String(r[1]).trim() !== String(login).trim()) continue;
+    if (!r[5]) return { ok: false, error: 'Пользователь деактивирован' };
+    if (r[2] !== hashPw(password) && r[2] !== password) return { ok: false, error: 'Неверный пароль' };
+    return { ok: true, user: { id: r[0], login: r[1], name: r[3], role: r[4] } };
+  }
+  return { ok: false, error: 'Пользователь не найден' };
+}
+
+// ───────────────────────────────────────────────────────────────────
+// ВАКАНСИИ
+// ───────────────────────────────────────────────────────────────────
+function getVacancies(data) {
+  const role = data.role;
+  const recruiter_id = data.recruiter_id;
+  const rows = getSheet(SH.VACANCIES).getDataRange().getValues();
+  if (rows.length < 2) return { ok: true, vacancies: [] };
+
+  const vacancies = rows.slice(1)
+    .filter(r => r[0])
+    .map(vacRowToObj)
+    .filter(v => {
+      if (role === 'recruiter' && recruiter_id) {
+        if (v.recruiter_id !== recruiter_id && v.current_recruiter_id !== recruiter_id) return false;
+      }
+      return true;
+    });
+
+  return { ok: true, vacancies: vacancies };
+}
+
+function getVacancy(data) {
+  if (!data.id) return { ok: false, error: 'Нет id' };
+  const rows = getSheet(SH.VACANCIES).getDataRange().getValues();
+  const row = rows.slice(1).find(r => r[0] === data.id);
+  if (!row) return { ok: false, error: 'Вакансия не найдена' };
+  return { ok: true, vacancy: vacRowToObj(row) };
+}
+
+function addVacancy(data) {
+  const v = data.vacancy;
+  if (!v) return { ok: false, error: 'Нет данных вакансии' };
+
+  const sheet = getSheet(SH.VACANCIES);
+  const now = new Date();
+  const id = generateId();
+  const initial = (v.recruiter_name || 'X').charAt(0).toUpperCase();
+  const num = initial + '-' + String(sheet.getLastRow()).padStart(3, '0');
+
+  const openedDate = v.date_opened ? new Date(v.date_opened) : now;
+  const factDate = v.fact_date ? new Date(v.fact_date) : '';
+  const planDate = v.plan_date ? new Date(v.plan_date) : '';
+  const transDate = v.transfer_date ? new Date(v.transfer_date) : '';
+
+  sheet.appendRow([
+    id, num,
+    v.recruiter_id || '', v.recruiter_name || '',
+    v.current_recruiter_id || v.recruiter_id || '',
+    v.current_recruiter_name || v.recruiter_name || '',
+    openedDate,
+    v.status || 'В работе',
+    v.type || '',
+    v.name || '',
+    v.department || '',
+    v.project || '—',
+    v.contract || 'ТД',
+    v.initiator || '',
+    v.reason || '',
+    v.site_url || '',
+    v.salary_offer || '',
+    v.salary_request || '',
+    v.crm_link || '',
+    v.comment || '',
+    planDate,
+    v.norm_days || '',
+    factDate,
+    v.days_total || 0,
+    v.days_current || 0,
+    v.transferred || false,
+    v.transferred_from_id || '',
+    v.transferred_from_name || '',
+    transDate,
+    v.vacancy_group || '',
+    now,
+    now,
+  ]);
+
+  return { ok: true, id: id, num: num, message: 'Вакансия создана' };
+}
+
+function updateVacancy(data) {
+  const id = data.id;
+  const fields = data.fields;
+  if (!id || !fields) return { ok: false, error: 'Нет id или полей' };
+
+  const sheet = getSheet(SH.VACANCIES);
+  const rows = sheet.getDataRange().getValues();
+
+  const colMap = {
+    status: 8, type: 9, name: 10, department: 11, project: 12, contract: 13, initiator: 14,
+    reason: 15, site_url: 16, salary_offer: 17, salary_request: 18, crm_link: 19, comment: 20,
+    plan_date: 21, norm_days: 22, fact_date: 23, days_total: 24, days_current: 25, transferred: 26,
+    transferred_from_id: 27, transferred_from_name: 28, transfer_date: 29, vacancy_group: 30,
+    date_opened: 7, current_recruiter_id: 5, current_recruiter_name: 6,
+  };
+
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] !== id) continue;
+    Object.keys(fields).forEach(key => {
+      const col = colMap[key];
+      if (!col) return;
+      const val = fields[key];
+      const isDate = ['fact_date', 'plan_date', 'transfer_date', 'date_opened'].indexOf(key) >= 0;
+      sheet.getRange(i + 1, col).setValue(isDate && val ? new Date(val) : val);
+    });
+    sheet.getRange(i + 1, 32).setValue(new Date());
+    return { ok: true, message: 'Вакансия обновлена' };
+  }
+  return { ok: false, error: 'Вакансия не найдена' };
+}
+
+function deleteVacancy(data) {
+  const id = data.id;
+  if (!id) return { ok: false, error: 'Нет id' };
+  const sheet = getSheet(SH.VACANCIES);
+  const rows = sheet.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] !== id) continue;
+    sheet.deleteRow(i + 1);
+    return { ok: true, message: 'Вакансия удалена' };
+  }
+  return { ok: false, error: 'Вакансия не найдена' };
+}
+
+// ───────────────────────────────────────────────────────────────────
+// ОЦЕНКА КАНДИДАТА (старый модуль)
+// ───────────────────────────────────────────────────────────────────
+function addAssessment(data) {
+  const a = data.assessment;
+  if (!a) return { ok: false, error: 'Нет данных оценки' };
+
+  const id = generateId();
+  const now = new Date();
+
+  getSheet(SH.ASSESSMENTS).appendRow([
+    id,
+    a.vacancy_id || '',
+    a.vacancy_name || '',
+    a.recruiter_id || '',
+    a.recruiter_name || '',
+    a.candidate_name || '',
+    a.interview_date ? new Date(a.interview_date) : now,
+    JSON.stringify(a.scores || {}),
+    a.total_score || 0,
+    a.max_score || 0,
+    a.pct_score || 0,
+    a.recommendation || '',
+    a.summary || '',
+    a.notes || '',
+    now,
+  ]);
+  return { ok: true, id: id, message: 'Оценка сохранена' };
+}
+
+function getAssessments(data) {
+  const vacancy_id = data.vacancy_id;
+  const recruiter_id = data.recruiter_id;
+  const role = data.role;
+
+  const rows = getSheet(SH.ASSESSMENTS).getDataRange().getValues();
+  if (rows.length < 2) return { ok: true, assessments: [] };
+
+  const out = rows.slice(1).filter(r => r[0]).map(r => ({
+    id: r[0],
+    vacancy_id: r[1],
+    vacancy_name: r[2],
+    recruiter_id: r[3],
+    recruiter_name: r[4],
+    candidate_name: r[5],
+    interview_date: fmtDisp(r[6]),
+    scores: safeJson(r[7]),
+    total_score: r[8],
+    max_score: r[9],
+    pct_score: r[10],
+    recommendation: r[11],
+    summary: r[12],
+    notes: r[13],
+    created_at: fmtDisp(r[14]),
+  })).filter(a => {
+    if (vacancy_id && a.vacancy_id !== vacancy_id) return false;
+    if (role === 'recruiter' && recruiter_id && a.recruiter_id !== recruiter_id) return false;
+    return true;
+  });
+
+  return { ok: true, assessments: out };
+}
+
+function deleteAssessment(data) {
+  const id = String(data.id || '');
+  const role = String(data.caller_role || '');
+  if (!id) return { ok: false, error: 'Нет id' };
+  if (role !== 'admin') return { ok: false, error: 'Недостаточно прав' };
+
+  const sheet = getSheet(SH.ASSESSMENTS);
+  const rows = sheet.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) !== id) continue;
+    sheet.deleteRow(i + 1);
+    return { ok: true, message: 'Оценка удалена' };
+  }
+  return { ok: false, error: 'Оценка не найдена' };
+}
+
+// ───────────────────────────────────────────────────────────────────
+// СПРАВОЧНИК
+// ───────────────────────────────────────────────────────────────────
+function getReference() {
+  const rows = getSheet(SH.REFERENCE).getDataRange().getValues();
+  const ref = {};
+  rows[0].forEach((h, col) => {
+    if (!h) return;
+    ref[h] = rows.slice(1).map(r => r[col]).filter(v => v !== '' && v != null);
+  });
+  return { ok: true, reference: ref };
+}
+
+// ───────────────────────────────────────────────────────────────────
+// ПОЛЬЗОВАТЕЛИ
+// ───────────────────────────────────────────────────────────────────
+function getUsers(data) {
+  if (data.role !== 'admin') return { ok: false, error: 'Нет прав' };
+  const rows = getSheet(SH.USERS).getDataRange().getValues();
+  return {
+    ok: true,
+    users: rows.slice(1).filter(r => r[0]).map(r => ({
+      id: r[0], login: r[1], name: r[3], role: r[4], active: r[5]
+    }))
+  };
+}
+
+function addUser(data) {
+  if (data.caller_role !== 'admin') return { ok: false, error: 'Нет прав' };
+  const u = data.user;
+  if (!u || !u.login || !u.password || !u.name) return { ok: false, error: 'Заполни логин, пароль и имя' };
+
+  const rows = getSheet(SH.USERS).getDataRange().getValues();
+  if (rows.slice(1).some(r => String(r[1]).trim() === String(u.login).trim())) {
+    return { ok: false, error: 'Такой логин уже существует' };
+  }
+
+  const id = generateId();
+  getSheet(SH.USERS).appendRow([
+    id, String(u.login).trim(), hashPw(u.password), u.name, u.role || 'recruiter', true, new Date().toISOString()
+  ]);
+  return { ok: true, id: id, message: 'Пользователь создан' };
+}
+
+function updateUser(data) {
+  if (data.caller_role !== 'admin') return { ok: false, error: 'Нет прав' };
+  const id = data.id;
+  const fields = data.fields;
+
+  const sheet = getSheet(SH.USERS);
+  const rows = sheet.getDataRange().getValues();
+
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] !== id) continue;
+    if (fields.name) sheet.getRange(i + 1, 4).setValue(fields.name);
+    if (fields.role) sheet.getRange(i + 1, 5).setValue(fields.role);
+    if (fields.password) sheet.getRange(i + 1, 3).setValue(hashPw(fields.password));
+    return { ok: true, message: 'Пользователь обновлён' };
+  }
+  return { ok: false, error: 'Не найден' };
+}
+
+function setUserActive(data, active) {
+  if (data.caller_role !== 'admin') return { ok: false, error: 'Нет прав' };
+  const sheet = getSheet(SH.USERS);
+  const rows = sheet.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] !== data.id) continue;
+    sheet.getRange(i + 1, 6).setValue(!!active);
+    return { ok: true, message: active ? 'Пользователь активирован' : 'Пользователь деактивирован' };
+  }
+  return { ok: false, error: 'Не найден' };
+}
+
+function deleteUser(data) {
+  if (data.caller_role !== 'admin') return { ok: false, error: 'Нет прав' };
+  const id = String(data.id || '');
+  const callerId = String(data.caller_id || '');
+  if (!id) return { ok: false, error: 'Нет id' };
+  if (id === callerId) return { ok: false, error: 'Нельзя удалить текущего пользователя' };
+
+  const sheet = getSheet(SH.USERS);
+  const rows = sheet.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) !== id) continue;
+    sheet.deleteRow(i + 1);
+    return { ok: true, message: 'Пользователь удалён' };
+  }
+  return { ok: false, error: 'Пользователь не найден' };
+}
+
+// ───────────────────────────────────────────────────────────────────
+// НОВЫЙ МОДУЛЬ: ОЦЕНКА ЦЕННОСТЕЙ (PVQ-RR)
+// ───────────────────────────────────────────────────────────────────
+function createValueAssessmentInvite(data) {
+  const required = ['candidate_name','sent_date','gender','email','department','employee_group','recruiter_id','recruiter_name'];
+  for (let i = 0; i < required.length; i++) {
+    if (!data[required[i]]) return { ok: false, error: 'Не заполнено поле: ' + required[i] };
+  }
+
+  const id = generateId();
+  const token = buildSecureToken_();
+  const sentAt = new Date(data.sent_date);
+  if (isNaN(sentAt.getTime())) return { ok: false, error: 'Некорректная дата направления' };
+
+  const expiresAt = new Date(sentAt.getTime() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
+  const now = new Date();
+
+  const sheet = getSheet(SH.VALUE_INVITES);
+  appendRowByHeaders_(sheet, {
+    id: id,
+    token: token,
+    status: 'sent',
+    sent_at: sentAt,
+    expires_at: expiresAt,
+    submitted_at: '',
+    vacancy_id: data.vacancy_id || '',
+    vacancy_name: data.vacancy_name || '',
+    candidate_name: data.candidate_name,
+    candidate_gender: data.gender,
+    candidate_email: String(data.email).trim().toLowerCase(),
+    department: data.department || '',
+    employee_group: data.employee_group || '',
+    recruiter_id: data.recruiter_id,
+    recruiter_name: data.recruiter_name,
+    created_at: now,
+    updated_at: now
+  });
+
+  const surveyLink = APP_BASE_URL + '/?token=' + encodeURIComponent(token);
+
+  const subject = 'Опрос по оценке ценностей (PVQ-RR)';
+  const body =
+    'Здравствуйте, ' + data.candidate_name + '!\n\n' +
+    'Вас приглашают пройти опрос по оценке ценностей.\n' +
+    'Ссылка на опрос: ' + surveyLink + '\n\n' +
+    'Срок действия ссылки: 7 дней.\n' +
+    'После отправки ответы изменить нельзя.\n\n' +
+    'С уважением,\nКоманда подбора';
+
+  GmailApp.sendEmail(String(data.email).trim(), subject, body);
+
+  return {
+    ok: true,
+    invite_id: id,
+    token: token,
+    survey_link: surveyLink,
+    expires_at: toYMD(expiresAt),
+    message: 'Приглашение отправлено'
+  };
+}
+
+function getValueAssessments(data) {
+  const role = String(data.role || '');
+  const recruiterId = String(data.recruiter_id || '');
+
+  const invitesSheet = getSheet(SH.VALUE_INVITES);
+  const invitesRows = invitesSheet.getDataRange().getValues();
+  if (invitesRows.length < 2) return { ok: true, items: [] };
+  const hm = headerMap_(invitesSheet);
+  const userNameMap = buildUserNameMap_();
+
+  const resultsMap = buildValueResultMap_();
+
+  const items = invitesRows.slice(1).filter(r => r[0]).map(r => {
+    const inviteId = String(getCellByHeader_(r, hm, 'id', r[0] || ''));
+    const status = String(getCellByHeader_(r, hm, 'status', r[2] || ''));
+    const expired = isInviteExpired_(getCellByHeader_(r, hm, 'expires_at', r[4]));
+    const finalStatus = (status === 'completed') ? 'completed' : (expired ? 'expired' : status);
+
+    const result = resultsMap[inviteId] || null;
+    let profile = result ? deriveProfileFromStoredResult_(result) : {};
+    if (!profile || !Object.keys(profile).length) {
+      profile = result ? safeJson(result.profile_json || '{}') : {};
+    }
+
+    const recruiterIdVal = getCellByHeader_(r, hm, 'recruiter_id', r[11]);
+    let recruiterNameVal = getCellByHeader_(r, hm, 'recruiter_name', r[12]);
+    if (looksLikeDateString_(recruiterNameVal)) {
+      recruiterNameVal = userNameMap[String(recruiterIdVal)] || '';
+    }
+
+    return {
+      id: inviteId,
+      token: getCellByHeader_(r, hm, 'token', r[1]),
+      status: finalStatus,
+      sent_at: toYMD(getCellByHeader_(r, hm, 'sent_at', r[3])),
+      expires_at: toYMD(getCellByHeader_(r, hm, 'expires_at', r[4])),
+      submitted_at: toYMD(getCellByHeader_(r, hm, 'submitted_at', r[5])),
+      vacancy_id: getCellByHeader_(r, hm, 'vacancy_id', r[6]),
+      vacancy_name: getCellByHeader_(r, hm, 'vacancy_name', r[7]),
+      candidate_name: getCellByHeader_(r, hm, 'candidate_name', r[8]),
+      candidate_gender: getCellByHeader_(r, hm, 'candidate_gender', r[9]),
+      candidate_email: getCellByHeader_(r, hm, 'candidate_email', r[10]),
+      department: getCellByHeader_(r, hm, 'department', ''),
+      employee_group: getCellByHeader_(r, hm, 'employee_group', ''),
+      recruiter_id: recruiterIdVal,
+      recruiter_name: recruiterNameVal || '',
+      has_result: !!result,
+      top_values: result ? safeJson(result.top_values_json || '{}') : {},
+      interpretation: result ? String(result.interpretation || '') : '',
+      profile_level: profile && profile.level_code ? String(profile.level_code) : '',
+      profile_match_pct: profile && profile.match_pct != null ? Number(profile.match_pct) : null
+    };
+  }).filter(item => {
+    if (role === 'recruiter' && recruiterId) return String(item.recruiter_id) === recruiterId;
+    return true;
+  });
+
+  items.sort((a,b) => (a.sent_at < b.sent_at ? 1 : -1));
+
+  return { ok: true, items: items };
+}
+
+function getValueAssessmentResult(data) {
+  const id = String(data.id || '');
+  const role = String(data.role || '');
+  if (role !== 'admin' && role !== 'manager') {
+    return { ok: false, error: 'Недостаточно прав для просмотра детального результата' };
+  }
+  if (!id) return { ok: false, error: 'Нет id' };
+
+  const inv = findInviteById_(id);
+  if (!inv) return { ok: false, error: 'Приглашение не найдено' };
+
+  const userNameMap = buildUserNameMap_();
+  const recruiterName = looksLikeDateString_(inv.recruiter_name)
+    ? (userNameMap[String(inv.recruiter_id)] || '')
+    : inv.recruiter_name;
+
+  const result = findValueResultByInviteId_(id);
+  if (!result) return { ok: false, error: 'Результат пока не сформирован' };
+
+  return {
+    ok: true,
+    invite: {
+      id: inv.id,
+      status: inv.status,
+      sent_at: toYMD(inv.sent_at),
+      expires_at: toYMD(inv.expires_at),
+      submitted_at: toYMD(inv.submitted_at),
+      vacancy_name: inv.vacancy_name,
+      department: inv.department || '',
+      employee_group: inv.employee_group || '',
+      candidate_name: inv.candidate_name,
+      candidate_gender: inv.candidate_gender,
+      candidate_email: inv.candidate_email,
+      recruiter_name: recruiterName,
+    },
+    result: {
+      mean57: Number(result.mean57 || 0),
+      scores: safeJson(result.scores_json || '{}'),
+      top_values: safeJson(result.top_values_json || '[]'),
+      bar_chart: safeJson(result.bar_chart_json || '{}'),
+      circle_chart: safeJson(result.circle_chart_json || '{}'),
+      interpretation: String(result.interpretation || ''),
+      profile: (function(){
+        const p2 = deriveProfileFromStoredResult_(result);
+        if (p2 && Object.keys(p2).length) return p2;
+        return safeJson(result.profile_json || '{}');
+      })(),
+      im: {
+        sum: Number(result.im_sum || 0),
+        level: String(result.im_level || ''),
+        chart: safeJson(result.im_chart_json || '{}')
+      }
+    }
+  };
+}
+
+function deleteValueAssessment(data) {
+  const id = String(data.id || '');
+  const role = String(data.caller_role || '');
+
+  if (!id) return { ok: false, error: 'Нет id' };
+  if (role !== 'admin') return { ok: false, error: 'Недостаточно прав' };
+
+  const inv = findInviteById_(id);
+  if (!inv) return { ok: false, error: 'Запись не найдена' };
+
+  deleteRowByValue_(getSheet(SH.VALUE_INVITES), 1, id);
+  deleteRowByValue_(getSheet(SH.VALUE_RESPONSES), 2, id);
+  deleteRowByValue_(getSheet(SH.VALUE_RESULTS), 2, id);
+
+  return { ok: true, message: 'Оценка ценностей удалена' };
+}
+
+function startValueSurvey(data) {
+  const token = String(data.token || '').trim();
+  if (!token) return { ok: false, error: 'Не передан token' };
+
+  const inv = findInviteByToken_(token);
+  if (!inv) return { ok: false, error: 'Ссылка недействительна' };
+
+  if (String(inv.status) === 'completed') {
+    return { ok: false, error: 'Опрос уже отправлен' };
+  }
+  if (isInviteExpired_(inv.expires_at)) {
+    return { ok: false, error: 'Срок действия ссылки истёк' };
+  }
+
+  return {
+    ok: true,
+    invite: {
+      candidate_name: inv.candidate_name,
+      vacancy_name: inv.vacancy_name,
+      department: inv.department || '',
+      employee_group: inv.employee_group || '',
+      expires_at: toYMD(inv.expires_at),
+      gender: inv.candidate_gender
+    },
+    scale: PVQ_SCALE_LABELS,
+    questions: buildSurveyQuestions_()
+  };
+}
+
+function submitValueSurvey(data) {
+  const token = String(data.token || '').trim();
+  const rawAnswers = data.answers;
+
+  if (!token) return { ok: false, error: 'Не передан token' };
+  if (!rawAnswers) return { ok: false, error: 'Не переданы ответы' };
+
+  const inv = findInviteByToken_(token);
+  if (!inv) return { ok: false, error: 'Ссылка недействительна' };
+
+  if (String(inv.status) === 'completed') return { ok: false, error: 'Опрос уже отправлен' };
+  if (isInviteExpired_(inv.expires_at)) return { ok: false, error: 'Срок действия ссылки истёк' };
+
+  const parsed = parseSurveyAnswers_(rawAnswers);
+  if (!parsed.ok) return { ok: false, error: parsed.error };
+  const pvqAnswers = parsed.pvqAnswers; // 57
+  const imAnswers = parsed.imAnswers;   // 10
+
+  const submittedAt = new Date();
+  const responseId = generateId();
+
+  // Сохраняем ответы
+  const respSheet = getSheet(SH.VALUE_RESPONSES);
+  const row = [responseId, inv.id, token, submittedAt]
+    .concat(pvqAnswers)
+    .concat(imAnswers)
+    .concat([JSON.stringify({ pvq: pvqAnswers, im: imAnswers })]);
+  respSheet.appendRow(row);
+
+  // Считаем результат
+  const calc = calculatePvqrr_(pvqAnswers);
+  const imCalc = calculateIm_(imAnswers);
+
+  const resultId = generateId();
+  const resultSheet = getSheet(SH.VALUE_RESULTS);
+  const hm = headerMap_(resultSheet);
+  const resultRow = buildRowByHeaders_(resultSheet, {
+    id: resultId,
+    invite_id: inv.id,
+    token: token,
+    candidate_name: inv.candidate_name,
+    vacancy_name: inv.vacancy_name,
+    recruiter_name: inv.recruiter_name,
+    created_at: submittedAt,
+    mean57: calc.mean57,
+    scores_json: JSON.stringify(calc.scores),
+    top_values_json: JSON.stringify(calc.topValues),
+    bar_chart_json: JSON.stringify(calc.barChart),
+    circle_chart_json: JSON.stringify(calc.circleChart),
+    interpretation: calc.interpretation,
+    profile_json: JSON.stringify(calc.profile || {}),
+    im_sum: imCalc.sum,
+    im_level: imCalc.level,
+    im_chart_json: JSON.stringify(imCalc.chart)
+  }, hm);
+  resultSheet.appendRow(resultRow);
+
+  // Помечаем приглашение как completed
+  setInviteCompleted_(inv.id, submittedAt);
+
+  return {
+    ok: true,
+    message: 'Опрос успешно отправлен',
+    result: {
+      mean57: calc.mean57,
+      scores: calc.scores,
+      top_values: calc.topValues,
+      bar_chart: calc.barChart,
+      circle_chart: calc.circleChart,
+      interpretation: calc.interpretation,
+      im: imCalc
+    }
+  };
+}
+
+function buildRowByHeaders_(sheet, valuesByHeader, hm) {
+  const map = hm || headerMap_(sheet);
+  const cols = Math.max(sheet.getLastColumn(), Object.keys(map).length);
+  const row = [];
+  for (let i = 0; i < cols; i++) row.push('');
+  Object.keys(valuesByHeader || {}).forEach(h => {
+    if (!map.hasOwnProperty(h)) return;
+    row[map[h]] = valuesByHeader[h];
+  });
+  return row;
+}
+
+function appendRowByHeaders_(sheet, valuesByHeader) {
+  const cols = Math.max(sheet.getLastColumn(), 1);
+  const empty = [];
+  for (let i = 0; i < cols; i++) empty.push('');
+  sheet.appendRow(empty);
+  const rowNum = sheet.getLastRow();
+  const map = headerMap_(sheet);
+  Object.keys(valuesByHeader || {}).forEach(h => {
+    if (!map.hasOwnProperty(h)) return;
+    sheet.getRange(rowNum, map[h] + 1).setValue(valuesByHeader[h]);
+  });
+}
+
+function parseSurveyAnswers_(rawAnswers) {
+  // Ожидаем объект: {pvq1..pvq57, im1..im10}
+  if (rawAnswers == null || typeof rawAnswers !== 'object' || Array.isArray(rawAnswers)) {
+    return { ok: false, error: 'Неверный формат ответов: ожидается объект {pvq1..pvq57, im1..im10}' };
+  }
+
+  const pvqAnswers = [];
+  for (let i = 1; i <= 57; i++) {
+    const v = Number(rawAnswers['pvq' + i]);
+    if (![1,2,3,4,5,6].includes(v)) return { ok: false, error: 'PVQ: ответ pvq' + i + ' должен быть в диапазоне 1..6' };
+    pvqAnswers.push(v);
+  }
+
+  const imAnswers = [];
+  for (let i = 1; i <= 10; i++) {
+    const v = Number(rawAnswers['im' + i]);
+    if (![1,2,3,4,5,6].includes(v)) return { ok: false, error: 'IM: ответ im' + i + ' должен быть в диапазоне 1..6' };
+    imAnswers.push(v);
+  }
+
+  return { ok: true, pvqAnswers: pvqAnswers, imAnswers: imAnswers };
+}
+
+function calculateIm_(imAnswers) {
+  let sum = 0;
+  for (let i = 0; i < imAnswers.length; i++) sum += Number(imAnswers[i] || 0);
+  sum = Math.round(sum);
+
+  let level = 'Норма — ответы достоверны';
+  if (sum >= 42) level = 'Высокая социальная желательность — результаты могут быть искажены';
+  else if (sum >= 30) level = 'Умеренная социальная желательность — данные требуют осторожности';
+
+  const chart = {
+    labels: ['IM — управление впечатлением'],
+    data: [sum],
+    min: 10,
+    max: 60,
+    bands: [
+      { from: 10, to: 30, label: 'Норма' },
+      { from: 31, to: 41, label: 'Умеренно' },
+      { from: 42, to: 60, label: 'Высоко' },
+    ]
+  };
+
+  return { sum: sum, level: level, chart: chart };
+}
+
+// ───────────────────────────────────────────────────────────────────
+// PVQ-RR: ВОПРОСЫ И ШКАЛЫ
+// ───────────────────────────────────────────────────────────────────
+const PVQ_SCALE_LABELS = [
+  '1 – Совсем не похож на меня',
+  '2 – Не похож на меня',
+  '3 – Немного похож на меня',
+  '4 – В некоторой степени похож на меня',
+  '5 – Похож на меня',
+  '6 – Очень похож на меня'
+];
+
+const PVQ_QUESTIONS_PUBLIC = [
+  { n:1,  text:'Ему важнее всего применять нестандартные подходы в решении задач' },
+  { n:2,  text:'Важно, чтобы его страна защищала себя от всех угроз' },
+  { n:3,  text:'Ему важно хорошо и комфортно проводить время и получать удовольствие, чем бы он не занимался' },
+  { n:4,  text:'Если коллега мешает ему громкими разговорами по телефону, он скорее промолчит, чем попросит его выйти' },
+  { n:5,  text:'Защищать слабых и уязвимых людей в обществе важно для него, пусть даже с риском пострадать самому' },
+  { n:6,  text:'Он считает что создан для того, чтобы управлять людьми, ставить задачи и контролировать исполнения' },
+  { n:7,  text:'Он считает не приличным публично хвастаться своими достижениями' },
+  { n:8,  text:'Заботиться о природе для него важнее многих других вещей' },
+  { n:9,  text:'Для него важно чтобы никто публично не критиковал его действия или идеи' },
+  { n:10, text:'Он считает, что для достижения результата в работе важно рисковать и с азартом подходить к решению задач' },
+  { n:11, text:'Заботиться о близких ему людях для него важнее всего' },
+  { n:12, text:'Деньги для него не ценны сами по себе, они дают много возможностей' },
+  { n:13, text:'Он очень сильно обеспокоен сохранением своего здоровья' },
+  { n:14, text:'Ему важно быть терпимым ко всем людям и группам' },
+  { n:15, text:'Он считает важным соблюдать правила/регламенты, пусть даже они кажутся глупыми и замедляют достижение результата' },
+  { n:16, text:'Ему важно поступать по-своему, даже когда кто-то, пусть даже более экспертный и авторитетный говорит ему как поступать в жизни' },
+  { n:17, text:'Он всегда стремится достичь чего-то, даже если приходится жертвовать временем для семьи' },
+  { n:18, text:'Для него важно поддерживать традиционные ценности или верования' },
+  { n:19, text:'Ему важно, чтобы люди, которых он знает, были полностью в нем уверены. Он сдержит обещание даже если придется поступиться' },
+  { n:20, text:'Для него важно быть богатым, даже если для этого придется выполнять грязную, нелюбимую работу' },
+  { n:21, text:'Ему важно участвовать в акциях по защите природы, и он уделяет этому свободное время' },
+  { n:22, text:'Он лучше отложит срочный вопрос до понедельника, чем потревожит коллегу в выходной день' },
+  { n:23, text:'В рабочем обсуждении, когда все выражают согласие с руководителем,  для него важно иметь свое суждение' },
+  { n:24, text:'Для него важнее всего в любой ситуации "держать лицо"' },
+  { n:25, text:'Помогать дорогим ему людям очень важно для него, пусть даже для этого ему надо жертвовать личным временем' },
+  { n:26, text:'Для него исключительно важна его личная безопасность' },
+  { n:27, text:'Быть надежным и заслуживающим доверия другом очень важно для него' },
+  { n:28, text:'Для него важен азарт в жизни, даже если он сопряжен с риском' },
+  { n:29, text:'Для него очень важнее всего держать ситуацию под контролем и определять правила' },
+  { n:30, text:'Независимость его действий настолько важна для него, что ради этого он готов вступить в конфронтацию' },
+  { n:31, text:'Он соблюдает правила, даже когда никто не наблюдает за ним' },
+  { n:32, text:'Для него важно быть очень успешным' },
+  { n:33, text:'Ему важно следовать обычаям семьи или обычаям его религии.' },
+  { n:34, text:'Ему важно слушать и понимать людей, отличающихся от него' },
+  { n:35, text:'Он считает, что  в обществе каждый должен чувствовать себя в безопасности, пусть даже ценой личных свобод' },
+  { n:36, text:'Он выберет жизнь в удовольствие, чем самоограничения ради далеких целей' },
+  { n:37, text:'Ему важно, чтобы каждый человек в мире имел равные возможности в жизни' },
+  { n:38, text:'Он считает , что скромность украшает человека и ему важно следовать этому' },
+  { n:39, text:'Для него важно учиться новым практикам и быть экспертом' },
+  { n:40, text:'Он высоко ценит традиционные практики своей культуры' },
+  { n:41, text:'Для него важнее руководить людьми, чем иметь высокую зарплату' },
+  { n:42, text:'Для него важно соблюдать все законы' },
+  { n:43, text:'Ему важнее работать в среде где часто происходят изменения, чем заниматься стандартными процессами' },
+  { n:44, text:'Обладать дорогими вещами, которые демонстрируют его достаток, важно для него' },
+  { n:45, text:'Ему важно защищать окружающую среду от разрушения и загрязнения' },
+  { n:46, text:'Для него важно ловить удовольствие в каждом моменте жизни, он не упускает возможности приятно провести время' },
+  { n:47, text:'Заботиться обо всех потребностях близких людей важно для него' },
+  { n:48, text:'Ему важно, чтобы люди высоко оценивали его достиженияи' },
+  { n:49, text:'Он лучше лишится части премии, чем публично выслушает жесткую критику от руководителя' },
+  { n:50, text:'Стабильность и порядок в обществе важны для него, даже если приходится мириться с отсутствием инноваций' },
+  { n:51, text:'Для него важно быть тактичным и избегать назойливости по отношению к людям' },
+  { n:52, text:'Ему важно, чтобы к каждому относились справедливо, даже к незнакомым ему людям' },
+  { n:53, text:'Для него очень важно, чтобы район его проживания был безопасным' },
+  { n:54, text:'Он никогда не ищет публичного внимания и похвалы' },
+  { n:55, text:'Ему важно, чтобы люди, могли на него полностью положиться' },
+  { n:56, text:'Для него очень важна свобода выбора' },
+  { n:57, text:'Для него важно принимать мнение людей, даже когда он с ними не согласен' },
+];
+
+// ───────────────────────────────────────────────────────────────────
+// IM: Контроль социальной желательности (Управление впечатлением)
+// 10 утверждений, шкала 1..6. Высокая сумма = вероятное приукрашивание ответов.
+// Пороги:
+// 10–30 норма, 30–41 умеренная соц.желательность, 42–60 высокая соц.желательность.
+// ───────────────────────────────────────────────────────────────────
+const IM_QUESTIONS = [
+  { n:1,  text:'Он всегда полностью честен с коллегами, даже если правда неудобна для него' },
+  { n:2,  text:'Ему никогда не приходило в голову хотеть, чтобы кто-то из коллег потерпел неудачу' },
+  { n:3,  text:'Он всегда внимательно слушает собеседника, не отвлекаясь на свои мысли' },
+  { n:4,  text:'У него никогда не возникало зависти или ревности к чужим успехам' },
+  { n:5,  text:'Его рабочие мотивы всегда абсолютно прозрачны для окружающих' },
+  { n:6,  text:'Он всегда сразу признает свои ошибки, никогда не пытаясь их скрыть или оправдать' },
+  { n:7,  text:'Ему никогда не приходило в голову преувеличить свои заслуги или вклад в общий результат' },
+  { n:8,  text:'Он никогда не говорил о коллеге негативно за его спиной' },
+  { n:9,  text:'Ему всегда удаётся сохранять полное спокойствие, что бы ни происходило на работе' },
+  { n:10, text:'Он никогда не откладывал важные дела на потом' },
+];
+
+function shuffle_(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = a[i];
+    a[i] = a[j];
+    a[j] = t;
+  }
+  return a;
+}
+
+function buildSurveyQuestions_() {
+  // Единый список вопросов: PVQ (57) + IM (10) = 67.
+  // Ключи позволяют прислать ответы независимо от случайного порядка.
+  const pvq = PVQ_QUESTIONS_PUBLIC.map(q => ({
+    key: 'pvq' + q.n,
+    kind: 'pvq',
+    n: q.n,
+    text: q.text,
+  }));
+  const im = IM_QUESTIONS.map(q => ({
+    key: 'im' + q.n,
+    kind: 'im',
+    n: q.n,
+    text: q.text,
+  }));
+  return shuffle_(pvq.concat(im));
+}
+
+// 19 шкал (из твоего ключа)
+const PVQ_SCALES = [
+  { id:'self_direction_thought',   label:'Самостоятельность — Мысли',               q:[1,23,39] },
+  { id:'security_societal',        label:'Безопасность — Общественная',             q:[2,35,50] },
+  { id:'hedonism',                 label:'Гедонизм',                                 q:[3,36,46] },
+  { id:'conformity_interpersonal', label:'Конформизм — Межличностный',              q:[4,22,51] },
+  { id:'universalism_concern',     label:'Универсализм — Забота о других',          q:[5,37,52] },
+  { id:'power_dominance',          label:'Власть — Доминирование',                  q:[6,29,41] },
+  { id:'humility',                 label:'Скромность',                               q:[7,38,54] },
+  { id:'universalism_nature',      label:'Универсализм — Забота о природе',         q:[8,21,45] },
+  { id:'reputation',               label:'Репутация',                                q:[9,24,49] },
+  { id:'stimulation',              label:'Стимуляция',                               q:[10,28,43] },
+  { id:'benevolence_caring',       label:'Благожелательность — Забота',             q:[11,25,47] },
+  { id:'power_resources',          label:'Власть — Ресурсы',                         q:[12,20,44] },
+  { id:'security_personal',        label:'Безопасность — Личная',                    q:[13,26,53] },
+  { id:'universalism_tolerance',   label:'Универсализм — Толерантность',            q:[14,34,57] },
+  { id:'conformity_rules',         label:'Конформизм — Правила',                     q:[15,31,42] },
+  { id:'self_direction_action',    label:'Самостоятельность — Поступки',             q:[16,30,56] },
+  { id:'achievement',              label:'Достижение',                               q:[17,32,48] },
+  { id:'tradition',                label:'Традиция',                                 q:[18,33,40] },
+  { id:'benevolence_dependability',label:'Благожелательность — Чувство долга',       q:[19,27,55] },
+];
+
+// Порядок для "круга ценностей" (каноничная идея: соседние рядом, противоположные напротив)
+const PVQ_CIRCLE_ORDER = [
+  'self_direction_thought',
+  'self_direction_action',
+  'stimulation',
+  'hedonism',
+  'achievement',
+  'power_dominance',
+  'power_resources',
+  'reputation',
+  'security_personal',
+  'security_societal',
+  'tradition',
+  'conformity_rules',
+  'conformity_interpersonal',
+  'humility',
+  'benevolence_dependability',
+  'benevolence_caring',
+  'universalism_concern',
+  'universalism_tolerance',
+  'universalism_nature',
+];
+
+const ABBR_BY_ID = {
+  self_direction_thought: 'SDT',
+  security_societal: 'SES',
+  hedonism: 'HE',
+  conformity_interpersonal: 'COI',
+  universalism_concern: 'UNC',
+  power_dominance: 'POD',
+  humility: 'HUM',
+  universalism_nature: 'UNN',
+  reputation: 'FAC',
+  stimulation: 'ST',
+  benevolence_caring: 'BEC',
+  power_resources: 'POR',
+  security_personal: 'SEP',
+  universalism_tolerance: 'UNT',
+  conformity_rules: 'COR',
+  self_direction_action: 'SDA',
+  achievement: 'AC',
+  tradition: 'TR',
+  benevolence_dependability: 'BED',
+};
+
+const VALUE_MODEL_BY_ABBR = {
+  "SDT": {"axis1":"Рост / свобода от тревоги","axis2":"Личностная","meta":"Открытость изменениям","base":"Самостоятельность","refine":"Самостоятельность мысли","goal":"Свобода развивать свои идеи","badMgmt":"Навязывание готовых решений, критика инициативы","needMgmt":"Поощрять генерацию идей, поддерживать обучение","conflict":"Конформность (правила, межличностная), Традиция, Безопасность (личная, общественная)","synergy":"Стимуляция, Универсализм (толерантность)","recommend":"Создавайте «безопасные зоны для творчества»: выделите время и пространство, где правила не действуют"},
+  "SDA": {"axis1":"Рост / свобода от тревоги","axis2":"Личностная","meta":"Открытость изменениям","base":"Самостоятельность","refine":"Самостоятельность поступков","goal":"Свобода определять свои действия","badMgmt":"Микроменеджмент, жёсткая регламентация","needMgmt":"Давать автономию, свободу выбора методов","conflict":"Конформность (правила), Безопасность (личная), Власть (доминирование)","synergy":"Стимуляция, Достижения","recommend":"Давайте выбор в контролируемых рамках: 2-3 варианта с чёткими критериями"},
+  "ST": {"axis1":"Рост / свобода от тревоги","axis2":"Личностная","meta":"Открытость изменениям","base":"Стимуляция","refine":"Стимуляция","goal":"Новизна, вызов, разнообразие","badMgmt":"Рутина, монотонность, отсутствие развития","needMgmt":"Сложные проекты, исследования, инновации","conflict":"Безопасность (личная, общественная), Традиция, Конформность (правила)","synergy":"Самостоятельность (мысли, действия), Гедонизм","recommend":"Дозируйте новизну: 20% нестандартных задач, 80% предсказуемых"},
+  "HE": {"axis1":"Рост / свобода от тревоги","axis2":"Личностная","meta":"Открытость ↔ Самоутверждение","base":"Гедонизм","refine":"Гедонизм","goal":"Удовольствие, наслаждение, комфорт","badMgmt":"Переработки, стресс, игнорирование баланса","needMgmt":"Комфортные условия, поощрения, праздники","conflict":"Традиция (умеренность), Конформность (межличностная), Безопасность","synergy":"Стимуляция, Достижения","recommend":"Ищите «полезное удовольствие»: связывайте приятные активности с рабочими целями"},
+  "AC": {"axis1":"Рост / свобода от тревоги ↔ Самозащита / избегание тревоги","axis2":"Личностная","meta":"Самоутверждение","base":"Достижение","refine":"Достижение","goal":"Личный успех через демонстрацию компетентности","badMgmt":"Игнорирование результатов, уравниловка","needMgmt":"Чёткие KPI, соревновательная среда","conflict":"Универсализм (забота), Благожелательность (забота, долг)","synergy":"Власть (ресурсы, доминирование), Репутация","recommend":"Введите командные достижения: личный KPI привяжите к результату отдела"},
+  "POD": {"axis1":"Самозащита / избегание тревоги","axis2":"Личностная","meta":"Самоутверждение","base":"Власть","refine":"Доминирование","goal":"Власть через осуществление контроля над людьми","badMgmt":"Оспаривание авторитета, подрыв иерархии","needMgmt":"Формальное лидерство, статусные полномочия","conflict":"Универсализм (забота), Скромность, Благожелательность (забота)","synergy":"Власть (ресурсы), Достижения, Репутация","recommend":"Создайте иерархию с обратной связью: дайте власть, но введите правило анонимной оценки снизу"},
+  "POR": {"axis1":"Самозащита / избегание тревоги","axis2":"Личностная","meta":"Самоутверждение","base":"Власть","refine":"Власть над ресурсами","goal":"Контроль над материальными и социальными ресурсами","badMgmt":"Ограничение ресурсов, делегирование полномочий без контроля","needMgmt":"Доступ к бюджетам и управлению","conflict":"Универсализм (забота), Благожелательность (забота, долг)","synergy":"Власть (доминирование), Достижения, Репутация","recommend":"Делегируйте бюджет на социальные проекты: дайте ресурсы, но часть направьте на помощь команде"},
+  "FAC": {"axis1":"Самозащита / избегание тревоги","axis2":"Личностная","meta":"Сохранение ↔ Самоутверждение","base":"Лицо (Face)","refine":"Сохранение репутации","goal":"Поддержание публичного имиджа, избегание унижения","badMgmt":"Публичное порицание, подрыв авторитета","needMgmt":"Уважать репутацию, давать возможность влиять на решения","conflict":"Универсализм (забота), Скромность","synergy":"Власть (ресурсы, доминирование), Достижения","recommend":"Хвалите публично, критикуйте приватно, с акцентом на развитие статуса"},
+  "SEP": {"axis1":"Самозащита / избегание тревоги","axis2":"Личностная","meta":"Сохранение","base":"Безопасность","refine":"Личная безопасность","goal":"Безопасность в ближайшем окружении (семья, карьера)","badMgmt":"Неопределённость, рискованные задачи без страховки","needMgmt":"Стабильность, гарантии занятости","conflict":"Стимуляция, Самостоятельность (действия)","synergy":"Конформность (правила), Традиция","recommend":"Внедрите «контролируемый риск»: изменения с планом Б и периодом возврата"},
+  "SES": {"axis1":"Самозащита / избегание тревоги","axis2":"Социальная","meta":"Сохранение","base":"Безопасность","refine":"Общественная безопасность","goal":"Безопасность и стабильность в широком обществе","badMgmt":"Игнорирование законов, социальной ответственности","needMgmt":"Подчёркивать важность работы для общества","conflict":"Стимуляция, Универсализм (толерантность)","synergy":"Традиция, Конформность (правила)","recommend":"Показывайте, как разнообразие укрепляет стабильность: встречи с разными группами в структурированном формате"},
+  "TR": {"axis1":"Самозащита / избегание тревоги","axis2":"Социальная","meta":"Сохранение","base":"Традиция","refine":"Традиция","goal":"Поддержание и сохранение культурных, семейных, религиозных традиций","badMgmt":"Игнорирование истории, неуважение к устоям","needMgmt":"Соблюдать ритуалы, чтить традиции","conflict":"Стимуляция, Гедонизм, Самостоятельность (мысли)","synergy":"Конформность (правила, межличностная), Безопасность (общественная)","recommend":"Создайте «гибридные традиции»: сохраните старые ритуалы, добавьте элемент новизны"},
+  "COR": {"axis1":"Самозащита / избегание тревоги","axis2":"Социальная","meta":"Сохранение","base":"Конформность","refine":"Соблюдение правил","goal":"Соблюдение правил, законов, формальных обязанностей","badMgmt":"Хаос, двусмысленные правила","needMgmt":"Чёткие инструкции, структура","conflict":"Самостоятельность (мысли, действия), Стимуляция","synergy":"Традиция, Безопасность (личная, общественная)","recommend":"Оформляйте свободу как исключение из правил: создайте «регламент экспериментов»"},
+  "COI": {"axis1":"Самозащита / избегание тревоги","axis2":"Социальная","meta":"Сохранение","base":"Конформность","refine":"Межличностная конформность","goal":"Избегание действий, которые могут расстроить или навредить другим","badMgmt":"Публичная критика, создание конфликтных ситуаций","needMgmt":"Приватная обратная связь, избегать конфронтации","conflict":"Самостоятельность (мысли, действия), Стимуляция","synergy":"Традиция, Безопасность (личная)","recommend":"Используйте «мягкую прямоту»: обратная связь по формуле «ситуация + факт + предложение» один-на-один"},
+  "HUM": {"axis1":"Самозащита / избегание тревоги - Рост / свобода от тревоги","axis2":"Социальная","meta":"Сохранение ↔ Самоопределение","base":"Скромность","refine":"Скромность","goal":"Осознание своей незначительности в общей картине мира","badMgmt":"Публичное самовосхваление, принижение других","needMgmt":"Отмечать вклад сотрудника в общее дело","conflict":"Власть (доминирование), Достижения, Репутация","synergy":"Универсализм (забота), Благожелательность (забота)","recommend":"Хвалите через команду: признавайте заслуги в контексте общего результата"},
+  "BEC": {"axis1":"Рост / свобода от тревоги","axis2":"Социальная","meta":"Самоопределение","base":"Благожелательность","refine":"Забота","goal":"Благополучие близких людей","badMgmt":"Игнорирование человеческих потребностей, равнодушие","needMgmt":"Забота, поддержка, командный дух","conflict":"Власть (доминирование), Достижения, Репутация","synergy":"Универсализм (забота), Скромность","recommend":"Создайте систему взаимопомощи: наставничество, практика благодарностей"},
+  "BED": {"axis1":"Рост / свобода от тревоги","axis2":"Социальная","meta":"Самоопределение","base":"Благожелательность","refine":"Чувство долга","goal":"Быть надёжным, ответственным, сдерживать обещания ради гармонии в группе","badMgmt":"Непоследовательность, обман, подрыв доверия","needMgmt":"Ценить преданность, приватная обратная связь","conflict":"Власть, Достижения (нечестные)","synergy":"Конформность (правила), Традиция","recommend":"Цените предсказуемость в соревновательной среде: добавьте в KPI пункт «выполнение обещаний»"},
+  "UNC": {"axis1":"Рост / свобода от тревоги","axis2":"Социальная","meta":"Самоопределение","base":"Универсализм","refine":"Забота о других","goal":"Равенство, справедливость, защита людей","badMgmt":"Несправедливость, игнорирование социальных проблем","needMgmt":"Честность, КСО, социальные инициативы","conflict":"Власть (ресурсы, доминирование), Достижения, Репутация","synergy":"Благожелательность (забота, долг), Скромность","recommend":"Покажите, как власть и достижения помогают заботиться"},
+  "UNN": {"axis1":"Рост / свобода от тревоги","axis2":"Социальная","meta":"Самоопределение","base":"Универсализм","refine":"Забота о природе","goal":"Сохранение и защита окружающей среды","badMgmt":"Нанесение вреда экологии, неуважение к природе","needMgmt":"«Зелёные» инициативы, экологичные практики","conflict":"Власть (ресурсы), Достижения","synergy":"Универсализм (забота), Традиция","recommend":"Внедряйте «экологичную эффективность»: показывайте, что забота о природе снижает издержки"},
+  "UNT": {"axis1":"Рост / свобода от тревоги","axis2":"Социальная","meta":"Самоопределение","base":"Универсализм","refine":"Толерантность","goal":"Принятие и понимание отличающихся","badMgmt":"Предвзятость, дискриминация, неприятие иных взглядов","needMgmt":"Инклюзивная среда, разнообразие","conflict":"Конформность (межличностная), Традиция, Безопасность (общественная)","synergy":"Универсализм (забота), Благожелательность (забота)","recommend":"Организуйте безопасный диалог: встречи, где сотрудники обсуждают различия без осуждения"}
+};
+
+const IDEAL_BASE_BY_ABBR = {
+  SDT: 5.2, SDA: 5.2, ST: 4.8, HE: 3.8, AC: 5.1,
+  UNC: 5.4, BEC: 5.4, BED: 5.2, UNT: 4.8, HUM: 4.5,
+  SEP: 4.0, SES: 3.8, UNN: 3.5, COI: 3.5,
+  TR: 2.3, COR: 2.8, FAC: 2.8, POR: 2.8, POD: 2.0
+};
+
+const META_COLORS = {
+  'Открытость изменениям': '#7B5EA7',
+  'Самоопределение': '#2FAE7B',
+  'Самоутверждение': '#E35B6A',
+  'Сохранение': '#4E79A7',
+  'Открытость ↔ Самоутверждение': '#9C6ADE',
+  'Сохранение ↔ Самоутверждение': '#8B6A4D',
+  'Сохранение ↔ Самоопределение': '#5C8D89'
+};
+
+function calculatePvqrr_(answers) {
+  // 1) Среднее по 57 (ipsat)
+  const mean57 = round_(avg_(answers), 4);
+
+  // 2) Центрирование
+  const centered = answers.map(v => Number(v) - mean57);
+
+  // 3) Шкалы
+  const scores = {};
+  PVQ_SCALES.forEach(s => {
+    const vals = s.q.map(n => centered[n - 1]);
+    scores[s.id] = round_(avg_(vals), 4);
+  });
+
+  // 4) Топ-ценности
+  const arr = PVQ_SCALES.map(s => ({ id: s.id, label: s.label, score: scores[s.id] }));
+  arr.sort((a,b) => b.score - a.score);
+  const topValues = arr.slice(0, 5);
+
+  // 5) Базовые средние (для сопоставления и понятной шкалы 1..6)
+  const baseScores = {};
+  PVQ_SCALES.forEach(s => {
+    baseScores[s.id] = round_(scores[s.id] + mean57, 4);
+  });
+
+  const idealBaseById = {};
+  PVQ_SCALES.forEach(s => {
+    const abbr = ABBR_BY_ID[s.id];
+    idealBaseById[s.id] = Number(IDEAL_BASE_BY_ABBR[abbr] || 3.5);
+  });
+  const idealMean = avg_(Object.keys(idealBaseById).map(k => idealBaseById[k]));
+
+  // 6) График bars (короткие подписи + группировка цветом + эталон)
+  const barChart = {
+    labels: PVQ_SCALES.map(s => {
+      const abbr = ABBR_BY_ID[s.id];
+      const vm = VALUE_MODEL_BY_ABBR[abbr] || {};
+      return vm.refine || s.label;
+    }),
+    abbrs: PVQ_SCALES.map(s => ABBR_BY_ID[s.id]),
+    data: PVQ_SCALES.map(s => scores[s.id]),
+    base_data: PVQ_SCALES.map(s => baseScores[s.id]),
+    ideal_data: PVQ_SCALES.map(s => idealBaseById[s.id]),
+    ideal_centered_data: PVQ_SCALES.map(s => round_(idealBaseById[s.id] - idealMean, 4)),
+    group_meta: PVQ_SCALES.map(s => {
+      const vm = VALUE_MODEL_BY_ABBR[ABBR_BY_ID[s.id]] || {};
+      return vm.meta || '';
+    }),
+    colors: PVQ_SCALES.map(s => {
+      const vm = VALUE_MODEL_BY_ABBR[ABBR_BY_ID[s.id]] || {};
+      return META_COLORS[vm.meta] || '#7B5EA7';
+    }),
+    mean57: mean57,
+  };
+
+  // 7) График круга (короткие подписи + эталон)
+  const byId = {};
+  PVQ_SCALES.forEach(s => {
+    const abbr = ABBR_BY_ID[s.id];
+    const vm = VALUE_MODEL_BY_ABBR[abbr] || {};
+    byId[s.id] = vm.refine || s.label;
+  });
+  const circleChart = {
+    labels: PVQ_CIRCLE_ORDER.map(id => byId[id]),
+    data: PVQ_CIRCLE_ORDER.map(id => scores[id]),
+    base_data: PVQ_CIRCLE_ORDER.map(id => baseScores[id]),
+    ideal_data: PVQ_CIRCLE_ORDER.map(id => idealBaseById[id]),
+    ideal_centered_data: PVQ_CIRCLE_ORDER.map(id => round_(idealBaseById[id] - idealMean, 4)),
+    order: PVQ_CIRCLE_ORDER
+  };
+  const interp = buildInterpretation_(baseScores);
+
+  return {
+    mean57: mean57,
+    scores: scores,
+    topValues: topValues,
+    barChart: barChart,
+    circleChart: circleChart,
+    interpretation: interp.text,
+    profile: interp.profile
+  };
+}
+
+function buildInterpretation_(baseScores) {
+  if (!baseScores) return { text: 'Недостаточно данных для интерпретации.', profile: {} };
+  function metaById_(id) {
+    const abbr = ABBR_BY_ID[id] || id;
+    const vm = VALUE_MODEL_BY_ABBR[abbr] || {};
+    return {
+      id: id,
+      abbr: abbr,
+      label: vm.refine || id,
+      fullLabel: vm.base ? (vm.base + ' — ' + (vm.refine || '')) : (vm.refine || id),
+      axis1: vm.axis1 || '',
+      axis2: vm.axis2 || '',
+      meta: vm.meta || '',
+      goal: vm.goal || '',
+      badMgmt: vm.badMgmt || '',
+      needMgmt: vm.needMgmt || '',
+      conflict: vm.conflict || '',
+      synergy: vm.synergy || '',
+      recommend: vm.recommend || '',
+    };
+  }
+
+  function v_(id) {
+    const n = Number(baseScores[id]);
+    return Number.isFinite(n) ? n : null;
+  }
+  function fmt_(n) {
+    if (!Number.isFinite(n)) return '—';
+    // 1..6 обычно красиво смотрятся с двумя знаками
+    return n.toFixed(2).replace(/\\.00$/, '');
+  }
+
+  const UNC = v_('universalism_concern');
+  const BEC = v_('benevolence_caring');
+  const BED = v_('benevolence_dependability');
+  const SDA = v_('self_direction_action');
+  const SDT = v_('self_direction_thought');
+  const ST  = v_('stimulation');
+  const AC  = v_('achievement');
+  const POD = v_('power_dominance');
+  const TR  = v_('tradition');
+  const FAC = v_('reputation');
+  const COR = v_('conformity_rules');
+
+  const CRIT_MIN = { UNC:5.0, BEC:5.0, BED:4.5, AC:4.0, SDA:4.0, SDT:4.0, ST:3.5 };
+  const UNDES_IDEAL_MAX = { POD:3.0, TR:3.0, FAC:4.0, COR:3.5 };
+  const critKeys = ['UNC','BEC','BED','AC','SDA','SDT','ST'];
+  const riskKeys = ['POD','TR','FAC','COR'];
+
+  // % соответствия 0..100:
+  // 1) Близость к эталонному профилю по всем 19 ценностям (основной вклад)
+  // 2) Соблюдение критических минимумов/порогов риска (дополнительный вклад)
+  const pointList = [];
+  critKeys.forEach(k => {
+    const id = Object.keys(ABBR_BY_ID).find(x => ABBR_BY_ID[x] === k);
+    const val = v_(id);
+    if (val == null) return;
+    pointList.push(Math.max(0, Math.min(1, val / Number(CRIT_MIN[k]))));
+  });
+  riskKeys.forEach(k => {
+    const id = Object.keys(ABBR_BY_ID).find(x => ABBR_BY_ID[x] === k);
+    const val = v_(id);
+    if (val == null) return;
+    const max = Number(UNDES_IDEAL_MAX[k]);
+    pointList.push(val <= max ? 1 : Math.max(0, Math.min(1, max / val)));
+  });
+  const thresholdScore = pointList.length ? avg_(pointList) : 0;
+  const profilePoints = PVQ_SCALES.map(s => {
+    const val = v_(s.id);
+    if (val == null) return null;
+    const abbr = ABBR_BY_ID[s.id];
+    const ideal = Number(IDEAL_BASE_BY_ABBR[abbr] || 3.5);
+    const diff = Math.abs(Number(val) - ideal);
+    // На шкале 1..6 отклонение >=2.5 считаем сильным расхождением.
+    return Math.max(0, Math.min(1, 1 - (diff / 2.5)));
+  }).filter(x => x != null);
+  const profileScore = profilePoints.length ? avg_(profilePoints) : 0;
+  const matchPct = Math.round(((profileScore * 0.75) + (thresholdScore * 0.25)) * 100);
+  let levelCode = 'red';
+  let levelLabel = 'Красный';
+  let levelColor = '#E35B6A';
+  if (matchPct >= 75) { levelCode = 'green'; levelLabel = 'Зелёный'; levelColor = '#2FAE7B'; }
+  else if (matchPct >= 50) { levelCode = 'blue'; levelLabel = 'Синий'; levelColor = '#4E79A7'; }
+  else if (matchPct >= 25) { levelCode = 'yellow'; levelLabel = 'Жёлтый'; levelColor = '#F2B84B'; }
+
+  // Для контекста покажем ведущие ценности по базовым средним
+  const ordered = PVQ_SCALES
+    .map(s => ({ id: s.id, abbr: ABBR_BY_ID[s.id], value: v_(s.id) }))
+    .filter(x => x.value != null)
+    .sort((a,b) => b.value - a.value);
+  const leadItems = ordered.slice(0, 5).map(x => {
+    const m = metaById_(x.id);
+    return { abbr:m.abbr, label:m.label, score:round_(x.value,2), axis1:m.axis1, axis2:m.axis2, meta:m.meta, goal:m.goal };
+  });
+  const critItems = critKeys.map(k => {
+    const id = Object.keys(ABBR_BY_ID).find(x => ABBR_BY_ID[x] === k);
+    const m = metaById_(id);
+    const score = v_(id);
+    return { abbr:k, label:m.label, score:round_(score,2), min:CRIT_MIN[k], needMgmt:m.needMgmt, recommend:m.recommend };
+  });
+  const riskItems = riskKeys.map(k => {
+    const id = Object.keys(ABBR_BY_ID).find(x => ABBR_BY_ID[x] === k);
+    const m = metaById_(id);
+    const score = Number(v_(id) || 0);
+    return { abbr:k, label:m.label, score:round_(score,2), max:UNDES_IDEAL_MAX[k], conflict:m.conflict, recommend:m.recommend };
+  }).sort((a,b)=>b.score-a.score);
+  const criticalRisk = critItems.filter(x => Number(x.score) < Number(x.min))
+    .sort((a,b)=>(b.min-b.score)-(a.min-a.score));
+
+  const criticalMap = {};
+  criticalRisk.forEach(function(x){ criticalMap[x.abbr] = true; });
+  const riskMap = {};
+  riskItems.forEach(function(x){
+    if (Number(x.score) > Number(x.max)) riskMap[x.abbr] = true;
+  });
+  const allValues = ordered.map(x => {
+    const m = metaById_(x.id);
+    const zone = criticalMap[m.abbr] ? 'critical' : (riskMap[m.abbr] ? 'risk' : 'key');
+    return {
+      id: x.id,
+      abbr: m.abbr,
+      label: m.label,
+      fullLabel: m.fullLabel,
+      score: round_(x.value, 2),
+      zone: zone,
+      axis1: m.axis1,
+      axis2: m.axis2,
+      meta: m.meta,
+      goal: m.goal,
+      needMgmt: m.needMgmt,
+      recommend: m.recommend,
+      conflict: m.conflict
+    };
+  });
+
+  const profile = {
+    match_pct: matchPct,
+    level_code: levelCode,
+    level_label: levelLabel,
+    level_color: levelColor,
+    lead_values: leadItems,
+    key_values: critItems,
+    risk_values: riskItems,
+    critical_risk_values: criticalRisk,
+    all_values: allValues
+  };
+  const text =
+    'Итог соответствия ценностному профилю компании: ' + levelLabel + ' (' + matchPct + '%).' + '\n' +
+    'Критические зоны риска: ' + (criticalRisk.length
+      ? criticalRisk.map(x => (x.label || x.abbr) + ' ' + fmt_(x.score) + ' < ' + x.min).join(', ')
+      : 'не выявлены') + '.';
+  return { text: text, profile: profile };
+}
+
+// ───────────────────────────────────────────────────────────────────
+// VALUE HELPERS
+// ───────────────────────────────────────────────────────────────────
+function buildValueResultMap_() {
+  const sheet = getSheet(SH.VALUE_RESULTS);
+  const rows = sheet.getDataRange().getValues();
+  const map = {};
+  if (rows.length < 2) return map;
+
+  const hm = headerMap_(sheet);
+
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r[0]) continue;
+    const inviteId = String(getCellByHeader_(r, hm, 'invite_id', r[1] || ''));
+    map[inviteId] = {
+      id: String(getCellByHeader_(r, hm, 'id', r[0] || '')),
+      invite_id: inviteId,
+      mean57: getCellByHeader_(r, hm, 'mean57', r[7] || ''),
+      scores_json: getCellByHeader_(r, hm, 'scores_json', r[8] || ''),
+      top_values_json: getCellByHeader_(r, hm, 'top_values_json', r[9] || ''),
+      interpretation: getCellByHeader_(r, hm, 'interpretation', r[12] || ''),
+      profile_json: getCellByHeader_(r, hm, 'profile_json', '')
+    };
+  }
+  return map;
+}
+
+function deriveProfileFromStoredResult_(result) {
+  if (!result) return {};
+  const mean = Number(result.mean57);
+  const scores = safeJson(result.scores_json || '{}');
+  if (!Number.isFinite(mean) || !scores || typeof scores !== 'object') return {};
+  const baseScores = {};
+  PVQ_SCALES.forEach(s => {
+    const centered = Number(scores[s.id]);
+    if (!Number.isFinite(centered)) return;
+    baseScores[s.id] = round_(centered + mean, 4);
+  });
+  if (!Object.keys(baseScores).length) return {};
+  return (buildInterpretation_(baseScores) || {}).profile || {};
+}
+
+function findInviteById_(id) {
+  const sheet = getSheet(SH.VALUE_INVITES);
+  const rows = sheet.getDataRange().getValues();
+  const hm = headerMap_(sheet);
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (String(getCellByHeader_(r, hm, 'id', r[0])) !== String(id)) continue;
+    return inviteRowToObj_(r, hm);
+  }
+  return null;
+}
+
+function findInviteByToken_(token) {
+  const sheet = getSheet(SH.VALUE_INVITES);
+  const rows = sheet.getDataRange().getValues();
+  const hm = headerMap_(sheet);
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (String(getCellByHeader_(r, hm, 'token', r[1])) !== String(token)) continue;
+    return inviteRowToObj_(r, hm);
+  }
+  return null;
+}
+
+function findValueResultByInviteId_(inviteId) {
+  const sheet = getSheet(SH.VALUE_RESULTS);
+  const rows = sheet.getDataRange().getValues();
+  const hm = headerMap_(sheet);
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    const rid = String(getCellByHeader_(r, hm, 'invite_id', r[1] || ''));
+    if (rid !== String(inviteId)) continue;
+    return {
+      id: getCellByHeader_(r, hm, 'id', r[0]),
+      invite_id: rid,
+      mean57: getCellByHeader_(r, hm, 'mean57', r[7]),
+      scores_json: getCellByHeader_(r, hm, 'scores_json', r[8]),
+      top_values_json: getCellByHeader_(r, hm, 'top_values_json', r[9]),
+      bar_chart_json: getCellByHeader_(r, hm, 'bar_chart_json', r[10]),
+      circle_chart_json: getCellByHeader_(r, hm, 'circle_chart_json', r[11]),
+      interpretation: getCellByHeader_(r, hm, 'interpretation', r[12]),
+      profile_json: getCellByHeader_(r, hm, 'profile_json', ''),
+      im_sum: getCellByHeader_(r, hm, 'im_sum', ''),
+      im_level: getCellByHeader_(r, hm, 'im_level', ''),
+      im_chart_json: getCellByHeader_(r, hm, 'im_chart_json', '')
+    };
+  }
+  return null;
+}
+
+function setInviteCompleted_(inviteId, submittedAt) {
+  const sheet = getSheet(SH.VALUE_INVITES);
+  const rows = sheet.getDataRange().getValues();
+  const hm = headerMap_(sheet);
+  const statusCol = (hm.status != null ? hm.status + 1 : 3);
+  const submittedCol = (hm.submitted_at != null ? hm.submitted_at + 1 : 6);
+  const updatedCol = (hm.updated_at != null ? hm.updated_at + 1 : 15);
+  for (let i = 1; i < rows.length; i++) {
+    if (String(getCellByHeader_(rows[i], hm, 'id', rows[i][0])) !== String(inviteId)) continue;
+    sheet.getRange(i + 1, statusCol).setValue('completed');
+    sheet.getRange(i + 1, submittedCol).setValue(submittedAt);
+    sheet.getRange(i + 1, updatedCol).setValue(new Date());
+    return;
+  }
+}
+
+/**
+ * Одноразовое исправление строк VALUE_INVITES, которые были записаны
+ * в старом порядке полей после добавления department/employee_group.
+ * Запускается вручную из редактора Apps Script при необходимости.
+ */
+function repairShiftedValueInviteRows() {
+  const sheet = getSheet(SH.VALUE_INVITES);
+  const rows = sheet.getDataRange().getValues();
+  if (!rows || rows.length < 2) return { ok: true, fixed: 0 };
+  const hm = headerMap_(sheet);
+
+  function col_(name) { return hm[name] != null ? hm[name] + 1 : 0; }
+  const cRecruiterId = col_('recruiter_id');
+  const cRecruiterName = col_('recruiter_name');
+  const cCreatedAt = col_('created_at');
+  const cUpdatedAt = col_('updated_at');
+  const cDepartment = col_('department');
+  const cGroup = col_('employee_group');
+  if (!cRecruiterId || !cRecruiterName || !cCreatedAt || !cUpdatedAt || !cDepartment || !cGroup) {
+    return { ok: false, error: 'Не найдены необходимые заголовки в VALUE_INVITES' };
+  }
+
+  let fixed = 0;
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    const recruiterId = r[cRecruiterId - 1];
+    const recruiterName = r[cRecruiterName - 1];
+    const createdAt = r[cCreatedAt - 1];
+    const updatedAt = r[cUpdatedAt - 1];
+    const department = r[cDepartment - 1];
+    const employeeGroup = r[cGroup - 1];
+
+    // Признак "сдвинутой" строки:
+    // - в department лежит Date (должен быть текст),
+    // - created_at не Date (обычно там recruiter_id),
+    // - employee_group тоже Date (обычно updated_at).
+    const isShifted =
+      (department instanceof Date) &&
+      !(createdAt instanceof Date) &&
+      (employeeGroup instanceof Date);
+    if (!isShifted) continue;
+
+    // Возвращаем значения в правильные колонки.
+    sheet.getRange(i + 1, cRecruiterId).setValue(createdAt);
+    sheet.getRange(i + 1, cRecruiterName).setValue(updatedAt);
+    sheet.getRange(i + 1, cCreatedAt).setValue(department);
+    sheet.getRange(i + 1, cUpdatedAt).setValue(employeeGroup);
+    sheet.getRange(i + 1, cDepartment).setValue(recruiterId);
+    sheet.getRange(i + 1, cGroup).setValue(recruiterName);
+    fixed++;
+  }
+
+  return { ok: true, fixed: fixed };
+}
+
+// Совместимость: можно вызывать и старое имя вручную.
+function repairShiftedValueInviteRows_() {
+  return repairShiftedValueInviteRows();
+}
+
+function inviteRowToObj_(r, hm) {
+  const map = hm || {};
+  return {
+    id: getCellByHeader_(r, map, 'id', r[0]),
+    token: getCellByHeader_(r, map, 'token', r[1]),
+    status: getCellByHeader_(r, map, 'status', r[2]),
+    sent_at: getCellByHeader_(r, map, 'sent_at', r[3]),
+    expires_at: getCellByHeader_(r, map, 'expires_at', r[4]),
+    submitted_at: getCellByHeader_(r, map, 'submitted_at', r[5]),
+    vacancy_id: getCellByHeader_(r, map, 'vacancy_id', r[6]),
+    vacancy_name: getCellByHeader_(r, map, 'vacancy_name', r[7]),
+    candidate_name: getCellByHeader_(r, map, 'candidate_name', r[8]),
+    candidate_gender: getCellByHeader_(r, map, 'candidate_gender', r[9]),
+    candidate_email: getCellByHeader_(r, map, 'candidate_email', r[10]),
+    department: getCellByHeader_(r, map, 'department', ''),
+    employee_group: getCellByHeader_(r, map, 'employee_group', ''),
+    recruiter_id: getCellByHeader_(r, map, 'recruiter_id', r[11]),
+    recruiter_name: getCellByHeader_(r, map, 'recruiter_name', r[12]),
+    created_at: getCellByHeader_(r, map, 'created_at', r[13]),
+    updated_at: getCellByHeader_(r, map, 'updated_at', r[14]),
+  };
+}
+
+function normalizeAnswers_(answers) {
+  if (!answers) return null;
+
+  if (Array.isArray(answers)) {
+    return answers.map(v => Number(v));
+  }
+
+  if (typeof answers === 'object') {
+    const arr = [];
+    for (let i = 1; i <= 57; i++) {
+      const v = answers['q' + i];
+      arr.push(Number(v));
+    }
+    return arr;
+  }
+
+  return null;
+}
+
+function isInviteExpired_(expiresAt) {
+  const d = new Date(expiresAt);
+  if (isNaN(d.getTime())) return true;
+  return new Date().getTime() > d.getTime();
+}
+
+function buildSecureToken_() {
+  const raw = Utilities.getUuid() + '|' + new Date().toISOString() + '|' + Math.random();
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, raw);
+  const hex = bytes.map(b => ('0' + (b & 0xFF).toString(16)).slice(-2)).join('');
+  return hex.slice(0, 48);
+}
+
+function buildUserNameMap_() {
+  const map = {};
+  const sheet = getSheet(SH.USERS);
+  const rows = sheet.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    const id = String(r[0] || '');
+    if (!id) continue;
+    map[id] = String(r[3] || '');
+  }
+  return map;
+}
+
+function looksLikeDateString_(v) {
+  const s = String(v || '').trim();
+  if (!s) return false;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return true;
+  if (/^\d{1,2}\.\d{1,2}\.\d{4}/.test(s)) return true;
+  return false;
+}
+
+function deleteRowByValue_(sheet, col1Based, value) {
+  const rows = sheet.getDataRange().getValues();
+  for (let i = rows.length - 1; i >= 1; i--) {
+    if (String(rows[i][col1Based - 1]) === String(value)) {
+      sheet.deleteRow(i + 1);
+    }
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────
+// ТРИГГЕР: автообновление дней
+// ───────────────────────────────────────────────────────────────────
+function updateAllDays() {
+  const sheet = getSheet(SH.VACANCIES);
+  const rows = sheet.getDataRange().getValues();
+  const today = toYMD(new Date());
+
+  for (let i = 1; i < rows.length; i++) {
+    if (!rows[i][0]) continue;
+    const status = rows[i][7];
+    if (['Закрыта','Отменена','Передана'].indexOf(status) >= 0) continue;
+    const opened = toYMD(rows[i][6]);
+    if (!opened) continue;
+    const days = calcDays(opened, today);
+    sheet.getRange(i + 1, 24).setValue(days); // days_total
+    const transDate = toYMD(rows[i][28]);
+    const daysFrom = transDate || opened;
+    sheet.getRange(i + 1, 25).setValue(calcDays(daysFrom, today)); // days_current
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────
+// ВСПОМОГАТЕЛЬНЫЕ
+// ───────────────────────────────────────────────────────────────────
+function getSheet(name) {
+  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(name);
+  if (!sheet) throw new Error('Лист "' + name + '" не найден. Запусти initDatabase()');
+  return sheet;
+}
+
+function generateId() {
+  return Utilities.getUuid();
+}
+
+function hashPw(plain) {
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(plain));
+  return bytes.map(b => ('0' + (b & 0xFF).toString(16)).slice(-2)).join('');
+}
+
+function toYMD(val) {
+  if (!val) return '';
+  try {
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  } catch (e) {
+    return '';
+  }
+}
+
+function fmtDisp(val) {
+  const ymd = toYMD(val);
+  if (!ymd) return '';
+  const p = ymd.split('-');
+  return p[2] + '.' + p[1] + '.' + p[0];
+}
+
+function calcDays(from, to) {
+  if (!from) return 0;
+  const f = new Date(from);
+  const t = to ? new Date(to) : new Date();
+  return Math.max(1, Math.round((t - f) / 864e5));
+}
+
+function safeJson(val) {
+  try { return JSON.parse(val); } catch (e) { return {}; }
+}
+
+function vacRowToObj(r) {
+  return {
+    id: r[0],
+    num: r[1],
+    recruiter_id: String(r[2] || ''),
+    recruiter_name: r[3],
+    current_recruiter_id: String(r[4] || ''),
+    current_recruiter_name: r[5],
+    date_opened: toYMD(r[6]),
+    status: r[7],
+    type: r[8],
+    name: r[9],
+    department: r[10],
+    project: r[11],
+    contract: r[12],
+    initiator: r[13],
+    reason: r[14],
+    site_url: r[15],
+    salary_offer: r[16],
+    salary_request: r[17],
+    crm_link: r[18],
+    comment: r[19],
+    plan_date: toYMD(r[20]),
+    norm_days: r[21],
+    fact_date: toYMD(r[22]),
+    days_total: r[23],
+    days_current: r[24],
+    transferred: r[25] === true || r[25] === 'TRUE',
+    transferred_from_id: String(r[26] || ''),
+    transferred_from_name: r[27],
+    transfer_date: toYMD(r[28]),
+    vacancy_group: r[29],
+    created_at: toYMD(r[30]),
+    updated_at: toYMD(r[31]),
+  };
+}
+
+function avg_(arr) {
+  if (!arr || !arr.length) return 0;
+  let s = 0;
+  for (let i = 0; i < arr.length; i++) s += Number(arr[i] || 0);
+  return s / arr.length;
+}
+
+function round_(n, d) {
+  const p = Math.pow(10, d || 2);
+  return Math.round(Number(n || 0) * p) / p;
+}

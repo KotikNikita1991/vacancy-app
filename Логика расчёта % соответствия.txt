@@ -1,0 +1,337 @@
+Логика расчёта % соответствия
+Принцип: не «попал / не попал», а дистанционный скор
+Бинарная логика (в диапазоне = 1, вне = 0) слишком груба. Лучше — градиентный штраф за отклонение от диапазона.
+Для каждой ценности:
+Если балл ВНУТРИ [min, max] → raw_score = 1.0 (100%)
+
+Если балл НИЖЕ min:
+  distance = min - score
+  max_possible_distance = min - 1.0   (ниже 1 не бывает)
+  raw_score = 1 - (distance / max_possible_distance)
+
+Если балл ВЫШЕ max:
+  distance = score - max
+  max_possible_distance = 6.0 - max   (выше 6 не бывает)
+  raw_score = 1 - (distance / max_possible_distance)
+Пример: UNC, диапазон 5.0–6.0, балл респондента = 3.5
+→ distance = 5.0 - 3.5 = 1.5
+→ max_distance = 5.0 - 1.0 = 4.0
+→ raw_score = 1 - (1.5 / 4.0) = 0.625 (62.5%)
+
+Веса по приоритету
+ПриоритетЦенностиВесКЛЮЧЕВАЯSDT, SDA, AC, UNC, BEC, BED4ВАЖНАЯST, HUM, UNT2НЕЙТРАЛЬНАЯHE, POR, SEP, SES, COI, UNN1НЕЖЕЛАТЕЛЬНАЯPOD, FAC, TR, COR3 (отклонение вверх критично)
+
+Штраф за направление отклонения
+Отклонение в «плохую» сторону весит больше:
+
+КЛЮЧЕВЫЕ — если балл ниже min → множитель штрафа ×1.5
+НЕЖЕЛАТЕЛЬНЫЕ — если балл выше max → множитель штрафа ×1.5
+
+Для КЛЮЧЕВОЙ, балл ниже min:
+  raw_score = 1 - min(1, (distance / max_distance) * 1.5)
+
+Для НЕЖЕЛАТЕЛЬНОЙ, балл выше max:
+  raw_score = 1 - min(1, (distance / max_distance) * 1.5)
+
+Критические флаги (жёсткие вычеты из итога)
+После взвешенного расчёта применяются абсолютные вычеты:
+УсловиеВычетUNC < 4.5−15%BEC < 4.0−15%POD > 4.0−10%TR > 3.5−10%AC ≥ 5.0 И BEC ≤ 2.5−20% (конфликтная пара)SDT < 3.5 И SDA < 3.5−10% (нет самостоятельности)
+
+Итоговая формула
+base_score = Σ(weight_i × raw_score_i) / Σ(weight_i)  →  [0..1]
+penalties = сумма применимых вычетов  →  [0..0.XX]
+final_score = max(0, base_score - penalties) × 100  →  [0..100%]
+Интерпретация:
+
+🟢 ≥ 75% — Зелёный (хорошо подходит)
+🟡 55–74% — Жёлтый (приемлемо, уточнить на интервью)
+🔴 < 55% — Красный (скорее не подходит)
+
+
+Google Apps Script — полный код
+javascript// ═══════════════════════════════════════════════════════════════
+//  ПРОФИЛЬ КОМПАНИИ — 19 ценностей Шварца PVQ-RR
+//  Структура: { abbr, name, min, max, priority, direction }
+//  direction: 'high' = хотим высокий балл (КЛЮЧЕВАЯ/ВАЖНАЯ/НЕЙТРАЛЬНАЯ)
+//             'low'  = хотим низкий балл (НЕЖЕЛАТЕЛЬНАЯ)
+// ═══════════════════════════════════════════════════════════════
+
+const COMPANY_PROFILE = [
+  { abbr: 'SDT', name: 'Самостоятельность мысли',    min: 4.5, max: 6.0, priority: 'KEY',     direction: 'high' },
+  { abbr: 'SDA', name: 'Самостоятельность поступков', min: 4.0, max: 5.5, priority: 'KEY',     direction: 'high' },
+  { abbr: 'ST',  name: 'Стимуляция',                 min: 3.5, max: 5.0, priority: 'IMPORTANT', direction: 'high' },
+  { abbr: 'HE',  name: 'Гедонизм',                   min: 2.5, max: 4.0, priority: 'NEUTRAL',  direction: 'high' },
+  { abbr: 'AC',  name: 'Достижение',                 min: 4.5, max: 6.0, priority: 'KEY',     direction: 'high' },
+  { abbr: 'POD', name: 'Власть: доминирование',      min: 1.5, max: 3.5, priority: 'UNWANTED', direction: 'low'  },
+  { abbr: 'POR', name: 'Власть: ресурсы',            min: 2.5, max: 4.0, priority: 'NEUTRAL',  direction: 'low'  },
+  { abbr: 'FAC', name: 'Лицо (репутация)',            min: 2.0, max: 3.5, priority: 'UNWANTED', direction: 'low'  },
+  { abbr: 'SEP', name: 'Безопасность: личная',       min: 3.0, max: 4.5, priority: 'NEUTRAL',  direction: 'high' },
+  { abbr: 'SES', name: 'Безопасность: общественная', min: 2.5, max: 4.0, priority: 'NEUTRAL',  direction: 'high' },
+  { abbr: 'TR',  name: 'Традиция',                   min: 1.5, max: 3.0, priority: 'UNWANTED', direction: 'low'  },
+  { abbr: 'COR', name: 'Конформность: правила',      min: 2.0, max: 3.5, priority: 'UNWANTED', direction: 'low'  },
+  { abbr: 'COI', name: 'Конформность: межличностная', min: 3.0, max: 4.5, priority: 'NEUTRAL',  direction: 'high' },
+  { abbr: 'HUM', name: 'Скромность',                 min: 3.5, max: 5.0, priority: 'IMPORTANT', direction: 'high' },
+  { abbr: 'BEC', name: 'Благожелательность: забота', min: 4.5, max: 6.0, priority: 'KEY',     direction: 'high' },
+  { abbr: 'BED', name: 'Благожелательность: долг',   min: 4.5, max: 6.0, priority: 'KEY',     direction: 'high' },
+  { abbr: 'UNC', name: 'Универсализм: забота',       min: 5.0, max: 6.0, priority: 'KEY',     direction: 'high' },
+  { abbr: 'UNN', name: 'Универсализм: природа',      min: 2.0, max: 4.0, priority: 'NEUTRAL',  direction: 'high' },
+  { abbr: 'UNT', name: 'Универсализм: толерантность', min: 4.0, max: 5.5, priority: 'IMPORTANT', direction: 'high' },
+];
+
+// Веса по приоритету
+const WEIGHTS = {
+  KEY:      4,
+  IMPORTANT: 2,
+  NEUTRAL:   1,
+  UNWANTED:  3,
+};
+
+// ═══════════════════════════════════════════════════════════════
+//  РАСЧЁТ raw_score ДЛЯ ОДНОЙ ЦЕННОСТИ
+// ═══════════════════════════════════════════════════════════════
+
+function calcValueScore(score, valueConfig) {
+  const { min, max, priority, direction } = valueConfig;
+
+  // Балл внутри идеального диапазона
+  if (score >= min && score <= max) return 1.0;
+
+  let distance, maxDistance, penalty;
+
+  if (score < min) {
+    // Балл ниже минимума
+    distance    = min - score;
+    maxDistance = min - 1.0;          // минимум шкалы = 1
+    penalty     = distance / maxDistance;
+
+    // КЛЮЧЕВЫЕ ценности: недобор особенно плох
+    if (priority === 'KEY') penalty *= 1.5;
+
+  } else {
+    // Балл выше максимума
+    distance    = score - max;
+    maxDistance = 6.0 - max;          // максимум шкалы = 6
+    penalty     = distance / maxDistance;
+
+    // НЕЖЕЛАТЕЛЬНЫЕ ценности: перебор особенно плох
+    if (priority === 'UNWANTED') penalty *= 1.5;
+  }
+
+  // raw_score не может быть отрицательным
+  return Math.max(0, 1.0 - penalty);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  КРИТИЧЕСКИЕ ФЛАГИ — жёсткие вычеты из итогового %
+// ═══════════════════════════════════════════════════════════════
+
+function calcCriticalPenalties(scores) {
+  const s = scores; // удобный алиас
+  let totalPenalty = 0;
+  const triggeredFlags = [];
+
+  if (s.UNC < 4.5) {
+    totalPenalty += 0.15;
+    triggeredFlags.push('🔴 UNC < 4.5: низкая забота о справедливости (-15%)');
+  }
+  if (s.BEC < 4.0) {
+    totalPenalty += 0.15;
+    triggeredFlags.push('🔴 BEC < 4.0: низкая забота о людях (-15%)');
+  }
+  if (s.POD > 4.0) {
+    totalPenalty += 0.10;
+    triggeredFlags.push('🔴 POD > 4.0: высокое доминирование (-10%)');
+  }
+  if (s.TR > 3.5) {
+    totalPenalty += 0.10;
+    triggeredFlags.push('🔴 TR > 3.5: высокая традиционность, риск сопротивления развитию (-10%)');
+  }
+  if (s.AC >= 5.0 && s.BEC <= 2.5) {
+    totalPenalty += 0.20;
+    triggeredFlags.push('🔴 AC ≥ 5.0 + BEC ≤ 2.5: конфликт "достижение без заботы" (-20%)');
+  }
+  if (s.SDT < 3.5 && s.SDA < 3.5) {
+    totalPenalty += 0.10;
+    triggeredFlags.push('🟠 SDT + SDA оба < 3.5: очень низкая самостоятельность (-10%)');
+  }
+
+  return { totalPenalty, triggeredFlags };
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ГЛАВНАЯ ФУНКЦИЯ РАСЧЁТА
+//  scores = объект вида { SDT: 5.2, SDA: 4.8, ST: 4.1, ... }
+// ═══════════════════════════════════════════════════════════════
+
+function calcProfileMatch(scores) {
+  let weightedSum = 0;
+  let totalWeight = 0;
+  const breakdown = [];
+
+  COMPANY_PROFILE.forEach(valueConfig => {
+    const { abbr, name, priority } = valueConfig;
+    const respondentScore = scores[abbr];
+
+    // Если ценность не заполнена — пропускаем
+    if (respondentScore === undefined || respondentScore === null || respondentScore === '') return;
+
+    const rawScore = calcValueScore(respondentScore, valueConfig);
+    const weight   = WEIGHTS[priority];
+
+    weightedSum  += rawScore * weight;
+    totalWeight  += weight;
+
+    breakdown.push({
+      abbr,
+      name,
+      priority,
+      respondentScore,
+      idealMin: valueConfig.min,
+      idealMax: valueConfig.max,
+      rawScore: Math.round(rawScore * 100),   // в %
+      weight,
+      inRange: respondentScore >= valueConfig.min && respondentScore <= valueConfig.max,
+    });
+  });
+
+  // Базовый % до штрафов
+  const baseScore = totalWeight > 0 ? weightedSum / totalWeight : 0;
+
+  // Критические штрафы
+  const { totalPenalty, triggeredFlags } = calcCriticalPenalties(scores);
+
+  // Итоговый %
+  const finalScore = Math.round(Math.max(0, baseScore - totalPenalty) * 100);
+
+  // Цветовой уровень
+  let level, levelColor;
+  if (finalScore >= 75) {
+    level = 'ЗЕЛЁНЫЙ';
+    levelColor = '🟢';
+  } else if (finalScore >= 55) {
+    level = 'ЖЁЛТЫЙ';
+    levelColor = '🟡';
+  } else {
+    level = 'КРАСНЫЙ';
+    levelColor = '🔴';
+  }
+
+  return {
+    finalScore,
+    baseScore: Math.round(baseScore * 100),
+    penaltyApplied: Math.round(totalPenalty * 100),
+    level,
+    levelColor,
+    triggeredFlags,
+    breakdown,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ИНТЕГРАЦИЯ С GOOGLE SHEETS
+//  Ожидаемая структура листа "Ответы":
+//  Строка 1 — заголовки: Имя | SDT | SDA | ST | HE | ...
+//  Строки 2+ — данные респондентов
+//
+//  Лист "Результаты" создаётся/обновляется автоматически
+// ═══════════════════════════════════════════════════════════════
+
+function runScoring() {
+  const ss          = SpreadsheetApp.getActiveSpreadsheet();
+  const inputSheet  = ss.getSheetByName('Ответы');
+  const outputSheet = ss.getSheetByName('Результаты') || ss.insertSheet('Результаты');
+
+  outputSheet.clearContents();
+
+  // Шапка результатов
+  const headerRow = [
+    'Имя', '% соответствия', 'Базовый %', 'Штраф %', 'Уровень',
+    ...COMPANY_PROFILE.map(v => `${v.abbr} (${v.min}–${v.max})`),
+    'Критические флаги'
+  ];
+  outputSheet.appendRow(headerRow);
+
+  // Форматирование шапки
+  const headerRange = outputSheet.getRange(1, 1, 1, headerRow.length);
+  headerRange.setBackground('#1B3A6B').setFontColor('#FFFFFF').setFontWeight('bold');
+
+  // Читаем входные данные
+  const inputData = inputSheet.getDataRange().getValues();
+  const headers   = inputData[0]; // первая строка = аббревиатуры
+
+  // Находим индекс каждой аббревиатуры в заголовках
+  const colIndex = {};
+  COMPANY_PROFILE.forEach(v => {
+    const idx = headers.indexOf(v.abbr);
+    if (idx !== -1) colIndex[v.abbr] = idx;
+  });
+  const nameColIdx = headers.indexOf('Имя');
+
+  // Обрабатываем каждого респондента
+  for (let i = 1; i < inputData.length; i++) {
+    const row  = inputData[i];
+    const name = nameColIdx !== -1 ? row[nameColIdx] : `Респондент ${i}`;
+
+    // Собираем объект scores
+    const scores = {};
+    COMPANY_PROFILE.forEach(v => {
+      if (colIndex[v.abbr] !== undefined) {
+        const val = parseFloat(row[colIndex[v.abbr]]);
+        if (!isNaN(val)) scores[v.abbr] = val;
+      }
+    });
+
+    // Считаем
+    const result = calcProfileMatch(scores);
+
+    // Строка результатов
+    const outputRow = [
+      name,
+      result.finalScore + '%',
+      result.baseScore  + '%',
+      result.penaltyApplied > 0 ? '-' + result.penaltyApplied + '%' : '0%',
+      result.levelColor + ' ' + result.level,
+      ...result.breakdown.map(b => `${b.respondentScore} → ${b.rawScore}%${b.inRange ? ' ✓' : ''}`),
+      result.triggeredFlags.join(' | ') || '—'
+    ];
+    outputSheet.appendRow(outputRow);
+
+    // Цвет строки по уровню соответствия
+    const lastRow   = outputSheet.getLastRow();
+    const rowRange  = outputSheet.getRange(lastRow, 1, 1, outputRow.length);
+    if (result.level === 'ЗЕЛЁНЫЙ')      rowRange.setBackground('#D0EDD9');
+    else if (result.level === 'ЖЁЛТЫЙ') rowRange.setBackground('#FFF3C0');
+    else                                 rowRange.setBackground('#F9D6D6');
+  }
+
+  // Автоширина
+  outputSheet.autoResizeColumns(1, headerRow.length);
+
+  SpreadsheetApp.getUi().alert(
+    `✅ Расчёт завершён!\n\nОбработано респондентов: ${inputData.length - 1}\nРезультаты — лист "Результаты"`
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ДОБАВЛЯЕМ ПУНКТ В МЕНЮ GOOGLE SHEETS
+// ═══════════════════════════════════════════════════════════════
+
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('🧭 Ценности')
+    .addItem('Рассчитать соответствие', 'runScoring')
+    .addToUi();
+}
+
+Структура листа «Ответы» (входные данные)
+ИмяSDTSDASTHEACPODPORFACSEPSESTRCORCOIHUMBECBEDUNCUNNUNTИванов И.5.24.84.03.25.02.13.02.53.83.22.02.53.54.25.35.15.43.04.5
+
+Что получите на выходе
+Для каждого респондента в листе «Результаты»:
+
+% соответствия (итоговый с учётом штрафов)
+Базовый % (до штрафов — для диагностики)
+Штраф % (сколько сняли и за что)
+Уровень 🟢/🟡/🔴 с цветовой заливкой строки
+Детализация по каждой ценности: балл → % и значок ✓ если в диапазоне
+Список сработавших критических флагов
