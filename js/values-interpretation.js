@@ -128,7 +128,6 @@
       '<th style="padding:5px 6px;font-size:10px;text-align:left;color:#4a5568">Код</th>'+
       '<th style="padding:5px 6px;font-size:10px;text-align:left;color:#4a5568">Ценность</th>'+
       '<th style="padding:5px 6px;font-size:10px;text-align:left;color:#4a5568">Метаценность</th>'+
-      '<th style="padding:5px 6px;font-size:10px;text-align:left;color:#4a5568">Ось</th>'+
       '<th style="padding:5px 6px;font-size:10px;text-align:left;color:#4a5568">Балл</th>'+
       '<th style="padding:5px 4px;font-size:10px;text-align:left;color:#4a5568">Идеал</th>'+
       '<th style="padding:5px 4px;font-size:10px;text-align:center;color:#4a5568">Ст.</th>'+
@@ -145,7 +144,6 @@
         '<td style="padding:3px 6px;font-size:11px;font-weight:700;color:#1a202c;white-space:nowrap">'+esc(v.cfg.a)+'</td>'+
         '<td style="padding:3px 10px 3px 0;font-size:11px;color:#4a5568">'+esc(v.cfg.n)+'</td>'+
         '<td style="padding:3px 6px;font-size:10px;white-space:nowrap"><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:'+mc+';display:inline-block"></span><span style="color:'+mc+';font-weight:600">'+esc(mt)+'</span></span></td>'+
-        '<td style="padding:3px 6px;font-size:10px;color:#718096">'+esc(ax)+'</td>'+
         '<td style="padding:3px 6px;white-space:nowrap"><span style="display:inline-block;padding:1px 7px;border-radius:4px;background:'+c.bg+';color:'+c.tx+';font-weight:700;font-size:11px">'+v.sc.toFixed(2)+'</span></td>'+
         '<td style="padding:3px 4px;font-size:10px;color:#718096;white-space:nowrap">'+v.cfg.mn+'–'+v.cfg.mx+'</td>'+
         '<td style="padding:3px 4px;font-size:13px;text-align:center">'+icon+'</td>'+
@@ -268,7 +266,10 @@
     hdr.innerHTML='Интерпретация ценностного профиля <span style="font-size:11px;font-weight:400;color:#a0aec0">по PVQ-RR (Шварц, 19 ценностей)</span>';
     wrap.appendChild(hdr);
     wrap.insertAdjacentHTML('beforeend',html);
-    v2.parentNode.insertBefore(wrap,v2.nextSibling);
+    // Insert AFTER the IM block if present, so IM stays above interpretation
+    var imBlock=document.querySelector('[data-im-block]');
+    var anchor=imBlock||v2;
+    anchor.parentNode.insertBefore(wrap,anchor.nextSibling);
   }
 
   function startObserver(){

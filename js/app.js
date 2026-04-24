@@ -1,4 +1,4 @@
-let U=null, VACS=[], ASSESSMENTS=[], PAGE='dashboard', COLSB=false;
+﻿let U=null, VACS=[], ASSESSMENTS=[], PAGE='dashboard', COLSB=false;
 let PERIOD=defPeriod(), FQ='';
 // Пустой массив = «все» (мультивыбор фильтров)
 let FStat=[], FGrp=[], FRec=[];
@@ -1618,221 +1618,32 @@ function stripInterpretationSummary(text){
 
 async function exportValueReport(inv, r){
   try{
-    await ensurePdfMake();
-    const waitFrame=()=>new Promise(res=>requestAnimationFrame(()=>res()));
-    const waitMs=(ms)=>new Promise(res=>setTimeout(res,ms));
-    const barBuild=(mode, fixedOrder)=>{
-      const src = mode==='base' ? V_RESULT_VIEW.base : V_RESULT_VIEW.centered;
-      const abbrs = Array.isArray(V_RESULT_VIEW.abbrs) ? V_RESULT_VIEW.abbrs.slice() : [];
-      const labelsRaw = abbrs.length ? abbrs.map(a=>VALUE_SHORT_LABEL_BY_ABBR[a]||a) : (Array.isArray(src?.labels) ? src.labels.slice() : []);
-      const dataRaw = Array.isArray(src?.data) ? src.data.slice() : [];
-      const idealRaw = mode==='base' && Array.isArray(V_RESULT_VIEW.idealBase) ? V_RESULT_VIEW.idealBase.slice() : null;
-      const pairs = labelsRaw.map((label,i)=>({label,value:Number(dataRaw[i])||0,ideal:idealRaw?Number(idealRaw[i])||0:null}));
-      if(mode==='base'){
-        pairs.sort((a,b)=>b.value-a.value);
-      }else if(Array.isArray(fixedOrder) && fixedOrder.length){
-        const rank={}; fixedOrder.forEach((x,i)=>{ rank[x]=i; });
-        pairs.sort((a,b)=>(rank[a.label]??999)-(rank[b.label]??999));
-      }else{
-        pairs.sort((a,b)=>b.value-a.value);
-      }
-      return {
-        labels:pairs.map(p=>p.label),
-        data:pairs.map(p=>p.value),
-        ideal:idealRaw ? pairs.map(p=>p.ideal) : null
-      };
+    await ensureHtml2Pdf();
+    const el=document.getElementById('content');
+    const filename='value-report-'+((inv?.candidate_name||'employee').replace(/[^\wа-яА-ЯёЁ-]+/g,'_'))+'.pdf';
+
+    // Temporarily hide action buttons
+    const hideEls=el.querySelectorAll('[data-act="val-export"],[data-act="val-list"]');
+    hideEls.forEach(x=>{x.dataset._pdfDisplay=x.style.display;x.style.display='none';});
+
+    const opt={
+      margin:[8,8,8,8],
+      filename:filename,
+      image:{type:'jpeg',quality:0.97},
+      html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,scrollX:0,scrollY:-window.scrollY},
+      jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
     };
-    const makeChartImage=async(cfg)=>{
-      const c=document.createElement('canvas');
-      c.width=cfg.width||1700;
-      c.height=cfg.height||760;
-      const chart=new Chart(c.getContext('2d'),{
-        type:cfg.type,
-        data:cfg.data,
-        options:Object.assign({responsive:false,maintainAspectRatio:false,animation:false}, cfg.options||{})
-      });
-      chart.update('none');
-      await waitFrame();
-      await waitMs(60);
-      const img=c.toDataURL('image/png');
-      chart.destroy();
-      return img;
-    };
-
-    const baseSeries=barBuild('base');
-    const centeredSeries=barBuild('centered', baseSeries.labels);
-    const baseBarImg=await makeChartImage({
-      type:'bar',
-      width:1800,
-      height:760,
-      data:{
-        labels:baseSeries.labels,
-        datasets:[
-          { type:'bar', label:'Профиль', data:baseSeries.data, backgroundColor:'#7B5EA7', borderRadius:2, order:10 },
-          ...(baseSeries.ideal ? [{ type:'line', label:'Эталонный профиль', data:baseSeries.ideal, borderColor:'#E11D48', backgroundColor:'rgba(225,29,72,.1)', pointBackgroundColor:'#E11D48', pointRadius:4, borderWidth:3, tension:0, fill:false, order:0 }] : [])
-        ]
-      },
-      options:{
-        plugins:{ legend:{display:true,position:'top'} },
-        scales:{
-          x:{ ticks:{autoSkip:false,maxRotation:50,minRotation:50,font:{size:13}} },
-          y:{ min:1,max:6,title:{display:true,text:'Средние баллы'} }
-        }
-      }
-    });
-    const centeredBarImg=await makeChartImage({
-      type:'bar',
-      width:1800,
-      height:760,
-      data:{ labels:centeredSeries.labels, datasets:[{ type:'bar', label:'Профиль (центр.)', data:centeredSeries.data, backgroundColor:'#7B5EA7', borderRadius:2 }] },
-      options:{
-        plugins:{ legend:{display:true,position:'top'} },
-        scales:{
-          x:{ ticks:{autoSkip:false,maxRotation:50,minRotation:50,font:{size:13}} },
-          y:{ min:-3,max:3,beginAtZero:true,title:{display:true,text:'Отклонение'} }
-        }
-      }
-    });
-    const radarSrc={
-      labels: Array.isArray(V_RESULT_VIEW.circleAbbrs) ? V_RESULT_VIEW.circleAbbrs.map(a=>VALUE_SHORT_LABEL_BY_ABBR[a]||a) : (V_RESULT_VIEW.circleBase?.labels||[]),
-      profile: Array.isArray(V_RESULT_VIEW.circleBase?.data) ? V_RESULT_VIEW.circleBase.data : [],
-      ideal: Array.isArray(V_RESULT_VIEW.circleIdealBase) ? V_RESULT_VIEW.circleIdealBase : []
-    };
-    const radarImg=await makeChartImage({
-      type:'radar',
-      width:1500,
-      height:950,
-      data:{
-        labels:radarSrc.labels,
-        datasets:[
-          {label:'Профиль',data:radarSrc.profile,borderColor:'#7B5EA7',backgroundColor:'rgba(123,94,167,.15)',pointBackgroundColor:'#7B5EA7'},
-          {label:'Эталонный профиль',data:radarSrc.ideal,borderColor:'#E11D48',backgroundColor:'rgba(225,29,72,.05)',pointBackgroundColor:'#E11D48'}
-        ]
-      },
-      options:{ plugins:{legend:{display:true,position:'top'}}, scales:{ r:{min:1,max:6} } }
-    });
-
-    const p=r?.profile||{};
-    const imSum=Number(r?.im?.sum)||0;
-    const allValues=Array.isArray(p?.all_values)?p.all_values:[];
-    const rawByAbbr=window.VALUES_V2?window.VALUES_V2.extractRawScoresByAbbr(r):null;
-    const v2Match=rawByAbbr&&window.VALUES_V2?window.VALUES_V2.computeMatch(rawByAbbr):null;
-    const idealByAbbr={
-      SDT:5.2,SDA:5.2,ST:4.8,HE:3.8,AC:5.1,UNC:5.4,BEC:5.4,BED:5.2,UNT:4.8,HUM:4.5,
-      SEP:4.0,SES:3.8,UNN:3.5,COI:3.5,TR:2.3,COR:2.8,FAC:2.8,POR:2.8,POD:2.0
-    };
-
-    const filename=`value-report-${(inv?.candidate_name||'employee').replace(/[^\wа-яА-ЯёЁ-]+/g,'_')}.pdf`;
-    const interpText=stripInterpretationSummary(r?.interpretation||'');
-    const imBg = imSum>=42 ? '#ffe9e9' : imSum>=31 ? '#fff6df' : '#e8f7ee';
-    const imBorder = imSum>=42 ? '#c53030' : imSum>=31 ? '#b7791f' : '#2f855a';
-    const content=[
-      { text:'Краткое резюме и итог соответствия', style:'h2' },
-      { text:`Сотрудник: ${inv?.candidate_name||''}` },
-      { text:`Подразделение: ${inv?.department||'—'}` },
-      { text:`Группа: ${inv?.employee_group||'—'}` },
-      { text:`Итог соответствия профилю компании: ${p?.level_label||'—'} ${Number.isFinite(Number(p?.match_pct))?`(${p.match_pct}%)`:''}` },
-      { text:'Совпадение считается по двум частям: близость к эталону по 19 ценностям и отсутствие выходов за критические пороги риска.', fontSize:9, color:'#6b7280', margin:[0,2,0,8] },
-      ...(interpText ? [{ text:interpText, margin:[0,2,0,10] }] : []),
-      ...(v2Match ? (()=>{
-        const lm={green:['Зелёный','#2F855A','#e8fff3'],yellow:['Жёлтый','#B7791F','#fff6dd'],red:['Красный','#E35B6A','#ffe9ec']};
-        const [ll,lc,lb]=lm[v2Match.level]||['—','#4a5568','#edf2f7'];
-        const blocks=[{
-          margin:[0,0,0,10],unbreakable:true,
-          table:{widths:['*'],body:[[{fillColor:lb,margin:[10,10,10,10],stack:[
-            {columns:[
-              {text:'V2 · альтернативный расчёт',style:'h2',color:lc,width:'*'},
-              {text:`${v2Match.finalScore}% · ${ll}`,style:'h2',color:lc,alignment:'right',width:'auto'}
-            ]},
-            {text:'Взвешенный градиент по всем 19 ценностям (КЛЮЧЕВАЯ×4, ВАЖНАЯ×2, НЕЙТРАЛЬНАЯ×1, НЕЖЕЛАТЕЛЬНАЯ×3). Пороги: ≥75% — Зелёный, 55–74% — Жёлтый, <55% — Красный.',fontSize:9,color:'#555',margin:[0,4,0,0]}
-          ]}]]},
-          layout:{hLineWidth:()=>1.5,vLineWidth:()=>1.5,hLineColor:()=>lc,vLineColor:()=>lc}
-        }];
-        if(v2Match.triggeredFlags&&v2Match.triggeredFlags.length){
-          blocks.push({
-            margin:[0,0,0,10],unbreakable:true,
-            table:{widths:['*'],body:[[{fillColor:'#fffbeb',margin:[10,8,10,8],stack:[
-              {text:'⚠ На заметку — уточнить на интервью',style:'h2',color:'#744210',margin:[0,0,0,3]},
-              ...v2Match.triggeredFlags.map(f=>({text:'• '+f,fontSize:9,color:'#744210',margin:[0,2,0,0]}))
-            ]}]]},
-            layout:{hLineWidth:()=>1.5,vLineWidth:()=>1.5,hLineColor:()=>'#f6ad55',vLineColor:()=>'#f6ad55'}
-          });
-        }
-        return blocks;
-      })() : []),
-      {
-        margin:[0,0,0,10],
-        unbreakable:true,
-        table:{ widths:['*'], body:[[{
-          fillColor:imBg, margin:[8,8,8,8], stack:[
-            { text:'Контроль социальной желательности (IM)', style:'h2', color:imBorder, margin:[0,0,0,2] },
-            { text:`Результат: ${imSum} / 60 · ${String(r?.im?.level||'')}`, fontSize:10 }
-          ]
-        }]]},
-        layout:{ hLineWidth:()=>1, vLineWidth:()=>1, hLineColor:()=>imBorder, vLineColor:()=>imBorder }
-      }
-    ];
-    if(baseBarImg){ content.push({ unbreakable:true, stack:[{ text:'Столбчатая диаграмма (базовые средние)', style:'h2' },{ image:baseBarImg, fit:[520,250], margin:[0,2,0,10] }] }); }
-    if(centeredBarImg){ content.push({ unbreakable:true, stack:[{ text:'Столбчатая диаграмма (центрирование)', style:'h2' },{ image:centeredBarImg, fit:[520,250], margin:[0,2,0,10] }] }); }
-    if(radarImg){ content.push({ unbreakable:true, stack:[{ text:'Радар с эталонным профилем', style:'h2' },{ image:radarImg, fit:[470,360], margin:[0,2,0,10] }] }); }
-    if(rawByAbbr&&window.VALUES_V2){
-      const _CP=window.VALUES_V2.COMPANY_PROFILE;
-      // Краткие описания диапазонов (те же, что в INTERP)
-      const _INTERP={SDT:{lo:'Следует чужим идеям, не инициирует.',mo:'Иногда инициатива, в основном следует.',hi:'Активно генерирует идеи, любопытен, ценит обучение.',vh:'Выраженный инноватор.'},SDA:{lo:'Ждёт задач и инструкций.',mo:'Выполняет задачи, нуждается в чётком направлении.',hi:'Самоорганизован, принимает решения сам.',vh:'Полная автономия.'},ST:{lo:'Предпочитает стабильность, сопротивляется изменениям.',mo:'Принимает изменения без энтузиазма.',hi:'Любит вызовы и новые проекты.',vh:'Постоянная смена деятельности.'},HE:{lo:'Готов к дискомфорту ради цели.',mo:'Ценит комфорт, но не выше работы.',hi:'Чётко отслеживает work-life balance.',vh:'Удовольствие — ключевой приоритет.'},AC:{lo:'Не стремится к личному успеху.',mo:'Выполняет задачи без выраженного стремления.',hi:'Амбициозен, нацелен на результат.',vh:'Сильная конкурентность.'},POD:{lo:'Не стремится к контролю над людьми.',mo:'Лидерство ситуационное.',hi:'Склонен к доминированию, требует уважения.',vh:'Сильная потребность в контроле.'},POR:{lo:'Не борется за ресурсы, легко делится.',mo:'Управляет ресурсами функционально.',hi:'Активно контролирует ресурсы.',vh:'Политика ресурсов.'},FAC:{lo:'Не озабочен репутацией.',mo:'Умеренная забота об имидже.',hi:'Заботится об имидже.',vh:'Имидж — ключевой приоритет.'},SEP:{lo:'Готов к риску и неопределённости.',mo:'Ценит стабильность.',hi:'Нуждается в гарантиях.',vh:'Любые изменения — стресс.'},SES:{lo:'Не придаёт значения нормам.',mo:'Соблюдает нормы.',hi:'Ценит социальный порядок.',vh:'Ригидность в нормах.'},TR:{lo:'Открыт к изменениям.',mo:'Уважает историю.',hi:'Хранитель традиций.',vh:'Традиции — абсолют.'},COR:{lo:'Игнорирует правила.',mo:'Соблюдает ключевые правила.',hi:'Дисциплинирован.',vh:'Жёсткая регламентация.'},COI:{lo:'Прямолинеен.',mo:'Баланс честности и деликатности.',hi:'Избегает конфронтации.',vh:'Не может сказать неудобное.'},HUM:{lo:'Высокая уверенность.',mo:'Умеренная скромность.',hi:'Осознаёт свою роль.',vh:'Заниженная самооценка.'},BEC:{lo:'Фокус на личных целях.',mo:'Ситуационная забота.',hi:'Активно заботится о команде.',vh:'Чрезмерная жертвенность.'},BED:{lo:'Ненадёжен.',mo:'Гибок в обязательствах.',hi:'Высоконадёжен.',vh:'Перегружается обязательствами.'},UNC:{lo:'Прагматичен.',mo:'Ситуационная справедливость.',hi:'Защищает принципы.',vh:'Идеализм.'},UNN:{lo:'Не акцентирует экологию.',mo:'Соблюдает базовые нормы.',hi:'Поддерживает инициативы.',vh:'Экология — главный приоритет.'},UNT:{lo:'Ограниченная толерантность.',mo:'Принимает различия.',hi:'Строит инклюзивную среду.',vh:'Принимает всё без критики.'}};
-
-      const _CARDS={SDT:{bH:'Инициативен, генерирует идеи.',bL:'Предпочитает следовать готовым решениям.',mot:'Обучение, творческие задачи, право голоса',dem:'Навязывание решений, жёсткая регламентация',rec:'Выделяйте «зоны свободного творчества»'},SDA:{bH:'Самоорганизован, инициативен.',bL:'Предпочитает чёткие инструкции.',mot:'Автономия, ответственность за результат',dem:'Микроменеджмент, жёсткая регламентация',rec:'Давайте выбор в рамках: 2–3 варианта'},ST:{bH:'Энергичен на новых проектах.',bL:'Ценит предсказуемость.',mot:'Новые проекты, вызовы',dem:'Рутина, монотонность',rec:'Дозируйте новизну: 20% нестандартных задач'},HE:{bH:'Ценит комфортные условия труда.',bL:'Готов терпеть дискомфорт.',mot:'Комфорт, поощрения, work-life баланс',dem:'Переработки, стресс',rec:'Связывайте приятные активности с целями'},AC:{bH:'Амбициозен, стремится к признанию.',bL:'Не стремится к личному выделению.',mot:'Чёткие KPI, соревнование',dem:'Игнорирование результатов, уравниловка',rec:'Привяжите личный KPI к командному'},POD:{bH:'Естественный лидер.',bL:'Не стремится к контролю.',mot:'Формальный статус, полномочия',dem:'Оспаривание авторитета',rec:'Дайте власть + анонимная оценка снизу'},POR:{bH:'Умело управляет ресурсами.',bL:'Не претендует на контроль.',mot:'Бюджетная ответственность',dem:'Ограничение ресурсов без контроля',rec:'Делегируйте бюджет + часть на командные цели'},FAC:{bH:'Заботится о репутации.',bL:'Не озабочен имиджем.',mot:'Публичное признание, статус',dem:'Публичное порицание',rec:'Хвалите публично, критикуйте приватно'},SEP:{bH:'Надёжен, предсказуем.',bL:'Готов к риску.',mot:'Гарантии, стабильность',dem:'Неопределённость, риск',rec:'Внедрите «контролируемый риск»'},SES:{bH:'Ответственен, соблюдает нормы.',bL:'Не придаёт значения нормам.',mot:'Значимость работы для общества',dem:'Игнорирование законов',rec:'Показывайте, как разнообразие укрепляет стабильность'},TR:{bH:'Уважает историю, ритуалы.',bL:'Открыт к изменениям.',mot:'Уважение к традициям',dem:'Резкие изменения',rec:'Создайте «гибридные традиции»'},COR:{bH:'Дисциплинирован, надёжен.',bL:'Гибок, действует по ситуации.',mot:'Чёткие инструкции, структура',dem:'Хаос, двусмысленные правила',rec:'Оформляйте свободу как исключение'},COI:{bH:'Заботлив, избегает конфликтов.',bL:'Прямолинеен, честен.',mot:'Гармония, приватная обратная связь',dem:'Публичная критика',rec:'«Мягкая прямота»: ситуация+факт+предложение'},HUM:{bH:'Не выпячивает себя, признаёт других.',bL:'Уверен в превосходстве.',mot:'Признание в контексте общего результата',dem:'Публичное самовосхваление',rec:'Хвалите через команду'},BEC:{bH:'Создаёт поддерживающую среду.',bL:'Ориентирован на личные цели.',mot:'Поддержка команды, наставничество',dem:'Равнодушие, холодная среда',rec:'Система взаимопомощи, благодарности'},BED:{bH:'Высоконадёжен, держит слово.',bL:'Гибок в обязательствах.',mot:'Доверие, ответственные роли',dem:'Непоследовательность',rec:'Добавьте KPI «выполнение обещаний»'},UNC:{bH:'Честен, защищает уязвимых.',bL:'Прагматичен.',mot:'Честные процессы, КСО, этика',dem:'Несправедливость, дискриминация',rec:'Покажите, как власть служит заботе'},UNN:{bH:'Поддерживает экологические инициативы.',bL:'Не акцентирует экологию.',mot:'«Зелёные» проекты, ответственные закупки',dem:'Вред экологии',rec:'«Экологичная эффективность»'},UNT:{bH:'Открыт к разнообразию.',bL:'Предпочитает однородную среду.',mot:'Инклюзивная среда, разнообразие',dem:'Предвзятость, дискриминация',rec:'Безопасный диалог о различиях'}};
-
-      const _META={SDT:'Открытость изм.',SDA:'Открытость изм.',ST:'Открытость изм.',HE:'Открытость изм.',AC:'Самоутверждение',POD:'Самоутверждение',POR:'Самоутверждение',FAC:'Самоутверждение',SEP:'Сохранение',SES:'Сохранение',TR:'Сохранение',COR:'Сохранение',COI:'Сохранение',HUM:'Самоопределение',BEC:'Самоопределение',BED:'Самоопределение',UNC:'Самоопределение',UNN:'Самоопределение',UNT:'Самоопределение'};
-      const _MCOL={'Открытость изм.':'#3B82F6','Самоутверждение':'#F59E0B','Сохранение':'#10B981','Самоопределение':'#8B5CF6'};
-      const _sorted=_CP.filter(c=>Number.isFinite(rawByAbbr[c.abbr])).map(c=>({c,sc:rawByAbbr[c.abbr]})).sort((a,b)=>b.sc-a.sc);
-      const _band=sc=>sc<=2.5?'lo':sc<=3.9?'mo':sc<=5.0?'hi':'vh';
-      const _bandLbl=b=>({lo:'Низкий (1–2.5)',mo:'Умеренный (2.6–3.9)',hi:'Высокий (4–5)',vh:'Очень высокий (5.1–6)'})[b]||'';
-      content.push({ text:'Детальная интерпретация всех 19 ценностей', style:'h2', margin:[0,8,0,4] });
-      content.push({ text:'Порядок — по убыванию балла. Вверху — ценности, сильнее всего определяющие поведение.', fontSize:9, color:'#718096', margin:[0,0,0,6] });
-      _sorted.forEach(({c,sc},i)=>{
-        const inR=sc>=c.min&&sc<=c.max, below=!inR&&sc<c.min;
-        const bg=inR?'#f0fff4':(below?'#fff5f5':'#fffbeb');
-        const brd=inR?'#68d391':(below?'#fc8181':'#f6ad55');
-        const tcol=inR?'#276749':(below?'#9b2c2c':'#744210');
-        const b=_band(sc), isHigh=(b==='hi'||b==='vh');
-        const ip=_INTERP[c.abbr], cd=_CARDS[c.abbr];
-        const mt=_META[c.abbr]||'—', mc=_MCOL[mt]||'#a0aec0';
-        const stack=[
-          {columns:[
-            {text:`${i+1}. ${VALUE_FULL_LABEL_BY_ABBR[c.abbr]||c.name} (${c.abbr})`,bold:true,color:tcol,width:'*',fontSize:10},
-            {text:sc.toFixed(2),bold:true,color:tcol,alignment:'right',width:'auto',fontSize:11}
-          ]},
-          {text:`${_bandLbl(b)} · Идеал: ${c.min}–${c.max} · ${mt}`,fontSize:8,color:mc,margin:[0,1,0,3]}
-        ];
-        if(ip&&ip[b])stack.push({text:ip[b],italics:true,fontSize:9,color:'#4a5568',margin:[0,0,0,3]});
-        if(cd){
-          stack.push({text:[{text:'Поведение: ',bold:true,fontSize:9},{text:isHigh?cd.bH:cd.bL,fontSize:9}],margin:[0,1,0,0]});
-          stack.push({text:[{text:'Мотивирует: ',bold:true,fontSize:9,color:'#276749'},{text:cd.mot,fontSize:9,color:'#276749'}],margin:[0,1,0,0]});
-          if(cd.dem)stack.push({text:[{text:'Демотивирует: ',bold:true,fontSize:9,color:'#9b2c2c'},{text:cd.dem,fontSize:9,color:'#9b2c2c'}],margin:[0,1,0,0]});
-          if(!inR&&cd.rec)stack.push({text:[{text:'Рекомендация: ',bold:true,fontSize:9,color:'#2b6cb0'},{text:cd.rec,fontSize:9,color:'#2b6cb0'}],margin:[0,2,0,0]});
-        }
-        content.push({
-          margin:[0,0,0,5],unbreakable:true,
-          table:{widths:['*'],body:[[{fillColor:bg,margin:[8,6,8,6],stack:stack}]]},
-          layout:{hLineWidth:()=>0.8,vLineWidth:()=>0.8,hLineColor:()=>brd,vLineColor:()=>brd}
-        });
-    });
-    }
-    window.pdfMake.createPdf({
-      pageSize:'A4',
-      pageMargins:[24,24,24,24],
-      defaultStyle:{ fontSize:10 },
-      styles:{ h2:{ fontSize:13, bold:true, margin:[0,4,0,4] } },
-      content
-    }).download(filename);
-    toast('PDF сформирован и загружен');
+    toast('Формируем PDF...');
+    await html2pdf().from(el).set(opt).save();
+    toast('PDF готов ✓');
   }catch(e){
-    console.error('PDF export error:', e);
-    toast(`Ошибка экспорта PDF: ${e?.message||'неизвестная ошибка'}`,'err');
-    throw e;
+    console.error('PDF export error:',e);
+    toast('Ошибка PDF: '+(e?.message||'неизвестная ошибка'),'err');
+  }finally{
+    const el2=document.getElementById('content');
+    if(el2){el2.querySelectorAll('[data-act="val-export"],[data-act="val-list"]').forEach(x=>{x.style.display=x.dataset._pdfDisplay||'';});}
   }
 }
-
 function renderValueBarChart(){
   if(!V_RESULT_VIEW.centered)return;
   const mode = V_RESULT_VIEW.mode === 'base' && V_RESULT_VIEW.base ? 'base' : 'centered';
@@ -1918,7 +1729,7 @@ function renderValueBarChart(){
 
 function renderValueCircleChart(){
   if(!V_RESULT_VIEW.circleCentered)return;
-  const mode = V_RESULT_VIEW.mode === 'base' && V_RESULT_VIEW.circleBase ? 'base' : 'centered';
+  const mode = V_RESULT_VIEW.circleBase ? 'base' : 'centered';
   const src = mode === 'base' ? V_RESULT_VIEW.circleBase : V_RESULT_VIEW.circleCentered;
   const abbrs = Array.isArray(V_RESULT_VIEW.circleAbbrs) ? V_RESULT_VIEW.circleAbbrs : [];
   const labels = abbrs.length ? abbrs.map(a=>VALUE_SHORT_LABEL_BY_ABBR[a]||a) : (src.labels||[]);
@@ -1930,7 +1741,7 @@ function renderValueCircleChart(){
       if(chart.config.type!=='radar')return;
       const sc=chart.scales.r; if(!sc)return;
       const ctx=chart.ctx,cx=sc.xCenter,cy=sc.yCenter,outerR=sc.drawingArea;
-      const arcR=outerR+26,ARC_W=9,LABEL_R=arcR+ARC_W/2+16;
+      const arcR=outerR+42,ARC_W=9,LABEL_R=arcR+ARC_W/2+14;
       const step=(2*Math.PI)/_n,startA=-Math.PI/2;
       const METAS=[
         {label:'Открытость изменениям',color:'#3B82F6',from:0,to:3},
@@ -1999,7 +1810,7 @@ function renderValueCircleChart(){
     options:{
       responsive:true,
       maintainAspectRatio:false,
-      layout:{padding:{top:20,bottom:20,left:40,right:40}},
+      layout:{padding:{top:80,bottom:80,left:90,right:90}},
       plugins:{
         legend:{display:true,position:'left',align:'start',labels:{font:{size:11},boxWidth:12,padding:10,usePointStyle:false}},
         ...(_dlr?{datalabels:{display:false}}:{})
@@ -2223,6 +2034,9 @@ async function viewValueResult(id){
       ${kind==='lead'?`${(it.meta||it.axis1||it.axis2)?`<div style="color:var(--ink3)">${escapeHtml(it.meta||'')}${it.axis1?' · '+escapeHtml(it.axis1):''}${it.axis2?' · '+escapeHtml(it.axis2):''}</div>`:''}<div>${escapeHtml(it.goal||'Мотивационная цель: выраженное стремление действовать согласно данной ценности.')}</div>`:''}
     </div>`).join('');
   }
+  const _mlvl=profile?.level_code||'';
+  const _mc={green:['#e8fff3','#68d391','#276749'],yellow:['#fff6dd','#f6ad55','#B7791F'],red:['#ffe9ec','#fc8181','#9b2c2c'],blue:['#e8f1ff','#90cdf4','#2B6CB0']};
+  const [_mbg,_mbd,_mtx]=_mc[_mlvl]||['#f7fafc','#e2e8f0','#4a5568'];
   document.getElementById('content').innerHTML=`
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px">
       <div>
@@ -2237,16 +2051,16 @@ async function viewValueResult(id){
     ${interpText ? `<div class="card" style="padding:12px 14px;margin-bottom:10px">
       <div style="font-size:13px;color:var(--ink2);line-height:1.7">${interpHtml}</div>
     </div>` : ''}
-    <div class="card" style="padding:12px 14px;margin-bottom:10px">
+    <div class="card" style="padding:14px 16px;margin-bottom:10px;background:${_mbg};border-color:${_mbd}">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-        <div class="ct">Итог соответствия профилю компании</div>
+        <div class="ct" style="color:${_mtx};font-size:15px">Итог соответствия профилю компании</div>
         ${levelBadgeHtml(profile)}
       </div>
-      <div style="margin-top:6px;font-size:11px;color:var(--ink3)">
+      <div style="margin-top:6px;font-size:11px;color:${_mtx};opacity:0.8">
         Совпадение считается по двум частям: насколько профиль по всем 19 ценностям близок к эталону и нет ли выходов за критические пороги риска.
       </div>
     </div>
-    <div class="card" style="padding:12px 14px;margin-bottom:10px;max-width:520px;margin-left:auto;margin-right:auto">
+    <div class="card" data-im-block="1" style="padding:12px 14px;margin-bottom:10px;max-width:520px;margin-left:auto;margin-right:auto">
       <div class="ct" style="margin-bottom:6px">Контроль социальной желательности (IM)</div>
       <div style="font-size:12px;color:var(--ink3);line-height:1.6">
         Этот показатель не влияет на PVQ‑RR и служит контролем «приукрашивания» ответов.
@@ -2263,11 +2077,12 @@ async function viewValueResult(id){
     </div>
     <div class="card" style="padding:10px 12px;margin-bottom:10px">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span style="font-size:12px;color:var(--ink3)">Показатель:</span>
+        <span style="font-size:12px;color:var(--ink3)">Столбчатая диаграмма:</span>
         <div style="display:inline-flex;gap:6px;background:#f3f4f6;padding:4px;border-radius:10px">
           <button type="button" class="btn-sm" data-act="val-chart-mode" data-mode="centered">Центрированные</button>
           <button type="button" class="btn-sm" data-act="val-chart-mode" data-mode="base">Базовые средние</button>
         </div>
+        <span style="font-size:11px;color:var(--ink3)">(радар всегда в базовых)</span>
       </div>
       <div id="val-base-note" style="margin-top:8px;font-size:12px;color:var(--ink3);display:none"></div>
     </div>
@@ -2277,7 +2092,7 @@ async function viewValueResult(id){
     </div>
     <div class="card" style="padding:12px;max-width:980px;margin-left:auto;margin-right:auto">
       <div class="ct" style="margin-bottom:10px">Круг ценностей</div>
-      <div style="height:540px"><canvas id="val-circle"></canvas></div>
+      <div style="height:600px"><canvas id="val-circle"></canvas></div>
     </div>`;
   try{
     await ensureChartJs();
