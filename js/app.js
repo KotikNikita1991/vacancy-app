@@ -1626,12 +1626,18 @@ async function exportValueReport(inv, r){
     const hideEls=el.querySelectorAll('[data-act="val-export"],[data-act="val-list"]');
     hideEls.forEach(x=>{x.dataset._pdfDisplay=x.style.display;x.style.display='none';});
 
+    // Fix radar chart: force explicit size before capture, restore after
+    const radarWrap=el.querySelector('#val-circle')?.parentElement;
+    const radarWrapOldW=radarWrap?radarWrap.style.width:'';
+    if(radarWrap){radarWrap.style.width='860px';}
+
     const opt={
       margin:[8,8,8,8],
       filename:filename,
       image:{type:'jpeg',quality:0.97},
-      html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,scrollX:0,scrollY:-window.scrollY},
-      jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
+      html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,scrollX:0,scrollY:-window.scrollY,windowWidth:900},
+      jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
+      pagebreak:{mode:['css','legacy'],avoid:['.card']}
     };
     toast('Формируем PDF...');
     await html2pdf().from(el).set(opt).save();
@@ -1642,6 +1648,7 @@ async function exportValueReport(inv, r){
   }finally{
     const el2=document.getElementById('content');
     if(el2){el2.querySelectorAll('[data-act="val-export"],[data-act="val-list"]').forEach(x=>{x.style.display=x.dataset._pdfDisplay||'';});}
+    if(radarWrap){radarWrap.style.width=radarWrapOldW;}
   }
 }
 function renderValueBarChart(){
