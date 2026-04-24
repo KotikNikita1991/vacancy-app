@@ -1818,7 +1818,7 @@ async function exportValueReport(inv, r){
         });
       });
     });
-    };
+    }
     window.pdfMake.createPdf({
       pageSize:'A4',
       pageMargins:[24,24,24,24],
