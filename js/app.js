@@ -1617,25 +1617,22 @@ function stripInterpretationSummary(text){
 }
 
 async function exportValueReport(inv, r){
+  let el=document.getElementById('content');
+  let savedW='',savedMW='',savedOX='';
   try{
     await ensureHtml2Pdf();
-    const el=document.getElementById('content');
     const filename='value-report-'+((inv?.candidate_name||'employee').replace(/[^\wа-яА-ЯёЁ-]+/g,'_'))+'.pdf';
-
-    // Temporarily hide action buttons
     const hideEls=el.querySelectorAll('[data-act="val-export"],[data-act="val-list"]');
     hideEls.forEach(x=>{x.dataset._pdfDisplay=x.style.display;x.style.display='none';});
-
-    // Fix radar chart: force explicit size before capture, restore after
-    const radarWrap=el.querySelector('#val-circle')?.parentElement;
-    const radarWrapOldW=radarWrap?radarWrap.style.width:'';
-    if(radarWrap){radarWrap.style.width='860px';}
-
+    // Constrain to A4-friendly width so content reflows, tables don't overflow, radar fills container
+    savedW=el.style.width; savedMW=el.style.maxWidth; savedOX=el.style.overflowX;
+    el.style.width='860px'; el.style.maxWidth='860px'; el.style.overflowX='hidden';
+    await new Promise(res=>requestAnimationFrame(res));
     const opt={
       margin:[8,8,8,8],
       filename:filename,
       image:{type:'jpeg',quality:0.97},
-      html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,scrollX:0,scrollY:-window.scrollY,windowWidth:900},
+      html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,scrollX:0,scrollY:0},
       jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
       pagebreak:{mode:['css','legacy'],avoid:['.card']}
     };
@@ -1646,9 +1643,11 @@ async function exportValueReport(inv, r){
     console.error('PDF export error:',e);
     toast('Ошибка PDF: '+(e?.message||'неизвестная ошибка'),'err');
   }finally{
-    const el2=document.getElementById('content');
-    if(el2){el2.querySelectorAll('[data-act="val-export"],[data-act="val-list"]').forEach(x=>{x.style.display=x.dataset._pdfDisplay||'';});}
-    if(radarWrap){radarWrap.style.width=radarWrapOldW;}
+    el=document.getElementById('content');
+    if(el){
+      el.querySelectorAll('[data-act="val-export"],[data-act="val-list"]').forEach(x=>{x.style.display=x.dataset._pdfDisplay||'';});
+      el.style.width=savedW; el.style.maxWidth=savedMW; el.style.overflowX=savedOX;
+    }
   }
 }
 function renderValueBarChart(){

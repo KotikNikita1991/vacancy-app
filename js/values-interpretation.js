@@ -185,29 +185,41 @@
   }
 
   function renderInteractions(topVals){
-    var pairs=[];
+    var syn=[],con=[];
+    var keyAbbrs={};
+    CP.forEach(function(c){if(c.p==='KEY')keyAbbrs[c.a]=true;});
     for(var i=0;i<topVals.length;i++){
       for(var j=i+1;j<topVals.length;j++){
         var a=topVals[i],b=topVals[j];
         var rel=(MX[a.cfg.a]&&MX[a.cfg.a][b.cfg.a])||'⚪';
-        if(rel!=='⚪')pairs.push({a:a.cfg,b:b.cfg,rel:rel});
+        if(rel==='🟢')syn.push({a:a.cfg,b:b.cfg});
+        else if(rel==='🔴')con.push({a:a.cfg,b:b.cfg});
       }
     }
-    if(!pairs.length)return'';
+    if(!syn.length&&!con.length)return'';
+    function pairRows(pairs){
+      if(!pairs.length)return'<div style="font-size:11px;color:#a0aec0;padding:4px 0">—</div>';
+      return pairs.map(function(p){
+        var isKey=keyAbbrs[p.a.a]||keyAbbrs[p.b.a];
+        return'<div style="padding:5px 0;border-bottom:1px solid rgba(0,0,0,0.06);display:flex;align-items:baseline;gap:5px">'+
+          (isKey?'<span title="Ключевая ценность профиля компании" style="color:#276749;font-weight:800;font-size:12px;flex-shrink:0">✓</span>':'<span style="display:inline-block;width:14px;flex-shrink:0"></span>')+
+          '<span style="font-size:11px;color:#2d3748"><b>'+esc(p.a.n)+'</b> <span style="color:#a0aec0">('+p.a.a+')</span> ↔ <b>'+esc(p.b.n)+'</b> <span style="color:#a0aec0">('+p.b.a+')</span></span>'+
+        '</div>';
+      }).join('');
+    }
     var html='<div style="margin-top:14px">';
-    html+='<div style="font-size:13px;font-weight:700;color:#1a202c;margin-bottom:8px;padding-bottom:5px;border-bottom:2px solid #bee3f8">Взаимодействие ведущих ценностей (топ-5 по баллу)</div>';
-    pairs.forEach(function(p){
-      var syn=p.rel==='🟢';
-      var bg=syn?'#f0fff4':'#fff5f5',tx=syn?'#276749':'#9b2c2c';
-      html+='<div style="padding:7px 10px;border-radius:6px;background:'+bg+';margin-bottom:5px;border-left:3px solid '+tx+'">';
-      html+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
-      html+='<span style="font-size:15px">'+p.rel+'</span>';
-      html+='<span style="font-size:12px;font-weight:700;color:'+tx+'">'+esc(p.a.n)+' <span style="font-weight:400;color:#a0aec0">('+p.a.a+')</span> ↔ '+esc(p.b.n)+' <span style="font-weight:400;color:#a0aec0">('+p.b.a+')</span></span>';
-      html+='</div>';
-      html+='<div style="margin-top:3px;margin-left:24px;font-size:11px;color:'+tx+'">'+(syn?'Синергия — ценности усиливают друг друга':'Конфликт — ценности тянут в разные стороны')+'</div>';
-      html+='</div>';
-    });
+    html+='<div style="font-size:13px;font-weight:700;color:#1a202c;margin-bottom:6px;padding-bottom:5px;border-bottom:2px solid #bee3f8">Взаимодействие ведущих ценностей (топ-5 по баллу)</div>';
+    html+='<div style="font-size:10px;color:#718096;margin-bottom:8px">✓ — одна из ценностей является ключевой в профиле компании</div>';
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+    html+='<div style="background:#f0fff4;border-radius:8px;padding:10px 12px">';
+    html+='<div style="font-size:11px;font-weight:700;color:#276749;margin-bottom:6px">🟢 Синергия — ценности усиливают друг друга</div>';
+    html+=pairRows(syn);
     html+='</div>';
+    html+='<div style="background:#fff5f5;border-radius:8px;padding:10px 12px">';
+    html+='<div style="font-size:11px;font-weight:700;color:#9b2c2c;margin-bottom:6px">🔴 Конфликт — ценности тянут в разные стороны</div>';
+    html+=pairRows(con);
+    html+='</div>';
+    html+='</div></div>';
     return html;
   }
 
