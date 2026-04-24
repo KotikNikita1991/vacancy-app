@@ -1,8 +1,7 @@
 // values-v2.js — альтернативный ("V2") расчёт % соответствия профилю компании.
 // Работает ПАРАЛЛЕЛЬНО с текущим расчётом: ничего не ломает и не заменяет.
 // Подключение: <script src="js/values-v2.js"></script> в index.html после app.js.
-// Источник формулы: "Логика расчёта % соответствия.txt" (корень репо).
-// Источник диапазонов: "Ценности_Анализ_Полный (2).xlsx" -> лист "Идеальный профиль" (столбец G).
+// Формула: градиентный штраф за выход из диапазона × вес приоритета. Без жёстких вычетов.
 (function(){
   'use strict';
 
@@ -14,7 +13,7 @@
     {abbr:'AC', name:'Достижение',                  min:4.5,max:6.0,priority:'KEY',      direction:'high'},
     {abbr:'POD',name:'Власть: доминирование',       min:1.5,max:3.5,priority:'UNWANTED', direction:'low' },
     {abbr:'POR',name:'Власть: ресурсы',             min:2.5,max:4.0,priority:'NEUTRAL',  direction:'low' },
-    {abbr:'FAC',name:'Лицо (репутация)',            min:2.0,max:3.5,priority:'UNWANTED', direction:'low' },
+    {abbr:'FAC',name:'Лицо (репутация)',             min:2.0,max:3.5,priority:'UNWANTED', direction:'low' },
     {abbr:'SEP',name:'Безопасность: личная',        min:3.0,max:4.5,priority:'NEUTRAL',  direction:'high'},
     {abbr:'SES',name:'Безопасность: общественная',  min:2.5,max:4.0,priority:'NEUTRAL',  direction:'high'},
     {abbr:'TR', name:'Традиция',                    min:1.5,max:3.0,priority:'UNWANTED', direction:'low' },
@@ -31,32 +30,32 @@
 
   function escHtml(s){if(s==null||s==='')return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
+  // Градиентный штраф БЕЗ множителей ×1.5 — чистая дистанционная оценка
   function calcValueScoreV2(score,cfg){
-    var min=cfg.min,max=cfg.max,priority=cfg.priority;
+    var min=cfg.min,max=cfg.max;
     if(score>=min&&score<=max)return 1.0;
     var distance,maxDistance,penalty;
     if(score<min){
       distance=min-score; maxDistance=min-1.0;
       penalty=maxDistance>0?distance/maxDistance:1;
-      if(priority==='KEY')penalty*=1.5;
     }else{
       distance=score-max; maxDistance=6.0-max;
       penalty=maxDistance>0?distance/maxDistance:1;
-      if(priority==='UNWANTED')penalty*=1.5;
     }
     return Math.max(0,1.0-Math.min(1,penalty));
   }
 
+  // Критические флаги — только для отображения как предупреждений, не снижают балл
   function calcCriticalPenaltiesV2(s){
-    var flags=[],total=0;
+    var flags=[];
     function has(k){return Number.isFinite(Number(s[k]));}
-    if(has('UNC')&&s.UNC<4.5){total+=0.15;flags.push('UNC < 4.5: низкая забота о справедливости (−15%)');}
-    if(has('BEC')&&s.BEC<4.0){total+=0.15;flags.push('BEC < 4.0: низкая забота о людях (−15%)');}
-    if(has('POD')&&s.POD>4.0){total+=0.10;flags.push('POD > 4.0: высокое доминирование (−10%)');}
-    if(has('TR') &&s.TR >3.5){total+=0.10;flags.push('TR > 3.5: высокая традиционность, риск сопротивления развитию (−10%)');}
-    if(has('AC')&&has('BEC')&&s.AC>=5.0&&s.BEC<=2.5){total+=0.20;flags.push('AC ≥ 5.0 + BEC ≤ 2.5: конфликт «достижение без заботы» (−20%)');}
-    if(has('SDT')&&has('SDA')&&s.SDT<3.5&&s.SDA<3.5){total+=0.10;flags.push('SDT + SDA оба < 3.5: очень низкая самостоятельность (−10%)');}
-    return{totalPenalty:total,triggeredFlags:flags};
+    if(has('UNC')&&s.UNC<4.5){flags.push('UNC < 4.5: невысокая забота о справедливости — уточнить на интервью');}
+    if(has('BEC')&&s.BEC<4.0){flags.push('BEC < 4.0: невысокая забота о людях — уточнить на интервью');}
+    if(has('POD')&&s.POD>4.0){flags.push('POD > 4.0: выраженное доминирование — проверить управленческий стиль');}
+    if(has('TR') &&s.TR >3.5){flags.push('TR > 3.5: высокая традиционность — риск сопротивления развитию');}
+    if(has('AC')&&has('BEC')&&s.AC>=5.0&&s.BEC<=2.5){flags.push('AC ≥ 5.0 + BEC ≤ 2.5: конфликт «достижение без заботы» — важно обсудить');}
+    if(has('SDT')&&has('SDA')&&s.SDT<3.5&&s.SDA<3.5){flags.push('SDT + SDA оба < 3.5: низкая самостоятельность мышления и действий');}
+    return{triggeredFlags:flags};
   }
 
   function extractRawScoresByAbbrV2(r){
@@ -106,11 +105,12 @@
     });
     if(!totalWeight)return null;
     var base=weightedSum/totalWeight;
-    var crit=calcCriticalPenaltiesV2(rawByAbbr);
-    var final=Math.round(Math.max(0,base-crit.totalPenalty)*100);
+    // Итог = чистый взвешенный градиент, без вычетов
+    var final=Math.round(base*100);
     var level=final>=75?'green':final>=55?'yellow':'red';
     var levelLabel=level==='green'?'Зелёный':level==='yellow'?'Жёлтый':'Красный';
-    return{finalScore:final,baseScore:Math.round(base*100),penaltyApplied:Math.round(crit.totalPenalty*100),level:level,levelLabel:levelLabel,triggeredFlags:crit.triggeredFlags,breakdown:breakdown};
+    var crit=calcCriticalPenaltiesV2(rawByAbbr);
+    return{finalScore:final,baseScore:final,level:level,levelLabel:levelLabel,triggeredFlags:crit.triggeredFlags,breakdown:breakdown};
   }
 
   function badgeHtml(m){
@@ -121,11 +121,11 @@
   }
 
   function renderCardHtml(m){
-    var breakdownNote=m?('<div style="margin-top:4px">Базовый: <b>'+m.baseScore+'%</b>'+(m.penaltyApplied>0?', штраф: <b>−'+m.penaltyApplied+'%</b>':'')+', итог: <b>'+m.finalScore+'%</b>.</div>'):'';
+    var scoreNote=m?('<div style="margin-top:4px">Взвешенный результат: <b>'+m.finalScore+'%</b> (градиент по всем 19 ценностям).</div>'):'';
     var flagsBlock='';
     if(m&&m.triggeredFlags&&m.triggeredFlags.length){
-      flagsBlock='<div style="margin-top:8px;padding:8px 10px;background:#fff0f3;border-radius:6px;font-size:11px;color:#9b2c2c;line-height:1.5">'+
-        '<div style="font-weight:700;margin-bottom:3px">Сработали критические флаги:</div>'+
+      flagsBlock='<div style="margin-top:8px;padding:8px 10px;background:#fffbeb;border-radius:6px;font-size:11px;color:#744210;line-height:1.5">'+
+        '<div style="font-weight:700;margin-bottom:3px">На заметку — уточнить на интервью:</div>'+
         m.triggeredFlags.map(function(f){return '<div>• '+escHtml(f)+'</div>';}).join('')+'</div>';
     }
     return (
@@ -134,8 +134,8 @@
         badgeHtml(m)+
       '</div>'+
       '<div style="margin-top:6px;font-size:11px;color:var(--ink3);line-height:1.55">'+
-        'Новый метод: для каждой из 19 ценностей — градиентный штраф за выход из идеального диапазона × вес приоритета (KEY=4, IMPORTANT=2, NEUTRAL=1, UNWANTED=3), затем жёсткие вычеты по критическим флагам. Пороги: ≥75% — Зелёный, 55–74% — Жёлтый, &lt;55% — Красный.'+
-        breakdownNote+
+        'Метод: для каждой из 19 ценностей — градиентный штраф за выход из идеального диапазона × вес приоритета (КЛЮЧЕВАЯ=4, ВАЖНАЯ=2, НЕЙТРАЛЬНАЯ=1, НЕЖЕЛАТЕЛЬНАЯ=3). Пороги: ≥75% — Зелёный, 55–74% — Жёлтый, &lt;55% — Красный.'+
+        scoreNote+
       '</div>'+
       flagsBlock
     );
