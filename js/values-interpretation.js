@@ -26,6 +26,20 @@
     {a:'UNT',n:'Универсализм: толерантность',mn:4.0,mx:5.5,p:'IMPORTANT'}
   ];
 
+  var META={
+    SDT:'Открытость изменениям',SDA:'Открытость изменениям',ST:'Открытость изменениям',HE:'Открытость изменениям',
+    AC:'Самоутверждение',POD:'Самоутверждение',POR:'Самоутверждение',FAC:'Самоутверждение',
+    SEP:'Сохранение',SES:'Сохранение',TR:'Сохранение',COR:'Сохранение',COI:'Сохранение',
+    HUM:'Самоопределение',BEC:'Самоопределение',BED:'Самоопределение',UNC:'Самоопределение',UNN:'Самоопределение',UNT:'Самоопределение'
+  };
+  var AXIS={
+    SDT:'Открытость ↔ Сохранение',SDA:'Открытость ↔ Сохранение',ST:'Открытость ↔ Сохранение',HE:'Открытость ↔ Сохранение',
+    AC:'Самоутверждение ↔ Самоопределение',POD:'Самоутверждение ↔ Самоопределение',POR:'Самоутверждение ↔ Самоопределение',FAC:'Самоутверждение ↔ Самоопределение',
+    SEP:'Открытость ↔ Сохранение',SES:'Открытость ↔ Сохранение',TR:'Открытость ↔ Сохранение',COR:'Открытость ↔ Сохранение',COI:'Открытость ↔ Сохранение',
+    HUM:'Самоутверждение ↔ Самоопределение',BEC:'Самоутверждение ↔ Самоопределение',BED:'Самоутверждение ↔ Самоопределение',UNC:'Самоутверждение ↔ Самоопределение',UNN:'Самоутверждение ↔ Самоопределение',UNT:'Самоутверждение ↔ Самоопределение'
+  };
+  var MCOL={'Открытость изменениям':'#3B82F6','Самоутверждение':'#F59E0B','Сохранение':'#10B981','Самоопределение':'#8B5CF6'};
+
   var INTERP={
     SDT:{lo:'Следует чужим идеям, не инициирует. Предпочитает готовые решения.',mo:'Иногда проявляет инициативу, в основном следует. Идеи есть, но не настаивает.',hi:'Активно генерирует идеи, любопытен, задаёт глубокие вопросы. Ценит обучение.',vh:'Выраженный инноватор. Может игнорировать чужие идеи как «менее оригинальные».'},
     SDA:{lo:'Ждёт задач и инструкций. Нуждается в постоянном руководстве.',mo:'Выполняет задачи самостоятельно, но нуждается в чётком направлении.',hi:'Самоорганизован, принимает решения сам. Минимальный контроль.',vh:'Полная автономия. Риск игнорирования командных норм.'},
@@ -109,21 +123,35 @@
 
   function renderGrid(vals){
     var pc=PCOL;
+    var head='<thead><tr style="background:#f7fafc;border-bottom:2px solid #e2e8f0">'+
+      '<th style="padding:5px 5px;font-size:10px;text-align:left;color:#4a5568" title="Приоритет">Пр.</th>'+
+      '<th style="padding:5px 6px;font-size:10px;text-align:left;color:#4a5568">Код</th>'+
+      '<th style="padding:5px 6px;font-size:10px;text-align:left;color:#4a5568">Ценность</th>'+
+      '<th style="padding:5px 6px;font-size:10px;text-align:left;color:#4a5568">Метаценность</th>'+
+      '<th style="padding:5px 6px;font-size:10px;text-align:left;color:#4a5568">Ось</th>'+
+      '<th style="padding:5px 6px;font-size:10px;text-align:left;color:#4a5568">Балл</th>'+
+      '<th style="padding:5px 4px;font-size:10px;text-align:left;color:#4a5568">Идеал</th>'+
+      '<th style="padding:5px 4px;font-size:10px;text-align:center;color:#4a5568">Ст.</th>'+
+      '</tr></thead>';
     var rows=vals.map(function(v){
       var c=scol(v.sc,v.cfg);
       var st=status(v.sc,v.cfg);
       var icon=st==='in'?'<span style="color:#276749">✓</span>':st==='below'?'<span style="color:#9b2c2c">↓</span>':'<span style="color:#c05621">↑</span>';
       var pp=pc[v.cfg.p]||pc.NEUTRAL;
+      var mt=META[v.cfg.a]||'—', mc=MCOL[mt]||'#a0aec0';
+      var ax=AXIS[v.cfg.a]||'—';
       return '<tr style="border-bottom:1px solid #f0f4f8">'+
         '<td style="padding:3px 5px"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:2px;font-size:9px;font-weight:800;background:'+pp.bg+';color:'+pp.tx+'">'+pp.lb+'</span></td>'+
         '<td style="padding:3px 6px;font-size:11px;font-weight:700;color:#1a202c;white-space:nowrap">'+esc(v.cfg.a)+'</td>'+
         '<td style="padding:3px 10px 3px 0;font-size:11px;color:#4a5568">'+esc(v.cfg.n)+'</td>'+
+        '<td style="padding:3px 6px;font-size:10px;white-space:nowrap"><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:'+mc+';display:inline-block"></span><span style="color:'+mc+';font-weight:600">'+esc(mt)+'</span></span></td>'+
+        '<td style="padding:3px 6px;font-size:10px;color:#718096">'+esc(ax)+'</td>'+
         '<td style="padding:3px 6px;white-space:nowrap"><span style="display:inline-block;padding:1px 7px;border-radius:4px;background:'+c.bg+';color:'+c.tx+';font-weight:700;font-size:11px">'+v.sc.toFixed(2)+'</span></td>'+
         '<td style="padding:3px 4px;font-size:10px;color:#718096;white-space:nowrap">'+v.cfg.mn+'–'+v.cfg.mx+'</td>'+
-        '<td style="padding:3px 4px;font-size:13px">'+icon+'</td>'+
+        '<td style="padding:3px 4px;font-size:13px;text-align:center">'+icon+'</td>'+
         '</tr>';
     });
-    return '<table style="border-collapse:collapse;width:100%;margin-bottom:4px"><tbody>'+rows.join('')+'</tbody></table>';
+    return '<table style="border-collapse:collapse;width:100%;margin-bottom:4px">'+head+'<tbody>'+rows.join('')+'</tbody></table>';
   }
 
   function renderValueCard(v,idx){
@@ -211,8 +239,6 @@
     return html;
   }
 
-  var injected=false;
-
   function currentResult(){
     try{if(typeof V_RESULT_CONTEXT!=='undefined'&&V_RESULT_CONTEXT&&V_RESULT_CONTEXT.result)return V_RESULT_CONTEXT.result;}catch(e){}
     return null;
@@ -226,10 +252,9 @@
   }
 
   function tryInject(){
-    if(injected)return;
+    if(document.querySelector('[data-interp-section]'))return;
     var v2=document.querySelector('[data-v2-card]');
     if(!v2)return;
-    if(document.querySelector('[data-interp-section]'))return;
     var r=currentResult(); if(!r)return;
     var raw=getRaw(r); if(!raw)return;
     var html=renderSection(raw); if(!html)return;
@@ -244,7 +269,6 @@
     wrap.appendChild(hdr);
     wrap.insertAdjacentHTML('beforeend',html);
     v2.parentNode.insertBefore(wrap,v2.nextSibling);
-    injected=true;
   }
 
   function startObserver(){

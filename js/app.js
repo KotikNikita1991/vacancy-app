@@ -1738,21 +1738,24 @@ async function exportValueReport(inv, r){
         const lm={green:['Зелёный','#2F855A','#e8fff3'],yellow:['Жёлтый','#B7791F','#fff6dd'],red:['Красный','#E35B6A','#ffe9ec']};
         const [ll,lc,lb]=lm[v2Match.level]||['—','#4a5568','#edf2f7'];
         const blocks=[{
-          margin:[0,0,0,6],unbreakable:true,
-          table:{widths:['*'],body:[[{fillColor:lb,margin:[8,8,8,8],stack:[
-            {text:`V2-оценка соответствия: ${v2Match.finalScore}% · ${ll}`,style:'h2',color:lc,margin:[0,0,0,2]},
-            {text:'Метод: взвешенный градиент по 19 ценностям (КЛЮЧЕВАЯ×4, ВАЖНАЯ×2, НЕЙТРАЛЬНАЯ×1, НЕЖЕЛАТЕЛЬНАЯ×3).',fontSize:9,color:'#718096'}
+          margin:[0,0,0,10],unbreakable:true,
+          table:{widths:['*'],body:[[{fillColor:lb,margin:[10,10,10,10],stack:[
+            {columns:[
+              {text:'V2 · альтернативный расчёт',style:'h2',color:lc,width:'*'},
+              {text:`${v2Match.finalScore}% · ${ll}`,style:'h2',color:lc,alignment:'right',width:'auto'}
+            ]},
+            {text:'Взвешенный градиент по всем 19 ценностям (КЛЮЧЕВАЯ×4, ВАЖНАЯ×2, НЕЙТРАЛЬНАЯ×1, НЕЖЕЛАТЕЛЬНАЯ×3). Пороги: ≥75% — Зелёный, 55–74% — Жёлтый, <55% — Красный.',fontSize:9,color:'#555',margin:[0,4,0,0]}
           ]}]]},
-          layout:{hLineWidth:()=>1,vLineWidth:()=>1,hLineColor:()=>lc,vLineColor:()=>lc}
+          layout:{hLineWidth:()=>1.5,vLineWidth:()=>1.5,hLineColor:()=>lc,vLineColor:()=>lc}
         }];
         if(v2Match.triggeredFlags&&v2Match.triggeredFlags.length){
           blocks.push({
-            margin:[0,0,0,6],unbreakable:true,
-            table:{widths:['*'],body:[[{fillColor:'#fffbeb',margin:[8,8,8,8],stack:[
-              {text:'На заметку — уточнить на интервью',style:'h2',color:'#744210',margin:[0,0,0,3]},
+            margin:[0,0,0,10],unbreakable:true,
+            table:{widths:['*'],body:[[{fillColor:'#fffbeb',margin:[10,8,10,8],stack:[
+              {text:'⚠ На заметку — уточнить на интервью',style:'h2',color:'#744210',margin:[0,0,0,3]},
               ...v2Match.triggeredFlags.map(f=>({text:'• '+f,fontSize:9,color:'#744210',margin:[0,2,0,0]}))
             ]}]]},
-            layout:{hLineWidth:()=>1,vLineWidth:()=>1,hLineColor:()=>'#f6ad55',vLineColor:()=>'#f6ad55'}
+            layout:{hLineWidth:()=>1.5,vLineWidth:()=>1.5,hLineColor:()=>'#f6ad55',vLineColor:()=>'#f6ad55'}
           });
         }
         return blocks;
@@ -1773,79 +1776,49 @@ async function exportValueReport(inv, r){
     if(centeredBarImg){ content.push({ unbreakable:true, stack:[{ text:'Столбчатая диаграмма (центрирование)', style:'h2' },{ image:centeredBarImg, fit:[520,250], margin:[0,2,0,10] }] }); }
     if(radarImg){ content.push({ unbreakable:true, stack:[{ text:'Радар с эталонным профилем', style:'h2' },{ image:radarImg, fit:[470,360], margin:[0,2,0,10] }] }); }
     if(rawByAbbr&&window.VALUES_V2){
-      const _prof=window.VALUES_V2.COMPANY_PROFILE;
-      const _top5=_prof.filter(c=>Number.isFinite(rawByAbbr[c.abbr])).map(c=>({c,sc:rawByAbbr[c.abbr]})).sort((a,b)=>b.sc-a.sc).slice(0,5);
-      if(_top5.length){
-        content.push({text:'Ведущие ценности — топ-5',style:'h2',margin:[0,8,0,4]});
+      const _CP=window.VALUES_V2.COMPANY_PROFILE;
+      // Краткие описания диапазонов (те же, что в INTERP)
+      const _INTERP={SDT:{lo:'Следует чужим идеям, не инициирует.',mo:'Иногда инициатива, в основном следует.',hi:'Активно генерирует идеи, любопытен, ценит обучение.',vh:'Выраженный инноватор.'},SDA:{lo:'Ждёт задач и инструкций.',mo:'Выполняет задачи, нуждается в чётком направлении.',hi:'Самоорганизован, принимает решения сам.',vh:'Полная автономия.'},ST:{lo:'Предпочитает стабильность, сопротивляется изменениям.',mo:'Принимает изменения без энтузиазма.',hi:'Любит вызовы и новые проекты.',vh:'Постоянная смена деятельности.'},HE:{lo:'Готов к дискомфорту ради цели.',mo:'Ценит комфорт, но не выше работы.',hi:'Чётко отслеживает work-life balance.',vh:'Удовольствие — ключевой приоритет.'},AC:{lo:'Не стремится к личному успеху.',mo:'Выполняет задачи без выраженного стремления.',hi:'Амбициозен, нацелен на результат.',vh:'Сильная конкурентность.'},POD:{lo:'Не стремится к контролю над людьми.',mo:'Лидерство ситуационное.',hi:'Склонен к доминированию, требует уважения.',vh:'Сильная потребность в контроле.'},POR:{lo:'Не борется за ресурсы, легко делится.',mo:'Управляет ресурсами функционально.',hi:'Активно контролирует ресурсы.',vh:'Политика ресурсов.'},FAC:{lo:'Не озабочен репутацией.',mo:'Умеренная забота об имидже.',hi:'Заботится об имидже.',vh:'Имидж — ключевой приоритет.'},SEP:{lo:'Готов к риску и неопределённости.',mo:'Ценит стабильность.',hi:'Нуждается в гарантиях.',vh:'Любые изменения — стресс.'},SES:{lo:'Не придаёт значения нормам.',mo:'Соблюдает нормы.',hi:'Ценит социальный порядок.',vh:'Ригидность в нормах.'},TR:{lo:'Открыт к изменениям.',mo:'Уважает историю.',hi:'Хранитель традиций.',vh:'Традиции — абсолют.'},COR:{lo:'Игнорирует правила.',mo:'Соблюдает ключевые правила.',hi:'Дисциплинирован.',vh:'Жёсткая регламентация.'},COI:{lo:'Прямолинеен.',mo:'Баланс честности и деликатности.',hi:'Избегает конфронтации.',vh:'Не может сказать неудобное.'},HUM:{lo:'Высокая уверенность.',mo:'Умеренная скромность.',hi:'Осознаёт свою роль.',vh:'Заниженная самооценка.'},BEC:{lo:'Фокус на личных целях.',mo:'Ситуационная забота.',hi:'Активно заботится о команде.',vh:'Чрезмерная жертвенность.'},BED:{lo:'Ненадёжен.',mo:'Гибок в обязательствах.',hi:'Высоконадёжен.',vh:'Перегружается обязательствами.'},UNC:{lo:'Прагматичен.',mo:'Ситуационная справедливость.',hi:'Защищает принципы.',vh:'Идеализм.'},UNN:{lo:'Не акцентирует экологию.',mo:'Соблюдает базовые нормы.',hi:'Поддерживает инициативы.',vh:'Экология — главный приоритет.'},UNT:{lo:'Ограниченная толерантность.',mo:'Принимает различия.',hi:'Строит инклюзивную среду.',vh:'Принимает всё без критики.'}};
+
+      const _CARDS={SDT:{bH:'Инициативен, генерирует идеи.',bL:'Предпочитает следовать готовым решениям.',mot:'Обучение, творческие задачи, право голоса',dem:'Навязывание решений, жёсткая регламентация',rec:'Выделяйте «зоны свободного творчества»'},SDA:{bH:'Самоорганизован, инициативен.',bL:'Предпочитает чёткие инструкции.',mot:'Автономия, ответственность за результат',dem:'Микроменеджмент, жёсткая регламентация',rec:'Давайте выбор в рамках: 2–3 варианта'},ST:{bH:'Энергичен на новых проектах.',bL:'Ценит предсказуемость.',mot:'Новые проекты, вызовы',dem:'Рутина, монотонность',rec:'Дозируйте новизну: 20% нестандартных задач'},HE:{bH:'Ценит комфортные условия труда.',bL:'Готов терпеть дискомфорт.',mot:'Комфорт, поощрения, work-life баланс',dem:'Переработки, стресс',rec:'Связывайте приятные активности с целями'},AC:{bH:'Амбициозен, стремится к признанию.',bL:'Не стремится к личному выделению.',mot:'Чёткие KPI, соревнование',dem:'Игнорирование результатов, уравниловка',rec:'Привяжите личный KPI к командному'},POD:{bH:'Естественный лидер.',bL:'Не стремится к контролю.',mot:'Формальный статус, полномочия',dem:'Оспаривание авторитета',rec:'Дайте власть + анонимная оценка снизу'},POR:{bH:'Умело управляет ресурсами.',bL:'Не претендует на контроль.',mot:'Бюджетная ответственность',dem:'Ограничение ресурсов без контроля',rec:'Делегируйте бюджет + часть на командные цели'},FAC:{bH:'Заботится о репутации.',bL:'Не озабочен имиджем.',mot:'Публичное признание, статус',dem:'Публичное порицание',rec:'Хвалите публично, критикуйте приватно'},SEP:{bH:'Надёжен, предсказуем.',bL:'Готов к риску.',mot:'Гарантии, стабильность',dem:'Неопределённость, риск',rec:'Внедрите «контролируемый риск»'},SES:{bH:'Ответственен, соблюдает нормы.',bL:'Не придаёт значения нормам.',mot:'Значимость работы для общества',dem:'Игнорирование законов',rec:'Показывайте, как разнообразие укрепляет стабильность'},TR:{bH:'Уважает историю, ритуалы.',bL:'Открыт к изменениям.',mot:'Уважение к традициям',dem:'Резкие изменения',rec:'Создайте «гибридные традиции»'},COR:{bH:'Дисциплинирован, надёжен.',bL:'Гибок, действует по ситуации.',mot:'Чёткие инструкции, структура',dem:'Хаос, двусмысленные правила',rec:'Оформляйте свободу как исключение'},COI:{bH:'Заботлив, избегает конфликтов.',bL:'Прямолинеен, честен.',mot:'Гармония, приватная обратная связь',dem:'Публичная критика',rec:'«Мягкая прямота»: ситуация+факт+предложение'},HUM:{bH:'Не выпячивает себя, признаёт других.',bL:'Уверен в превосходстве.',mot:'Признание в контексте общего результата',dem:'Публичное самовосхваление',rec:'Хвалите через команду'},BEC:{bH:'Создаёт поддерживающую среду.',bL:'Ориентирован на личные цели.',mot:'Поддержка команды, наставничество',dem:'Равнодушие, холодная среда',rec:'Система взаимопомощи, благодарности'},BED:{bH:'Высоконадёжен, держит слово.',bL:'Гибок в обязательствах.',mot:'Доверие, ответственные роли',dem:'Непоследовательность',rec:'Добавьте KPI «выполнение обещаний»'},UNC:{bH:'Честен, защищает уязвимых.',bL:'Прагматичен.',mot:'Честные процессы, КСО, этика',dem:'Несправедливость, дискриминация',rec:'Покажите, как власть служит заботе'},UNN:{bH:'Поддерживает экологические инициативы.',bL:'Не акцентирует экологию.',mot:'«Зелёные» проекты, ответственные закупки',dem:'Вред экологии',rec:'«Экологичная эффективность»'},UNT:{bH:'Открыт к разнообразию.',bL:'Предпочитает однородную среду.',mot:'Инклюзивная среда, разнообразие',dem:'Предвзятость, дискриминация',rec:'Безопасный диалог о различиях'}};
+
+      const _META={SDT:'Открытость изм.',SDA:'Открытость изм.',ST:'Открытость изм.',HE:'Открытость изм.',AC:'Самоутверждение',POD:'Самоутверждение',POR:'Самоутверждение',FAC:'Самоутверждение',SEP:'Сохранение',SES:'Сохранение',TR:'Сохранение',COR:'Сохранение',COI:'Сохранение',HUM:'Самоопределение',BEC:'Самоопределение',BED:'Самоопределение',UNC:'Самоопределение',UNN:'Самоопределение',UNT:'Самоопределение'};
+      const _MCOL={'Открытость изм.':'#3B82F6','Самоутверждение':'#F59E0B','Сохранение':'#10B981','Самоопределение':'#8B5CF6'};
+      const _sorted=_CP.filter(c=>Number.isFinite(rawByAbbr[c.abbr])).map(c=>({c,sc:rawByAbbr[c.abbr]})).sort((a,b)=>b.sc-a.sc);
+      const _band=sc=>sc<=2.5?'lo':sc<=3.9?'mo':sc<=5.0?'hi':'vh';
+      const _bandLbl=b=>({lo:'Низкий (1–2.5)',mo:'Умеренный (2.6–3.9)',hi:'Высокий (4–5)',vh:'Очень высокий (5.1–6)'})[b]||'';
+      content.push({ text:'Детальная интерпретация всех 19 ценностей', style:'h2', margin:[0,8,0,4] });
+      content.push({ text:'Порядок — по убыванию балла. Вверху — ценности, сильнее всего определяющие поведение.', fontSize:9, color:'#718096', margin:[0,0,0,6] });
+      _sorted.forEach(({c,sc},i)=>{
+        const inR=sc>=c.min&&sc<=c.max, below=!inR&&sc<c.min;
+        const bg=inR?'#f0fff4':(below?'#fff5f5':'#fffbeb');
+        const brd=inR?'#68d391':(below?'#fc8181':'#f6ad55');
+        const tcol=inR?'#276749':(below?'#9b2c2c':'#744210');
+        const b=_band(sc), isHigh=(b==='hi'||b==='vh');
+        const ip=_INTERP[c.abbr], cd=_CARDS[c.abbr];
+        const mt=_META[c.abbr]||'—', mc=_MCOL[mt]||'#a0aec0';
+        const stack=[
+          {columns:[
+            {text:`${i+1}. ${VALUE_FULL_LABEL_BY_ABBR[c.abbr]||c.name} (${c.abbr})`,bold:true,color:tcol,width:'*',fontSize:10},
+            {text:sc.toFixed(2),bold:true,color:tcol,alignment:'right',width:'auto',fontSize:11}
+          ]},
+          {text:`${_bandLbl(b)} · Идеал: ${c.min}–${c.max} · ${mt}`,fontSize:8,color:mc,margin:[0,1,0,3]}
+        ];
+        if(ip&&ip[b])stack.push({text:ip[b],italics:true,fontSize:9,color:'#4a5568',margin:[0,0,0,3]});
+        if(cd){
+          stack.push({text:[{text:'Поведение: ',bold:true,fontSize:9},{text:isHigh?cd.bH:cd.bL,fontSize:9}],margin:[0,1,0,0]});
+          stack.push({text:[{text:'Мотивирует: ',bold:true,fontSize:9,color:'#276749'},{text:cd.mot,fontSize:9,color:'#276749'}],margin:[0,1,0,0]});
+          if(cd.dem)stack.push({text:[{text:'Демотивирует: ',bold:true,fontSize:9,color:'#9b2c2c'},{text:cd.dem,fontSize:9,color:'#9b2c2c'}],margin:[0,1,0,0]});
+          if(!inR&&cd.rec)stack.push({text:[{text:'Рекомендация: ',bold:true,fontSize:9,color:'#2b6cb0'},{text:cd.rec,fontSize:9,color:'#2b6cb0'}],margin:[0,2,0,0]});
+        }
         content.push({
-          margin:[0,0,0,12],
-          table:{
-            headerRows:1,
-            widths:[16,'*',30,30,35,40],
-            body:[
-              [{text:'#',bold:true,fontSize:9},{text:'Ценность',bold:true,fontSize:9},{text:'Аббр.',bold:true,fontSize:9},{text:'Балл',bold:true,fontSize:9},{text:'Идеал',bold:true,fontSize:9},{text:'Статус',bold:true,fontSize:9}],
-              ..._top5.map(({c,sc},i)=>{
-                const inR=sc>=c.min&&sc<=c.max,below=!inR&&sc<c.min;
-                const stTxt=inR?'✓ норма':below?'↓ ниже':'↑ выше';
-                const stCol=inR?'#276749':below?'#9b2c2c':'#c05621';
-                return[
-                  {text:String(i+1),fontSize:9,alignment:'center'},
-                  {text:VALUE_FULL_LABEL_BY_ABBR[c.abbr]||c.name,fontSize:9},
-                  {text:c.abbr,fontSize:9,alignment:'center'},
-                  {text:sc.toFixed(2),fontSize:9,alignment:'center',bold:true},
-                  {text:c.min+'–'+c.max,fontSize:9,alignment:'center',color:'#718096'},
-                  {text:stTxt,fontSize:9,alignment:'center',color:stCol}
-                ];
-              })
-            ]
-          },
-          layout:'lightHorizontalLines'
-        });
-      }
-    }
-    content.push({ text:'Блоки ценностей (19)', style:'h2' });
-    if(!allValues.length){
-      content.push({ text:'Нет данных для этой записи.' });
-    }else{
-      allValues.forEach(v=>{
-        const nm = VALUE_FULL_LABEL_BY_ABBR[v.abbr]||v.label||v.abbr||'Ценность';
-        const ideal = Number(idealByAbbr[v.abbr]);
-        const diff = Number.isFinite(ideal) ? Math.abs((Number(v.score)||0) - ideal) : 0;
-        const bg = !Number.isFinite(ideal) ? '#eef2ff' : (diff <= 0.7 ? '#e8f7ee' : diff <= 1.4 ? '#fff6df' : '#ffe9e9');
-        const border = !Number.isFinite(ideal) ? '#818cf8' : (diff <= 0.7 ? '#2f855a' : diff <= 1.4 ? '#b7791f' : '#c53030');
-        const minMap={UNC:5.0,BEC:5.0,BED:4.5,AC:4.0,SDA:4.0,SDT:4.0,ST:3.5};
-        const maxMap={POD:3.0,TR:3.0,FAC:4.0,COR:3.5};
-        const threshold = Number.isFinite(minMap[v.abbr]) ? `Min ${String(minMap[v.abbr]).replace('.',',')}`
-          : (Number.isFinite(maxMap[v.abbr]) ? `Max ${String(maxMap[v.abbr]).replace('.',',')}`
-          : `Etalon ${Number.isFinite(ideal)?String(ideal.toFixed(1)).replace('.',','):'—'}`);
-        content.push({
-          margin:[0,2,0,6],
-          unbreakable:true,
-          table:{
-            widths:['*'],
-            body:[[
-              {
-                fillColor:bg,
-                margin:[8,7,8,7],
-                stack:[
-                  { text:`${nm} — ${Number(v.score||0).toFixed(2)} · ${threshold}`, bold:true, color:border },
-                  { text:`Описание: ${v.goal||'Ценность отражает устойчивый мотивационный ориентир сотрудника.'}`, fontSize:9 },
-                  { text:`В управлении: ${v.needMgmt||'Поддерживать практики, усиливающие проявление этой ценности в рабочих задачах.'}`, fontSize:9 },
-                  { text:`Рекомендация: ${v.recommend||'Согласовать ожидаемые поведенческие индикаторы и закрепить их в регулярной обратной связи.'}`, fontSize:9 },
-                  { text:`Конфликт: ${v.conflict||'Значимых конфликтов не выявлено; важен баланс с другими ценностями профиля.'}`, fontSize:9 },
-                ]
-              }
-            ]]
-          },
-          layout:{
-            hLineWidth:()=>1,
-            vLineWidth:()=>1,
-            hLineColor:()=>border,
-            vLineColor:()=>border
-          }
+          margin:[0,0,0,5],unbreakable:true,
+          table:{widths:['*'],body:[[{fillColor:bg,margin:[8,6,8,6],stack:stack}]]},
+          layout:{hLineWidth:()=>0.8,vLineWidth:()=>0.8,hLineColor:()=>brd,vLineColor:()=>brd}
         });
       });
-    }
+    });
+    };
     window.pdfMake.createPdf({
       pageSize:'A4',
       pageMargins:[24,24,24,24],
@@ -1907,7 +1880,7 @@ function renderValueBarChart(){
           borderRadius:4,
           borderSkipped:false,
           order:10,
-          ...(_dl?{datalabels:{display:true,anchor:'end',align:'top',offset:-2,color:'#4a5568',font:{size:9,weight:'600'},formatter:v=>Number(v).toFixed(2)}}:{})
+          ...(_dl?{datalabels:{display:true,anchor:'end',align:'top',offset:-2,color:'#4a5568',backgroundColor:'rgba(255,255,255,0.88)',borderRadius:3,padding:{top:1,bottom:1,left:3,right:3},font:{size:9,weight:'600'},formatter:v=>Number(v).toFixed(2)}}:{})
         },
         ...(ideal ? [{
           type:'line',
@@ -1929,9 +1902,9 @@ function renderValueBarChart(){
     options:{
       responsive:true,
       maintainAspectRatio:false,
-      layout:{padding:{top:_dl?18:4}},
+      layout:{padding:{top:_dl?18:4,left:0,right:8}},
       plugins:{
-        legend:{display:true,position:'top',labels:{font:{size:11},boxWidth:12,padding:12}},
+        legend:{display:true,position:'left',align:'start',labels:{font:{size:11},boxWidth:12,padding:10,usePointStyle:false}},
         ...(_dl?{datalabels:{display:false}}:{})
       },
       scales:{
@@ -1950,7 +1923,7 @@ function renderValueCircleChart(){
   const src = mode === 'base' ? V_RESULT_VIEW.circleBase : V_RESULT_VIEW.circleCentered;
   const abbrs = Array.isArray(V_RESULT_VIEW.circleAbbrs) ? V_RESULT_VIEW.circleAbbrs : [];
   const labels = abbrs.length ? abbrs.map(a=>VALUE_SHORT_LABEL_BY_ABBR[a]||a) : (src.labels||[]);
-   if(V_RESULT_CHARTS.circle)V_RESULT_CHARTS.circle.destroy();
+  if(V_RESULT_CHARTS.circle)V_RESULT_CHARTS.circle.destroy();
   const _n=abbrs.length||19;
   const _metaArcPlugin={
     id:'metaArcs',
@@ -1958,10 +1931,10 @@ function renderValueCircleChart(){
       if(chart.config.type!=='radar')return;
       const sc=chart.scales.r; if(!sc)return;
       const ctx=chart.ctx,cx=sc.xCenter,cy=sc.yCenter,outerR=sc.drawingArea;
-      const arcR=outerR+9,ARC_W=7,LABEL_R=arcR+ARC_W/2+13;
+      const arcR=outerR+26,ARC_W=9,LABEL_R=arcR+ARC_W/2+16;
       const step=(2*Math.PI)/_n,startA=-Math.PI/2;
       const METAS=[
-        {label:'Открытость изм.',color:'#3B82F6',from:0,to:3},
+        {label:'Открытость изменениям',color:'#3B82F6',from:0,to:3},
         {label:'Самоутверждение',color:'#F59E0B',from:4,to:7},
         {label:'Сохранение',color:'#10B981',from:8,to:12},
         {label:'Самоопределение',color:'#8B5CF6',from:13,to:_n-1}
@@ -1972,9 +1945,14 @@ function renderValueCircleChart(){
         ctx.beginPath(); ctx.arc(cx,cy,arcR,a1,a2,false);
         ctx.strokeStyle=m.color; ctx.lineWidth=ARC_W; ctx.lineCap='round'; ctx.stroke();
         const lx=cx+LABEL_R*Math.cos(mid),ly=cy+LABEL_R*Math.sin(mid);
-        ctx.fillStyle=m.color; ctx.font='bold 9px sans-serif';
+        const txt=m.label;
+        ctx.font='bold 12px sans-serif';
+        const tw=ctx.measureText(txt).width;
+        ctx.fillStyle='rgba(255,255,255,0.92)';
+        ctx.fillRect(lx-tw/2-4,ly-9,tw+8,18);
+        ctx.fillStyle=m.color;
         ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText(m.label,lx,ly);
+        ctx.fillText(txt,lx,ly);
         ctx.restore();
       });
     }
@@ -1995,7 +1973,7 @@ function renderValueCircleChart(){
           pointRadius:4,
           pointHoverRadius:6,
           borderWidth:2,
-          ...(_dlr?{datalabels:{display:true,anchor:'end',align:'end',offset:3,color:'#7B5EA7',font:{size:8,weight:'700'},formatter:v=>Number(v).toFixed(1)}}:{})
+          ...(_dlr?{datalabels:{display:true,anchor:'end',align:'end',offset:4,color:'#7B5EA7',backgroundColor:'rgba(255,255,255,0.88)',borderColor:'#7B5EA7',borderWidth:1,borderRadius:4,padding:{top:1,bottom:1,left:3,right:3},font:{size:9,weight:'700'},formatter:v=>Number(v).toFixed(1)}}:{})
         },
         ...(mode==='base' && Array.isArray(V_RESULT_VIEW.circleIdealBase) ? [{
           label:'Эталонный профиль',
@@ -2022,9 +2000,9 @@ function renderValueCircleChart(){
     options:{
       responsive:true,
       maintainAspectRatio:false,
-      layout:{padding:48},
+      layout:{padding:{top:20,bottom:20,left:40,right:40}},
       plugins:{
-        legend:{display:true,position:'top',labels:{font:{size:11},boxWidth:12,padding:12}},
+        legend:{display:true,position:'left',align:'start',labels:{font:{size:11},boxWidth:12,padding:10,usePointStyle:false}},
         ...(_dlr?{datalabels:{display:false}}:{})
       },
       scales:{r:{min:1,max:6,angleLines:{color:'#e6e1f0'},grid:{color:'#e6e1f0'},pointLabels:{font:{size:9},color:'#4a5568'},ticks:{backdropColor:'transparent',font:{size:8},stepSize:1}}}
@@ -2269,17 +2247,19 @@ async function viewValueResult(id){
         Совпадение считается по двум частям: насколько профиль по всем 19 ценностям близок к эталону и нет ли выходов за критические пороги риска.
       </div>
     </div>
-    <div class="card" style="padding:12px 14px;margin-bottom:10px">
+    <div class="card" style="padding:12px 14px;margin-bottom:10px;max-width:520px;margin-left:auto;margin-right:auto">
       <div class="ct" style="margin-bottom:6px">Контроль социальной желательности (IM)</div>
       <div style="font-size:12px;color:var(--ink3);line-height:1.6">
         Этот показатель не влияет на PVQ‑RR и служит контролем «приукрашивания» ответов.
       </div>
-      <div style="display:flex;gap:12px;align-items:baseline;margin-top:10px;flex-wrap:wrap">
-        <div style="font-size:18px;font-weight:800;color:var(--ink2)">${Number.isFinite(imSum)?imSum:'—'} / 60</div>
-        <div style="font-size:12px;color:var(--ink3)">${escapeHtml(imLevel||(!Number.isFinite(imSum)?'IM не записан для этой записи (старый формат результата или старый backend).':''))}</div>
-      </div>
-      <div style="height:120px;margin-top:10px">
-        <canvas id="im-bar"></canvas>
+      <div style="display:flex;gap:14px;align-items:center;margin-top:10px;flex-wrap:wrap">
+        <div style="flex-shrink:0">
+          <div style="font-size:22px;font-weight:800;color:var(--ink2);line-height:1.1">${Number.isFinite(imSum)?imSum:'—'} <span style="font-size:13px;font-weight:600;color:var(--ink3)">/ 60</span></div>
+          <div style="font-size:11px;color:var(--ink3);margin-top:2px;max-width:180px">${escapeHtml(imLevel||(!Number.isFinite(imSum)?'IM не записан для этой записи.':''))}</div>
+        </div>
+        <div style="flex:1;min-width:160px;height:88px">
+          <canvas id="im-bar"></canvas>
+        </div>
       </div>
     </div>
     <div class="card" style="padding:10px 12px;margin-bottom:10px">
@@ -2298,7 +2278,7 @@ async function viewValueResult(id){
     </div>
     <div class="card" style="padding:12px;max-width:980px;margin-left:auto;margin-right:auto">
       <div class="ct" style="margin-bottom:10px">Круг ценностей</div>
-      <div style="height:480px"><canvas id="val-circle"></canvas></div>
+      <div style="height:540px"><canvas id="val-circle"></canvas></div>
     </div>`;
   try{
     await ensureChartJs();
@@ -2371,22 +2351,29 @@ async function viewValueResult(id){
           band(42, 60, 'rgba(227,91,106,.18)');
         }
       };
+            const _dlim=window.ChartDataLabels;
       V_RESULT_CHARTS.im = new Chart(document.getElementById('im-bar').getContext('2d'),{
         type:'bar',
+        plugins:[imBandsPlugin,...(_dlim?[_dlim]:[])],
         data:{
-          labels:[imChart?.labels?.[0] || 'IM — управление впечатлением'],
-          datasets:[{ data:[imVal], backgroundColor:imColor, borderRadius:8, maxBarThickness:44 }]
+          labels:[''],
+          datasets:[{
+            data:[imVal],
+            backgroundColor:imColor,
+            borderRadius:6,
+            maxBarThickness:34,
+            ...(_dlim?{datalabels:{display:true,anchor:'center',align:'center',color:'#fff',font:{size:12,weight:'800'},formatter:v=>v}}:{})
+          }]
         },
         options:{
           responsive:true,
           maintainAspectRatio:false,
-          plugins:{ legend:{ display:false }, tooltip:{ enabled:true } },
+          plugins:{ legend:{ display:false }, tooltip:{ enabled:true }, ...(_dlim?{datalabels:{display:false}}:{}) },
           scales:{
-            y:{ min:10, max:60, ticks:{ stepSize:5 }, title:{ display:false } },
-            x:{ ticks:{ maxRotation:0, minRotation:0 } }
+            y:{ min:10, max:60, ticks:{ stepSize:10, font:{size:8} }, title:{ display:false }, grid:{color:'rgba(0,0,0,0.04)'} },
+            x:{ ticks:{ display:false }, grid:{display:false} }
           }
-        },
-        plugins:[imBandsPlugin]
+        }
       });
     }
   }catch(e){
