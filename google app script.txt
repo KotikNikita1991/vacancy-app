@@ -643,9 +643,8 @@ function getValueAssessments(data) {
     seenInviteIds[inviteId] = true;
     const status = String(getCellByHeader_(r, hm, 'status', r[2] || ''));
     const expired = isInviteExpired_(getCellByHeader_(r, hm, 'expires_at', r[4]));
-    const finalStatus = (status === 'completed' || !!result) ? 'completed' : (expired ? 'expired' : status);
-
     const result = resultsMap[inviteId] || null;
+    const finalStatus = (status === 'completed' || !!result) ? 'completed' : (expired ? 'expired' : status);
     let profile = result ? deriveProfileFromStoredResult_(result) : {};
     if (!profile || !Object.keys(profile).length) {
       profile = result ? safeJson(result.profile_json || '{}') : {};
