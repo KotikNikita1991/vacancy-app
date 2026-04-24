@@ -1,11 +1,9 @@
 // values-interpretation.js — Расширенная интерпретация ценностного профиля.
 // Подключение: <script src="js/values-interpretation.js"></script> после values-v2.js.
 // Данные: Ценности_Анализ_Полный.xlsx → Карточки ценностей + Интерпретация по диапазонам + Матрица.
-// Инжектируется после карточки V2 при просмотре результата кандидата.
 (function(){
   'use strict';
 
-  // ─── ПРОФИЛЬ КОМПАНИИ ────────────────────────────────────────────────────────
   var CP=[
     {a:'SDT',n:'Самостоятельность мысли',    mn:4.5,mx:6.0,p:'KEY'},
     {a:'SDA',n:'Самостоятельность поступков',mn:4.0,mx:5.5,p:'KEY'},
@@ -28,7 +26,6 @@
     {a:'UNT',n:'Универсализм: толерантность',mn:4.0,mx:5.5,p:'IMPORTANT'}
   ];
 
-  // ─── ИНТЕРПРЕТАЦИЯ ПО ДИАПАЗОНАМ (лист 4 Excel) ─────────────────────────────
   var INTERP={
     SDT:{lo:'Следует чужим идеям, не инициирует. Предпочитает готовые решения.',mo:'Иногда проявляет инициативу, в основном следует. Идеи есть, но не настаивает.',hi:'Активно генерирует идеи, любопытен, задаёт глубокие вопросы. Ценит обучение.',vh:'Выраженный инноватор. Может игнорировать чужие идеи как «менее оригинальные».'},
     SDA:{lo:'Ждёт задач и инструкций. Нуждается в постоянном руководстве.',mo:'Выполняет задачи самостоятельно, но нуждается в чётком направлении.',hi:'Самоорганизован, принимает решения сам. Минимальный контроль.',vh:'Полная автономия. Риск игнорирования командных норм.'},
@@ -51,7 +48,6 @@
     UNT:{lo:'Ограниченная толерантность. Предпочитает однородную среду.',mo:'Принимает различия без активного продвижения инклюзивности.',hi:'Строит инклюзивную среду. Ценит разнообразие мнений.',vh:'Принимает всё без критики. Может избегать конфронтации ради «принятия».'}
   };
 
-  // ─── КАРТОЧКИ ЦЕННОСТЕЙ (лист 1 Excel) ──────────────────────────────────────
   var CARDS={
     SDT:{bH:'Инициативен, генерирует идеи, задаёт глубокие вопросы. Любит учиться и исследовать.',rH:'Может уходить в идеи без завершения. При подавлении — скрытый саботаж или уход.',bL:'Предпочитает следовать готовым решениям. Хорошо работает по инструкции.',mot:'Обучение, творческие задачи, право голоса, доступ к информации, эксперименты',dem:'Навязывание решений, критика инициатив, жёсткая регламентация мышления',att:'Не блокировать идеи на этапе генерации. Создать «инкубатор идей». Следить, чтобы идеи доводились до результата — иначе разочарование.',rec:'Выделяйте «зоны свободного творчества» — время/пространство вне регламента'},
     SDA:{bH:'Самоорганизован, инициативен, хорошо работает без постоянного контроля.',rH:'Может игнорировать корпоративные правила. Сопротивляется микроменеджменту до конфликта.',bL:'Предпочитает чёткие инструкции и заданные методы. Нуждается в руководстве.',mot:'Автономия, ответственность за результат, гибкий формат работы, право выбирать метод',dem:'Микроменеджмент, жёсткая регламентация процессов, постоянный контроль',att:'Давать свободу, но договариваться о вехах. Важен результат, а не процесс. Следить за самоизоляцией.',rec:'Давайте выбор в рамках: 2–3 варианта с чёткими критериями успеха'},
@@ -74,7 +70,6 @@
     UNT:{bH:'Открыт к разнообразию, строит инклюзивную среду. Хорошо работает в международных командах.',rH:'Может избегать конфронтации ради принятия всех точек зрения.',bL:'Более однородное восприятие. Предпочитает работать в привычной среде.',mot:'Инклюзивная среда, разнообразие мнений, диалог, уважение к различиям',dem:'Предвзятость, дискриминация, неприятие иных взглядов',att:'Вовлекать в кросс-культурные проекты. Следить: не принимает ли всё без критики?',rec:'Организуйте безопасный диалог: встречи, где обсуждают различия без осуждения'}
   };
 
-  // ─── МАТРИЦА ВЗАИМОДЕЙСТВИЯ (лист 3 Excel) ──────────────────────────────────
   var MX={
     SDT:{SDA:'⚪',ST:'🟢',HE:'⚪',AC:'⚪',POD:'⚪',POR:'⚪',FAC:'⚪',SEP:'🔴',SES:'🔴',TR:'🔴',COR:'🔴',COI:'🔴',HUM:'⚪',BEC:'⚪',BED:'⚪',UNC:'⚪',UNN:'⚪',UNT:'🟢'},
     SDA:{SDT:'⚪',ST:'🟢',HE:'⚪',AC:'🟢',POD:'🔴',POR:'⚪',FAC:'⚪',SEP:'🔴',SES:'⚪',TR:'⚪',COR:'🔴',COI:'🔴',HUM:'⚪',BEC:'⚪',BED:'⚪',UNC:'⚪',UNN:'⚪',UNT:'⚪'},
@@ -97,24 +92,11 @@
     UNT:{SDT:'🟢',SDA:'⚪',ST:'⚪',HE:'⚪',AC:'⚪',POD:'⚪',POR:'⚪',FAC:'⚪',SEP:'⚪',SES:'🔴',TR:'🔴',COR:'⚪',COI:'🔴',HUM:'⚪',BEC:'🟢',BED:'⚪',UNC:'🟢',UNN:'⚪'}
   };
 
-  // ─── ХЕЛПЕРЫ ─────────────────────────────────────────────────────────────────
   function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-
-  function band(sc){
-    if(sc<=2.5)return'lo';
-    if(sc<=3.9)return'mo';
-    if(sc<=5.0)return'hi';
-    return'vh';
-  }
+  function band(sc){if(sc<=2.5)return'lo';if(sc<=3.9)return'mo';if(sc<=5.0)return'hi';return'vh';}
   function bandLabel(b){return{lo:'Низкий (1–2.5)',mo:'Умеренный (2.6–3.9)',hi:'Высокий (4–5)',vh:'Очень высокий (5.1–6)'}[b]||'';}
-
-  function status(sc,cfg){
-    if(sc>=cfg.mn&&sc<=cfg.mx)return'in';
-    return sc<cfg.mn?'below':'above';
-  }
-  function isBadDir(sc,cfg){
-    return cfg.p==='UNWANTED'?sc>cfg.mx:sc<cfg.mn;
-  }
+  function status(sc,cfg){if(sc>=cfg.mn&&sc<=cfg.mx)return'in';return sc<cfg.mn?'below':'above';}
+  function isBadDir(sc,cfg){return cfg.p==='UNWANTED'?sc>cfg.mx:sc<cfg.mn;}
 
   var PCOL={KEY:{bg:'#ebf8ff',tx:'#2b6cb0',lb:'К'},IMPORTANT:{bg:'#f0fff4',tx:'#276749',lb:'В'},NEUTRAL:{bg:'#f7fafc',tx:'#718096',lb:'Н'},UNWANTED:{bg:'#fff5f5',tx:'#c53030',lb:'×'}};
 
@@ -124,8 +106,6 @@
     if(isBadDir(sc,cfg))return{bg:'#fff5f5',tx:'#9b2c2c',bd:'#fc8181'};
     return{bg:'#fffbeb',tx:'#744210',bd:'#f6ad55'};
   }
-
-  // ─── РЕНДЕРИНГ ───────────────────────────────────────────────────────────────
 
   function renderGrid(vals){
     var pc=PCOL;
@@ -146,7 +126,7 @@
     return '<table style="border-collapse:collapse;width:100%;margin-bottom:4px"><tbody>'+rows.join('')+'</tbody></table>';
   }
 
-  function renderLeadCard(v){
+  function renderValueCard(v,idx){
     var c=scol(v.sc,v.cfg);
     var b=band(v.sc);
     var interp=INTERP[v.cfg.a];
@@ -156,79 +136,55 @@
     var st=status(v.sc,v.cfg);
     var html='<div style="border:1px solid '+c.bd+';border-radius:8px;padding:10px 14px;margin-bottom:8px;background:'+c.bg+'">';
     html+='<div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:5px">';
+    if(typeof idx==='number'){html+='<span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#fff;border:1px solid '+c.bd+';font-size:11px;font-weight:700;color:'+c.tx+'">'+idx+'</span>';}
     html+='<span style="font-weight:700;font-size:13px;color:#1a202c">'+esc(v.cfg.n)+'</span>';
+    html+='<span style="font-size:10px;color:#a0aec0">('+esc(v.cfg.a)+')</span>';
     html+='<span style="padding:2px 9px;border-radius:999px;background:#fff;border:1px solid '+c.bd+';font-size:11px;font-weight:700;color:'+c.tx+'">'+v.sc.toFixed(2)+'</span>';
     html+='<span style="font-size:10px;color:'+c.tx+'">'+bandLabel(b)+'</span>';
     html+='<span style="font-size:10px;color:#a0aec0">Идеал: '+v.cfg.mn+'–'+v.cfg.mx+'</span>';
     html+='</div>';
-    if(interpTxt){
-      html+='<div style="font-size:11px;font-style:italic;color:#4a5568;margin-bottom:6px;line-height:1.5">'+esc(interpTxt)+'</div>';
-    }
+    if(interpTxt){html+='<div style="font-size:11px;font-style:italic;color:#4a5568;margin-bottom:6px;line-height:1.5">'+esc(interpTxt)+'</div>';}
     if(card){
       html+='<div style="font-size:11px;color:#4a5568;line-height:1.6">';
       html+='<div><b>Поведение:</b> '+esc(isHigh?card.bH:card.bL)+'</div>';
-      if((b==='vh'||st!=='in')&&isHigh&&card.rH){
-        html+='<div style="color:#744210;margin-top:2px"><b>Риск:</b> '+esc(card.rH)+'</div>';
-      }
+      if((b==='vh'||st!=='in')&&isHigh&&card.rH){html+='<div style="color:#744210;margin-top:2px"><b>Риск:</b> '+esc(card.rH)+'</div>';}
       html+='<div style="color:#276749;margin-top:3px"><b>Мотивирует:</b> '+esc(card.mot)+'</div>';
-      if(st!=='in'&&card.att){
-        html+='<div style="margin-top:5px;padding:5px 8px;background:rgba(0,0,0,0.04);border-radius:5px;color:#744210"><b>На заметку:</b> '+esc(card.att)+'</div>';
-      }
+      if(card.dem){html+='<div style="color:#9b2c2c;margin-top:2px"><b>Демотивирует:</b> '+esc(card.dem)+'</div>';}
+      if(st!=='in'&&card.att){html+='<div style="margin-top:5px;padding:5px 8px;background:rgba(0,0,0,0.04);border-radius:5px;color:#744210"><b>На заметку:</b> '+esc(card.att)+'</div>';}
+      if(st!=='in'&&card.rec){html+='<div style="margin-top:4px;padding:5px 8px;background:rgba(43,108,176,0.06);border-radius:5px;color:#2b6cb0"><b>Рекомендация:</b> '+esc(card.rec)+'</div>';}
       html+='</div>';
     }
     html+='</div>';
     return html;
   }
 
-  function renderOutOfRange(vals){
-    if(!vals.length)return'';
-    var html='<div style="margin-top:14px">';
-    html+='<div style="font-size:13px;font-weight:700;color:#1a202c;margin-bottom:8px;padding-bottom:5px;border-bottom:2px solid #fed7d7">Расхождения с профилем компании</div>';
-    vals.forEach(function(v){
-      var c=scol(v.sc,v.cfg);
-      var b=band(v.sc);
-      var interp=INTERP[v.cfg.a];
-      var card=CARDS[v.cfg.a];
-      html+='<div style="margin-bottom:7px;padding:8px 12px;border-left:3px solid '+c.bd+';background:'+c.bg+';border-radius:0 6px 6px 0">';
-      html+='<div style="display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin-bottom:3px">';
-      html+='<span style="font-weight:700;font-size:12px;color:'+c.tx+'">'+esc(v.cfg.a)+'</span>';
-      html+='<span style="font-size:11px;color:#4a5568">'+esc(v.cfg.n)+'</span>';
-      html+='<span style="font-size:12px;font-weight:700;color:'+c.tx+'">'+v.sc.toFixed(2)+'</span>';
-      html+='<span style="font-size:10px;color:#a0aec0">(идеал '+v.cfg.mn+'–'+v.cfg.mx+')</span>';
-      html+='</div>';
-      if(interp&&interp[b]){html+='<div style="font-size:11px;color:#4a5568;line-height:1.4;margin-bottom:4px;font-style:italic">'+esc(interp[b])+'</div>';}
-      if(card&&card.rec){html+='<div style="font-size:11px;color:#744210"><b>Рекомендация:</b> '+esc(card.rec)+'</div>';}
-      html+='</div>';
-    });
-    html+='</div>';
-    return html;
-  }
-
-  function renderInteractions(abbrs){
+  function renderInteractions(topVals){
     var pairs=[];
-    for(var i=0;i<abbrs.length;i++){
-      for(var j=i+1;j<abbrs.length;j++){
-        var a=abbrs[i],b=abbrs[j];
-        var rel=(MX[a]&&MX[a][b])||'⚪';
-        if(rel!=='⚪')pairs.push({a:a,b:b,rel:rel});
+    for(var i=0;i<topVals.length;i++){
+      for(var j=i+1;j<topVals.length;j++){
+        var a=topVals[i],b=topVals[j];
+        var rel=(MX[a.cfg.a]&&MX[a.cfg.a][b.cfg.a])||'⚪';
+        if(rel!=='⚪')pairs.push({a:a.cfg,b:b.cfg,rel:rel});
       }
     }
     if(!pairs.length)return'';
     var html='<div style="margin-top:14px">';
-    html+='<div style="font-size:13px;font-weight:700;color:#1a202c;margin-bottom:8px;padding-bottom:5px;border-bottom:2px solid #bee3f8">Взаимодействие ведущих ценностей</div>';
+    html+='<div style="font-size:13px;font-weight:700;color:#1a202c;margin-bottom:8px;padding-bottom:5px;border-bottom:2px solid #bee3f8">Взаимодействие ведущих ценностей (топ-5 по баллу)</div>';
     pairs.forEach(function(p){
       var syn=p.rel==='🟢';
       var bg=syn?'#f0fff4':'#fff5f5',tx=syn?'#276749':'#9b2c2c';
-      html+='<div style="display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:5px;background:'+bg+';margin-bottom:4px">';
-      html+=p.rel+'<span style="font-size:12px;font-weight:700;color:'+tx+'">'+p.a+' ↔ '+p.b+'</span>';
-      html+='<span style="font-size:11px;color:'+tx+'">'+(syn?'Синергия — усиливают друг друга':'Конфликт — тянут в разные стороны')+'</span>';
+      html+='<div style="padding:7px 10px;border-radius:6px;background:'+bg+';margin-bottom:5px;border-left:3px solid '+tx+'">';
+      html+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+      html+='<span style="font-size:15px">'+p.rel+'</span>';
+      html+='<span style="font-size:12px;font-weight:700;color:'+tx+'">'+esc(p.a.n)+' <span style="font-weight:400;color:#a0aec0">('+p.a.a+')</span> ↔ '+esc(p.b.n)+' <span style="font-weight:400;color:#a0aec0">('+p.b.a+')</span></span>';
+      html+='</div>';
+      html+='<div style="margin-top:3px;margin-left:24px;font-size:11px;color:'+tx+'">'+(syn?'Синергия — ценности усиливают друг друга':'Конфликт — ценности тянут в разные стороны')+'</div>';
       html+='</div>';
     });
     html+='</div>';
     return html;
   }
 
-  // ─── ГЛАВНАЯ СБОРКА ──────────────────────────────────────────────────────────
   function renderSection(rawByAbbr){
     var vals=[];
     CP.forEach(function(cfg){
@@ -238,48 +194,29 @@
     });
     if(vals.length<10)return'';
 
-    // Топ-4 по баллу (самые выраженные ценности кандидата)
     var byScore=vals.slice().sort(function(a,b){return b.sc-a.sc;});
-    var top4=byScore.slice(0,4);
-
-    // Расхождения в «плохом» направлении, сортировка по дистанции
-    var bad=vals.filter(function(v){return isBadDir(v.sc,v.cfg);}).sort(function(a,b){
-      var da=a.sc<a.cfg.mn?a.cfg.mn-a.sc:a.sc-a.cfg.mx;
-      var db=b.sc<b.cfg.mn?b.cfg.mn-b.sc:b.sc-b.cfg.mx;
-      return db-da;
-    });
-
-    var topAbbrs=top4.map(function(v){return v.cfg.a;});
+    var top5=byScore.slice(0,5);
 
     var html='';
-
-    // 1. Сводная таблица всех ценностей
     html+='<div style="font-size:13px;font-weight:700;color:#1a202c;margin-bottom:6px;padding-bottom:5px;border-bottom:2px solid #e2e8f0">Обзор всех 19 ценностей</div>';
     html+='<div style="font-size:10px;color:#a0aec0;margin-bottom:6px">К — Ключевая · В — Важная · Н — Нейтральная · × — Нежелательная · ✓ в диапазоне · ↑↓ вне диапазона</div>';
     html+=renderGrid(vals);
 
-    // 2. Ведущие ценности
-    html+='<div style="font-size:13px;font-weight:700;color:#1a202c;margin:16px 0 8px;padding-bottom:5px;border-bottom:2px solid #c6f6d5">Ведущие ценности — топ-4 по баллу</div>';
-    html+='<div style="font-size:11px;color:#718096;margin-bottom:8px">Ценности с наивысшим баллом сильнее всего определяют поведение и мотивацию кандидата.</div>';
-    top4.forEach(function(v){html+=renderLeadCard(v);});
+    html+='<div style="font-size:13px;font-weight:700;color:#1a202c;margin:16px 0 6px;padding-bottom:5px;border-bottom:2px solid #c6f6d5">Детальная интерпретация всех 19 ценностей</div>';
+    html+='<div style="font-size:11px;color:#718096;margin-bottom:10px">Порядок — по убыванию балла кандидата. Вверху — ценности, которые сильнее всего определяют поведение.</div>';
+    byScore.forEach(function(v,i){html+=renderValueCard(v,i+1);});
 
-    // 3. Расхождения
-    if(bad.length){html+=renderOutOfRange(bad);}
-
-    // 4. Взаимодействия ведущих ценностей
-    html+=renderInteractions(topAbbrs);
+    html+=renderInteractions(top5);
 
     return html;
   }
 
-  // ─── ИНЖЕКЦИЯ ────────────────────────────────────────────────────────────────
   var injected=false;
 
   function currentResult(){
     try{if(typeof V_RESULT_CONTEXT!=='undefined'&&V_RESULT_CONTEXT&&V_RESULT_CONTEXT.result)return V_RESULT_CONTEXT.result;}catch(e){}
     return null;
   }
-
   function getRaw(r){
     if(window.VALUES_V2&&window.VALUES_V2.extractRawScoresByAbbr){
       var raw=window.VALUES_V2.extractRawScoresByAbbr(r);
@@ -293,22 +230,17 @@
     var v2=document.querySelector('[data-v2-card]');
     if(!v2)return;
     if(document.querySelector('[data-interp-section]'))return;
-    var r=currentResult();
-    if(!r)return;
-    var raw=getRaw(r);
-    if(!raw)return;
-    var html=renderSection(raw);
-    if(!html)return;
+    var r=currentResult(); if(!r)return;
+    var raw=getRaw(r); if(!raw)return;
+    var html=renderSection(raw); if(!html)return;
 
     var wrap=document.createElement('div');
     wrap.className='card';
     wrap.setAttribute('data-interp-section','1');
     wrap.style.cssText='padding:14px 16px;margin-bottom:10px;border:1px solid #e2e8f0;background:#ffffff';
-
     var hdr=document.createElement('div');
     hdr.style.cssText='font-weight:700;font-size:15px;color:#1a202c;margin-bottom:12px;display:flex;align-items:center;gap:10px';
     hdr.innerHTML='Интерпретация ценностного профиля <span style="font-size:11px;font-weight:400;color:#a0aec0">по PVQ-RR (Шварц, 19 ценностей)</span>';
-
     wrap.appendChild(hdr);
     wrap.insertAdjacentHTML('beforeend',html);
     v2.parentNode.insertBefore(wrap,v2.nextSibling);
@@ -321,9 +253,6 @@
     new MutationObserver(function(){tryInject();}).observe(target,{childList:true,subtree:true});
   }
 
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',startObserver);
-  }else{
-    startObserver();
-  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',startObserver);}
+  else{startObserver();}
 })();

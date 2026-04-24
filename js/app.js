@@ -1610,7 +1610,8 @@ function stripInterpretationSummary(text){
   const lines=raw.split('\n').map(s=>s.trim()).filter(Boolean);
   const cleaned=lines.filter(line=>
     !/^Итог соответствия ценностному профилю компании:/i.test(line) &&
-    !/^Цветовая шкала:/i.test(line)
+    !/^Цветовая шкала:/i.test(line) &&
+    !/^Критические зоны риска:/i.test(line)
   );
   return cleaned.join('\n').trim();
 }
@@ -2126,9 +2127,9 @@ async function viewValueResult(id){
         <button type="button" class="btn-cancel" data-act="val-list">← К списку</button>
       </div>
     </div>
-    <div class="card" style="padding:12px 14px;margin-bottom:10px">
+    ${interpText ? `<div class="card" style="padding:12px 14px;margin-bottom:10px">
       <div style="font-size:13px;color:var(--ink2);line-height:1.7">${interpHtml}</div>
-    </div>
+    </div>` : ''}
     <div class="card" style="padding:12px 14px;margin-bottom:10px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
         <div class="ct">Итог соответствия профилю компании</div>
@@ -2138,10 +2139,6 @@ async function viewValueResult(id){
         Совпадение считается по двум частям: насколько профиль по всем 19 ценностям близок к эталону и нет ли выходов за критические пороги риска.
       </div>
     </div>
-    <div class="card" style="padding:12px 14px;margin-bottom:10px;background:#f8f5ff"><div class="ct">Ведущие ценности</div>${renderRows(profile.lead_values,'lead')}</div>
-    <div class="card" style="padding:12px 14px;margin-bottom:10px;background:#effaf3"><div class="ct">Ключевые ценности</div>${renderRows(profile.key_values,'key')}</div>
-    <div class="card" style="padding:12px 14px;margin-bottom:10px;background:#fff8ea"><div class="ct">Зоны риска</div>${renderRows(profile.risk_values,'risk')}</div>
-    <div class="card" style="padding:12px 14px;margin-bottom:10px;background:#fff0f3"><div class="ct">Критические зоны риска</div>${renderRows(profile.critical_risk_values,'critical')}</div>
     <div class="card" style="padding:12px 14px;margin-bottom:10px">
       <div class="ct" style="margin-bottom:6px">Контроль социальной желательности (IM)</div>
       <div style="font-size:12px;color:var(--ink3);line-height:1.6">
