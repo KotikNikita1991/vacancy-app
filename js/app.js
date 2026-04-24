@@ -1816,7 +1816,6 @@ async function exportValueReport(inv, r){
           table:{widths:['*'],body:[[{fillColor:bg,margin:[8,6,8,6],stack:stack}]]},
           layout:{hLineWidth:()=>0.8,vLineWidth:()=>0.8,hLineColor:()=>brd,vLineColor:()=>brd}
         });
-      });
     });
     }
     window.pdfMake.createPdf({
