@@ -631,14 +631,16 @@ function getValueAssessments(data) {
 
   const invitesSheet = getSheet(SH.VALUE_INVITES);
   const invitesRows = invitesSheet.getDataRange().getValues();
-  if (invitesRows.length < 2) return { ok: true, items: [] };
-  const hm = headerMap_(invitesSheet);
+  const hm = invitesRows.length ? headerMap_(invitesSheet) : {};
   const userNameMap = buildUserNameMap_();
-
   const resultsMap = buildValueResultMap_();
 
-  const items = invitesRows.slice(1).filter(r => r[0]).map(r => {
+  const seenInviteIds = {};
+
+  // 1) Обычные приглашения из VALUE_INVITES
+  const items = (invitesRows.length < 2 ? [] : invitesRows.slice(1).filter(r => r[0])).map(r => {
     const inviteId = String(getCellByHeader_(r, hm, 'id', r[0] || ''));
+    seenInviteIds[inviteId] = true;
     const status = String(getCellByHeader_(r, hm, 'status', r[2] || ''));
     const expired = isInviteExpired_(getCellByHeader_(r, hm, 'expires_at', r[4]));
     const finalStatus = (status === 'completed') ? 'completed' : (expired ? 'expired' : status);
@@ -677,14 +679,51 @@ function getValueAssessments(data) {
       profile_level: profile && profile.level_code ? String(profile.level_code) : '',
       profile_match_pct: profile && profile.match_pct != null ? Number(profile.match_pct) : null
     };
-  }).filter(item => {
+  });
+
+  // 2) «Сиротские» результаты — есть в VALUE_RESULTS, но нет строки в VALUE_INVITES
+  Object.keys(resultsMap).forEach(function(inviteId) {
+    if (seenInviteIds[inviteId]) return;
+    const result = resultsMap[inviteId];
+    let profile = deriveProfileFromStoredResult_(result);
+    if (!profile || !Object.keys(profile).length) {
+      profile = safeJson(result.profile_json || '{}');
+    }
+    // Попробуем восстановить данные кандидата из самой строки результата, если они там сохранены
+    const topValues = safeJson(result.top_values_json || '{}');
+    items.push({
+      id: inviteId,
+      token: '',
+      status: 'completed',
+      sent_at: '',
+      expires_at: '',
+      submitted_at: result.submitted_at ? toYMD(result.submitted_at) : '',
+      vacancy_id: '',
+      vacancy_name: '',
+      candidate_name: result.candidate_name || topValues.candidate_name || '(без строки приглашения)',
+      candidate_gender: result.candidate_gender || '',
+      candidate_email: result.candidate_email || '',
+      department: result.department || '',
+      employee_group: result.employee_group || '',
+      recruiter_id: result.recruiter_id || '',
+      recruiter_name: result.recruiter_name || '',
+      has_result: true,
+      top_values: topValues,
+      interpretation: String(result.interpretation || ''),
+      profile_level: profile && profile.level_code ? String(profile.level_code) : '',
+      profile_match_pct: profile && profile.match_pct != null ? Number(profile.match_pct) : null,
+      orphan: true
+    });
+  });
+
+  const filtered = items.filter(item => {
     if (role === 'recruiter' && recruiterId) return String(item.recruiter_id) === recruiterId;
     return true;
   });
 
-  items.sort((a,b) => (a.sent_at < b.sent_at ? 1 : -1));
+  filtered.sort((a,b) => (a.sent_at < b.sent_at ? 1 : -1));
 
-  return { ok: true, items: items };
+  return { ok: true, items: filtered };
 }
 
 function getValueAssessmentResult(data) {
@@ -695,16 +734,36 @@ function getValueAssessmentResult(data) {
   }
   if (!id) return { ok: false, error: 'Нет id' };
 
-  const inv = findInviteById_(id);
-  if (!inv) return { ok: false, error: 'Приглашение не найдено' };
-
   const userNameMap = buildUserNameMap_();
+  let inv = findInviteById_(id);
+  let result = findValueResultByInviteId_(id);
+
+  // Если строка приглашения пропала, но результат есть — реконструируем минимальное приглашение из результата
+  if (!inv && result) {
+    inv = {
+      id: id,
+      status: 'completed',
+      sent_at: '',
+      expires_at: '',
+      submitted_at: result.created_at || '',
+      vacancy_name: result.vacancy_name || '',
+      department: '',
+      employee_group: '',
+      candidate_name: result.candidate_name || '(без строки приглашения)',
+      candidate_gender: '',
+      candidate_email: '',
+      recruiter_id: '',
+      recruiter_name: result.recruiter_name || '',
+      _orphan: true
+    };
+  }
+
+  if (!inv) return { ok: false, error: 'Приглашение не найдено' };
+  if (!result) return { ok: false, error: 'Результат пока не сформирован' };
+
   const recruiterName = looksLikeDateString_(inv.recruiter_name)
     ? (userNameMap[String(inv.recruiter_id)] || '')
     : inv.recruiter_name;
-
-  const result = findValueResultByInviteId_(id);
-  if (!result) return { ok: false, error: 'Результат пока не сформирован' };
 
   return {
     ok: true,
@@ -721,6 +780,7 @@ function getValueAssessmentResult(data) {
       candidate_gender: inv.candidate_gender,
       candidate_email: inv.candidate_email,
       recruiter_name: recruiterName,
+      orphan: !!inv._orphan
     },
     result: {
       mean57: Number(result.mean57 || 0),
@@ -981,7 +1041,7 @@ const PVQ_QUESTIONS_PUBLIC = [
   { n:30, text:'Независимость его действий настолько важна для него, что ради этого он готов вступить в конфронтацию' },
   { n:31, text:'Он соблюдает правила, даже когда никто не наблюдает за ним' },
   { n:32, text:'Для него важно быть очень успешным' },
-  { n:33, text:'Ему важно следовать обычаям семьи или обычаям его религии.' },
+  { n:33, text:'Ему важно следовать обычаям семьи или обычаям его религии' },
   { n:34, text:'Ему важно слушать и понимать людей, отличающихся от него' },
   { n:35, text:'Он считает, что  в обществе каждый должен чувствовать себя в безопасности, пусть даже ценой личных свобод' },
   { n:36, text:'Он выберет жизнь в удовольствие, чем самоограничения ради далеких целей' },
@@ -996,7 +1056,7 @@ const PVQ_QUESTIONS_PUBLIC = [
   { n:45, text:'Ему важно защищать окружающую среду от разрушения и загрязнения' },
   { n:46, text:'Для него важно ловить удовольствие в каждом моменте жизни, он не упускает возможности приятно провести время' },
   { n:47, text:'Заботиться обо всех потребностях близких людей важно для него' },
-  { n:48, text:'Ему важно, чтобы люди высоко оценивали его достиженияи' },
+  { n:48, text:'Ему важно, чтобы люди высоко оценивали его достижения' },
   { n:49, text:'Он лучше лишится части премии, чем публично выслушает жесткую критику от руководителя' },
   { n:50, text:'Стабильность и порядок в обществе важны для него, даже если приходится мириться с отсутствием инноваций' },
   { n:51, text:'Для него важно быть тактичным и избегать назойливости по отношению к людям' },
@@ -1418,11 +1478,21 @@ function buildValueResultMap_() {
     map[inviteId] = {
       id: String(getCellByHeader_(r, hm, 'id', r[0] || '')),
       invite_id: inviteId,
+      token: String(getCellByHeader_(r, hm, 'token', '') || ''),
+      candidate_name: String(getCellByHeader_(r, hm, 'candidate_name', '') || ''),
+      vacancy_name: String(getCellByHeader_(r, hm, 'vacancy_name', '') || ''),
+      recruiter_name: String(getCellByHeader_(r, hm, 'recruiter_name', '') || ''),
+      created_at: getCellByHeader_(r, hm, 'created_at', ''),
       mean57: getCellByHeader_(r, hm, 'mean57', r[7] || ''),
       scores_json: getCellByHeader_(r, hm, 'scores_json', r[8] || ''),
       top_values_json: getCellByHeader_(r, hm, 'top_values_json', r[9] || ''),
+      bar_chart_json: getCellByHeader_(r, hm, 'bar_chart_json', ''),
+      circle_chart_json: getCellByHeader_(r, hm, 'circle_chart_json', ''),
       interpretation: getCellByHeader_(r, hm, 'interpretation', r[12] || ''),
-      profile_json: getCellByHeader_(r, hm, 'profile_json', '')
+      profile_json: getCellByHeader_(r, hm, 'profile_json', ''),
+      im_sum: getCellByHeader_(r, hm, 'im_sum', ''),
+      im_level: getCellByHeader_(r, hm, 'im_level', ''),
+      im_chart_json: getCellByHeader_(r, hm, 'im_chart_json', '')
     };
   }
   return map;
@@ -1478,6 +1548,11 @@ function findValueResultByInviteId_(inviteId) {
     return {
       id: getCellByHeader_(r, hm, 'id', r[0]),
       invite_id: rid,
+      token: String(getCellByHeader_(r, hm, 'token', '') || ''),
+      candidate_name: String(getCellByHeader_(r, hm, 'candidate_name', '') || ''),
+      vacancy_name: String(getCellByHeader_(r, hm, 'vacancy_name', '') || ''),
+      recruiter_name: String(getCellByHeader_(r, hm, 'recruiter_name', '') || ''),
+      created_at: getCellByHeader_(r, hm, 'created_at', ''),
       mean57: getCellByHeader_(r, hm, 'mean57', r[7]),
       scores_json: getCellByHeader_(r, hm, 'scores_json', r[8]),
       top_values_json: getCellByHeader_(r, hm, 'top_values_json', r[9]),
