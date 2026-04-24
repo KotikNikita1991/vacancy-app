@@ -1715,6 +1715,8 @@ async function exportValueReport(inv, r){
     const p=r?.profile||{};
     const imSum=Number(r?.im?.sum)||0;
     const allValues=Array.isArray(p?.all_values)?p.all_values:[];
+    const rawByAbbr=window.VALUES_V2?window.VALUES_V2.extractRawScoresByAbbr(r):null;
+    const v2Match=rawByAbbr&&window.VALUES_V2?window.VALUES_V2.computeMatch(rawByAbbr):null;
     const idealByAbbr={
       SDT:5.2,SDA:5.2,ST:4.8,HE:3.8,AC:5.1,UNC:5.4,BEC:5.4,BED:5.2,UNT:4.8,HUM:4.5,
       SEP:4.0,SES:3.8,UNN:3.5,COI:3.5,TR:2.3,COR:2.8,FAC:2.8,POR:2.8,POD:2.0
@@ -1732,6 +1734,29 @@ async function exportValueReport(inv, r){
       { text:`Итог соответствия профилю компании: ${p?.level_label||'—'} ${Number.isFinite(Number(p?.match_pct))?`(${p.match_pct}%)`:''}` },
       { text:'Совпадение считается по двум частям: близость к эталону по 19 ценностям и отсутствие выходов за критические пороги риска.', fontSize:9, color:'#6b7280', margin:[0,2,0,8] },
       ...(interpText ? [{ text:interpText, margin:[0,2,0,10] }] : []),
+      ...(v2Match ? (()=>{
+        const lm={green:['Зелёный','#2F855A','#e8fff3'],yellow:['Жёлтый','#B7791F','#fff6dd'],red:['Красный','#E35B6A','#ffe9ec']};
+        const [ll,lc,lb]=lm[v2Match.level]||['—','#4a5568','#edf2f7'];
+        const blocks=[{
+          margin:[0,0,0,6],unbreakable:true,
+          table:{widths:['*'],body:[[{fillColor:lb,margin:[8,8,8,8],stack:[
+            {text:`V2-оценка соответствия: ${v2Match.finalScore}% · ${ll}`,style:'h2',color:lc,margin:[0,0,0,2]},
+            {text:'Метод: взвешенный градиент по 19 ценностям (КЛЮЧЕВАЯ×4, ВАЖНАЯ×2, НЕЙТРАЛЬНАЯ×1, НЕЖЕЛАТЕЛЬНАЯ×3).',fontSize:9,color:'#718096'}
+          ]}]]},
+          layout:{hLineWidth:()=>1,vLineWidth:()=>1,hLineColor:()=>lc,vLineColor:()=>lc}
+        }];
+        if(v2Match.triggeredFlags&&v2Match.triggeredFlags.length){
+          blocks.push({
+            margin:[0,0,0,6],unbreakable:true,
+            table:{widths:['*'],body:[[{fillColor:'#fffbeb',margin:[8,8,8,8],stack:[
+              {text:'На заметку — уточнить на интервью',style:'h2',color:'#744210',margin:[0,0,0,3]},
+              ...v2Match.triggeredFlags.map(f=>({text:'• '+f,fontSize:9,color:'#744210',margin:[0,2,0,0]}))
+            ]}]]},
+            layout:{hLineWidth:()=>1,vLineWidth:()=>1,hLineColor:()=>'#f6ad55',vLineColor:()=>'#f6ad55'}
+          });
+        }
+        return blocks;
+      })() : []),
       {
         margin:[0,0,0,10],
         unbreakable:true,
@@ -1747,6 +1772,37 @@ async function exportValueReport(inv, r){
     if(baseBarImg){ content.push({ unbreakable:true, stack:[{ text:'Столбчатая диаграмма (базовые средние)', style:'h2' },{ image:baseBarImg, fit:[520,250], margin:[0,2,0,10] }] }); }
     if(centeredBarImg){ content.push({ unbreakable:true, stack:[{ text:'Столбчатая диаграмма (центрирование)', style:'h2' },{ image:centeredBarImg, fit:[520,250], margin:[0,2,0,10] }] }); }
     if(radarImg){ content.push({ unbreakable:true, stack:[{ text:'Радар с эталонным профилем', style:'h2' },{ image:radarImg, fit:[470,360], margin:[0,2,0,10] }] }); }
+    if(rawByAbbr&&window.VALUES_V2){
+      const _prof=window.VALUES_V2.COMPANY_PROFILE;
+      const _top5=_prof.filter(c=>Number.isFinite(rawByAbbr[c.abbr])).map(c=>({c,sc:rawByAbbr[c.abbr]})).sort((a,b)=>b.sc-a.sc).slice(0,5);
+      if(_top5.length){
+        content.push({text:'Ведущие ценности — топ-5',style:'h2',margin:[0,8,0,4]});
+        content.push({
+          margin:[0,0,0,12],
+          table:{
+            headerRows:1,
+            widths:[16,'*',30,30,35,40],
+            body:[
+              [{text:'#',bold:true,fontSize:9},{text:'Ценность',bold:true,fontSize:9},{text:'Аббр.',bold:true,fontSize:9},{text:'Балл',bold:true,fontSize:9},{text:'Идеал',bold:true,fontSize:9},{text:'Статус',bold:true,fontSize:9}],
+              ..._top5.map(({c,sc},i)=>{
+                const inR=sc>=c.min&&sc<=c.max,below=!inR&&sc<c.min;
+                const stTxt=inR?'✓ норма':below?'↓ ниже':'↑ выше';
+                const stCol=inR?'#276749':below?'#9b2c2c':'#c05621';
+                return[
+                  {text:String(i+1),fontSize:9,alignment:'center'},
+                  {text:VALUE_FULL_LABEL_BY_ABBR[c.abbr]||c.name,fontSize:9},
+                  {text:c.abbr,fontSize:9,alignment:'center'},
+                  {text:sc.toFixed(2),fontSize:9,alignment:'center',bold:true},
+                  {text:c.min+'–'+c.max,fontSize:9,alignment:'center',color:'#718096'},
+                  {text:stTxt,fontSize:9,alignment:'center',color:stCol}
+                ];
+              })
+            ]
+          },
+          layout:'lightHorizontalLines'
+        });
+      }
+    }
     content.push({ text:'Блоки ценностей (19)', style:'h2' });
     if(!allValues.length){
       content.push({ text:'Нет данных для этой записи.' });
@@ -1834,8 +1890,10 @@ function renderValueBarChart(){
   const ideal = idealRaw ? pairs.map(p=>p.ideal) : null;
   const yTitle = mode === 'base' ? 'Средние баллы' : 'Отклонение';
   if(V_RESULT_CHARTS.bar)V_RESULT_CHARTS.bar.destroy();
+  const _dl=window.ChartDataLabels;
   V_RESULT_CHARTS.bar=new Chart(document.getElementById('val-bar').getContext('2d'),{
     type:'bar',
+    ...(_dl?{plugins:[_dl]}:{}),
     data:{
       labels,
       datasets:[
@@ -1843,31 +1901,44 @@ function renderValueBarChart(){
           type:'bar',
           label:mode === 'base' ? 'Профиль' : 'Профиль (центр.)',
           data,
-          backgroundColor:'#7B5EA7',
-          order:10
+          backgroundColor:'rgba(123,94,167,0.82)',
+          borderColor:'#7B5EA7',
+          borderWidth:1,
+          borderRadius:4,
+          borderSkipped:false,
+          order:10,
+          ...(_dl?{datalabels:{display:true,anchor:'end',align:'top',offset:-2,color:'#4a5568',font:{size:9,weight:'600'},formatter:v=>Number(v).toFixed(2)}}:{})
         },
         ...(ideal ? [{
           type:'line',
           label:'Эталонный профиль',
           data:ideal,
           borderColor:'#E11D48',
+          backgroundColor:'rgba(225,29,72,.08)',
           pointBackgroundColor:'#E11D48',
-          pointRadius:3,
-          borderWidth:3,
+          pointRadius:4,
+          pointHoverRadius:6,
+          borderWidth:2.5,
           tension:0.2,
-          order:0
+          fill:false,
+          order:0,
+          ...(_dl?{datalabels:{display:false}}:{})
         }] : [])
       ]
     },
     options:{
       responsive:true,
       maintainAspectRatio:false,
-      plugins:{legend:{display:true,position:'top'}},
+      layout:{padding:{top:_dl?18:4}},
+      plugins:{
+        legend:{display:true,position:'top',labels:{font:{size:11},boxWidth:12,padding:12}},
+        ...(_dl?{datalabels:{display:false}}:{})
+      },
       scales:{
-        x:{ticks:{autoSkip:false,maxRotation:45,minRotation:45,font:{size:9}}},
+        x:{ticks:{autoSkip:false,maxRotation:45,minRotation:45,font:{size:9},color:'#4a5568'},grid:{color:'rgba(0,0,0,0.04)'}},
         y: mode === 'base'
-          ? { min:1,max:6,beginAtZero:false,title:{display:true,text:yTitle} }
-          : { min:-3,max:3,beginAtZero:true,title:{display:true,text:yTitle} }
+          ? {min:1,max:6,beginAtZero:false,title:{display:true,text:yTitle,font:{size:10}},grid:{color:'rgba(0,0,0,0.06)'},ticks:{font:{size:9}}}
+          : {min:-3,max:3,beginAtZero:true,title:{display:true,text:yTitle,font:{size:10}},grid:{color:'rgba(0,0,0,0.06)'},ticks:{font:{size:9}}}
       }
     }
   });
@@ -1879,30 +1950,85 @@ function renderValueCircleChart(){
   const src = mode === 'base' ? V_RESULT_VIEW.circleBase : V_RESULT_VIEW.circleCentered;
   const abbrs = Array.isArray(V_RESULT_VIEW.circleAbbrs) ? V_RESULT_VIEW.circleAbbrs : [];
   const labels = abbrs.length ? abbrs.map(a=>VALUE_SHORT_LABEL_BY_ABBR[a]||a) : (src.labels||[]);
-  if(V_RESULT_CHARTS.circle)V_RESULT_CHARTS.circle.destroy();
+   if(V_RESULT_CHARTS.circle)V_RESULT_CHARTS.circle.destroy();
+  const _n=abbrs.length||19;
+  const _metaArcPlugin={
+    id:'metaArcs',
+    afterDraw(chart){
+      if(chart.config.type!=='radar')return;
+      const sc=chart.scales.r; if(!sc)return;
+      const ctx=chart.ctx,cx=sc.xCenter,cy=sc.yCenter,outerR=sc.drawingArea;
+      const arcR=outerR+9,ARC_W=7,LABEL_R=arcR+ARC_W/2+13;
+      const step=(2*Math.PI)/_n,startA=-Math.PI/2;
+      const METAS=[
+        {label:'Открытость изм.',color:'#3B82F6',from:0,to:3},
+        {label:'Самоутверждение',color:'#F59E0B',from:4,to:7},
+        {label:'Сохранение',color:'#10B981',from:8,to:12},
+        {label:'Самоопределение',color:'#8B5CF6',from:13,to:_n-1}
+      ];
+      METAS.forEach(m=>{
+        const a1=startA+step*(m.from-0.5),a2=startA+step*(m.to+0.5),mid=(a1+a2)/2;
+        ctx.save();
+        ctx.beginPath(); ctx.arc(cx,cy,arcR,a1,a2,false);
+        ctx.strokeStyle=m.color; ctx.lineWidth=ARC_W; ctx.lineCap='round'; ctx.stroke();
+        const lx=cx+LABEL_R*Math.cos(mid),ly=cy+LABEL_R*Math.sin(mid);
+        ctx.fillStyle=m.color; ctx.font='bold 9px sans-serif';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(m.label,lx,ly);
+        ctx.restore();
+      });
+    }
+  };
+  const _dlr=window.ChartDataLabels;
   V_RESULT_CHARTS.circle=new Chart(document.getElementById('val-circle').getContext('2d'),{
     type:'radar',
+    plugins:[_metaArcPlugin,...(_dlr?[_dlr]:[])],
     data:{
       labels,
       datasets:[
-        {label:'Профиль',data:src.data||[],borderColor:'#7B5EA7',backgroundColor:'rgba(123,94,167,.15)',pointBackgroundColor:'#7B5EA7'},
+        {
+          label:'Профиль',
+          data:src.data||[],
+          borderColor:'#7B5EA7',
+          backgroundColor:'rgba(123,94,167,.15)',
+          pointBackgroundColor:'#7B5EA7',
+          pointRadius:4,
+          pointHoverRadius:6,
+          borderWidth:2,
+          ...(_dlr?{datalabels:{display:true,anchor:'end',align:'end',offset:3,color:'#7B5EA7',font:{size:8,weight:'700'},formatter:v=>Number(v).toFixed(1)}}:{})
+        },
         ...(mode==='base' && Array.isArray(V_RESULT_VIEW.circleIdealBase) ? [{
           label:'Эталонный профиль',
           data:V_RESULT_VIEW.circleIdealBase,
           borderColor:'#E11D48',
           backgroundColor:'rgba(225,29,72,.04)',
-          pointBackgroundColor:'#E11D48'
+          pointBackgroundColor:'#E11D48',
+          pointRadius:3,
+          borderWidth:2,
+          ...(_dlr?{datalabels:{display:false}}:{})
         }] : []),
         ...(mode!=='base' && Array.isArray(V_RESULT_VIEW.circleIdealCentered) ? [{
           label:'Эталонный профиль',
           data:V_RESULT_VIEW.circleIdealCentered,
           borderColor:'#E11D48',
           backgroundColor:'rgba(225,29,72,.04)',
-          pointBackgroundColor:'#E11D48'
+          pointBackgroundColor:'#E11D48',
+          pointRadius:3,
+          borderWidth:2,
+          ...(_dlr?{datalabels:{display:false}}:{})
         }] : [])
       ],
     },
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'top'}},scales:{r:{min:1,max:6,angleLines:{color:'#e6e1f0'},grid:{color:'#e6e1f0'}}}}
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      layout:{padding:48},
+      plugins:{
+        legend:{display:true,position:'top',labels:{font:{size:11},boxWidth:12,padding:12}},
+        ...(_dlr?{datalabels:{display:false}}:{})
+      },
+      scales:{r:{min:1,max:6,angleLines:{color:'#e6e1f0'},grid:{color:'#e6e1f0'},pointLabels:{font:{size:9},color:'#4a5568'},ticks:{backdropColor:'transparent',font:{size:8},stepSize:1}}}
+    }
   });
 }
 
@@ -2011,12 +2137,16 @@ async function deleteValueAssessment(id){
 
 function ensureChartJs(){
   return new Promise((resolve,reject)=>{
-    if(window.Chart)return resolve();
-    const s=document.createElement('script');
-    s.src='https://cdn.jsdelivr.net/npm/chart.js';
-    s.onload=()=>resolve();
-    s.onerror=()=>reject(new Error('Chart.js не загрузился'));
-    document.head.appendChild(s);
+    if(window.Chart && window.ChartDataLabels) return resolve();
+    const loadScript=src=>new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src=src; s.onload=()=>res(); s.onerror=()=>rej(new Error('Не загрузился: '+src));
+      document.head.appendChild(s);
+    });
+    (window.Chart ? Promise.resolve() : loadScript('https://cdn.jsdelivr.net/npm/chart.js'))
+      .then(()=>window.ChartDataLabels ? Promise.resolve() : loadScript('https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js'))
+      .then(resolve)
+      .catch(reject);
   });
 }
 
@@ -2168,7 +2298,7 @@ async function viewValueResult(id){
     </div>
     <div class="card" style="padding:12px;max-width:980px;margin-left:auto;margin-right:auto">
       <div class="ct" style="margin-bottom:10px">Круг ценностей</div>
-      <div style="height:360px"><canvas id="val-circle"></canvas></div>
+      <div style="height:480px"><canvas id="val-circle"></canvas></div>
     </div>`;
   try{
     await ensureChartJs();
