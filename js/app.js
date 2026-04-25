@@ -1624,26 +1624,34 @@ async function exportValueReport(inv, r){
     const filename='value-report-'+((inv?.candidate_name||'employee').replace(/[^\wа-яА-ЯёЁ-]+/g,'_'))+'.pdf';
     toast('Формируем PDF...');
 
-    // Off-screen fixed-width container — no flex conflicts, full style preserved
+    // Fixed-position wrapper at z-index:-1 — behind page background,
+    // invisible to user, but at real viewport coords so html2canvas captures correctly.
     pdfWrap=document.createElement('div');
-    pdfWrap.style.cssText='position:absolute;left:-9999px;top:0;width:840px;';
+    pdfWrap.style.cssText='position:fixed;top:0;left:0;width:840px;overflow-x:hidden;z-index:-1;pointer-events:none;';
     document.body.appendChild(pdfWrap);
 
     // Clone content, strip id to avoid duplicate, remove action buttons
     const clone=el.cloneNode(true);
     clone.removeAttribute('id');
-    clone.style.cssText='width:840px;max-width:840px;overflow:visible;padding:20px;box-sizing:border-box;background:var(--sur,#fff);font-family:var(--font,"Onest",sans-serif);';
+    // overflow-x:hidden clips anything wider than 840px;
+    // background/font must be explicit since #content CSS won't match (id removed)
+    clone.style.cssText='width:840px;max-width:840px;overflow-x:hidden;padding:20px;box-sizing:border-box;background:var(--sur,#fff);font-family:var(--font,"Onest",sans-serif);';
     clone.querySelectorAll('[data-act="val-export"],[data-act="val-list"]').forEach(x=>x.remove());
-    // Tables: fit to container
+    // Tables: fit to container width, wrap text
     clone.querySelectorAll('table').forEach(t=>{
       t.style.width='100%'; t.style.minWidth='0'; t.style.tableLayout='fixed'; t.style.wordBreak='break-word';
     });
+    // Cards: prevent page breaks splitting a card in half
+    clone.querySelectorAll('.card').forEach(c=>{
+      c.style.breakInside='avoid'; c.style.pageBreakInside='avoid';
+    });
     pdfWrap.appendChild(clone);
 
-    // Let the clone layout settle before copying canvas pixel data
+    // Two frames: layout settle + repaint
+    await new Promise(res=>requestAnimationFrame(res));
     await new Promise(res=>requestAnimationFrame(res));
 
-    // Copy Chart.js canvas contents into the clone's canvas elements
+    // Copy Chart.js canvas pixel data (radar, bar, IM) into clone's canvas elements
     const origCanvases=Array.from(el.querySelectorAll('canvas'));
     const cloneCanvases=Array.from(clone.querySelectorAll('canvas'));
     origCanvases.forEach((oc,i)=>{
@@ -1791,7 +1799,28 @@ function renderValueCircleChart(){
         ctx.restore();
       });
       // Repaint Chart.js point labels on top of arcs
-      try{sc.drawPointLabels(chart.data.labels.length);}catch(e){}
+      try{
+        if(typeof sc.drawPointLabels==='function'){
+          sc.drawPointLabels(chart.data.labels.length);
+        }
+      }catch(e){
+        // Fallback: draw labels manually from scale's cached items
+        try{
+          const items=sc._pointLabelItems||[];
+          const plOpts=chart.options.scales.r.pointLabels||{};
+          const fSize=(plOpts.font&&plOpts.font.size)||9;
+          const fColor=plOpts.color||'#4a5568';
+          ctx.save();
+          ctx.font=fSize+'px sans-serif';
+          ctx.fillStyle=fColor;
+          ctx.textAlign='center'; ctx.textBaseline='middle';
+          items.forEach(function(item){
+            if(item&&item.x!=null&&item.y!=null&&item.label!=null)
+              ctx.fillText(String(item.label),item.x,item.y);
+          });
+          ctx.restore();
+        }catch(e2){}
+      }
     }
   };
   const _dlr=window.ChartDataLabels;
