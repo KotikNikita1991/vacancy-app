@@ -143,13 +143,22 @@
         '<td style="padding:3px 5px"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:2px;font-size:9px;font-weight:800;background:'+pp.bg+';color:'+pp.tx+'">'+pp.lb+'</span></td>'+
         '<td style="padding:3px 6px;font-size:11px;font-weight:700;color:#1a202c;white-space:nowrap">'+esc(v.cfg.a)+'</td>'+
         '<td style="padding:3px 10px 3px 0;font-size:11px;color:#4a5568">'+esc(v.cfg.n)+'</td>'+
-        '<td style="padding:3px 6px;font-size:10px;white-space:nowrap"><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:'+mc+';display:inline-block"></span><span style="color:'+mc+';font-weight:600">'+esc(mt)+'</span></span></td>'+
+        '<td style="padding:3px 6px;font-size:10px"><span style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap"><span style="width:8px;height:8px;border-radius:50%;background:'+mc+';flex-shrink:0;display:inline-block"></span><span style="color:'+mc+';font-weight:600">'+esc(mt)+'</span></span></td>'+
         '<td style="padding:3px 6px;white-space:nowrap"><span style="display:inline-block;padding:1px 7px;border-radius:4px;background:'+c.bg+';color:'+c.tx+';font-weight:700;font-size:11px">'+v.sc.toFixed(2)+'</span></td>'+
         '<td style="padding:3px 4px;font-size:10px;color:#718096;white-space:nowrap">'+v.cfg.mn+'–'+v.cfg.mx+'</td>'+
         '<td style="padding:3px 4px;font-size:13px;text-align:center">'+icon+'</td>'+
         '</tr>';
     });
-    return '<table style="border-collapse:collapse;width:100%;margin-bottom:4px">'+head+'<tbody>'+rows.join('')+'</tbody></table>';
+    var colgroup='<colgroup>'+
+      '<col style="width:5%">'+   // Пр.
+      '<col style="width:7%">'+   // Код
+      '<col style="width:28%">'+  // Ценность
+      '<col style="width:26%">'+  // Метаценность
+      '<col style="width:13%">'+  // Балл
+      '<col style="width:15%">'+  // Идеал
+      '<col style="width:6%">'+   // Ст.
+      '</colgroup>';
+    return '<table style="border-collapse:collapse;width:100%;table-layout:fixed;margin-bottom:4px">'+colgroup+head+'<tbody>'+rows.join('')+'</tbody></table>';
   }
 
   function renderValueCard(v,idx){

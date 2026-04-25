@@ -1699,6 +1699,14 @@ async function exportValueReport(inv, r){
     await new Promise(res=>requestAnimationFrame(res));
     await new Promise(res=>requestAnimationFrame(res));
 
+    // Resize Chart.js canvases to match the new 840px container dimensions
+    const chartSv=[];
+    [V_RESULT_CHARTS.bar,V_RESULT_CHARTS.circle,V_RESULT_CHARTS.im,V_RESULT_CHARTS.meta].forEach(ch=>{
+      if(ch){chartSv.push(ch); try{ch.resize();}catch(e){}}
+    });
+    // One extra frame so charts finish redrawing
+    await new Promise(res=>requestAnimationFrame(res));
+
     const opt={
       margin:[8,8,8,8],
       filename:filename,
@@ -1722,6 +1730,8 @@ async function exportValueReport(inv, r){
     el.scrollTo(sv.scrollLeft,sv.scrollTop);
     tblSv.forEach(s=>{s.el.style.width=s.w; s.el.style.minWidth=s.mw; s.el.style.tableLayout=s.tl; s.el.style.wordBreak=s.wb;});
     cardSv.forEach(s=>{s.el.style.breakInside=s.bi; s.el.style.pageBreakInside=s.pbi;});
+    // Restore chart sizes to browser viewport width
+    chartSv.forEach(ch=>{try{ch.resize();}catch(e){}});
   }
 }
 function renderValueBarChart(){
