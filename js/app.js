@@ -1655,7 +1655,7 @@ function stripInterpretationSummary(text){
 async function exportValueReport(inv, r){
   const el=document.getElementById('content');
   // Saved state for all modifications we make
-  const sv={flex:'',width:'',maxWidth:'',overflow:'',scrollTop:0,scrollLeft:0};
+  const sv={flex:'',width:'',maxWidth:'',overflowX:'',overflowY:'',scrollTop:0,scrollLeft:0};
   const tblSv=[], cardSv=[], hideSv=[];
   try{
     await ensureHtml2Pdf();
@@ -1669,15 +1669,19 @@ async function exportValueReport(inv, r){
     // Save element scroll & style
     sv.scrollTop=el.scrollTop; sv.scrollLeft=el.scrollLeft;
     sv.flex=el.style.flex; sv.width=el.style.width;
-    sv.maxWidth=el.style.maxWidth; sv.overflow=el.style.overflow;
+    sv.maxWidth=el.style.maxWidth;
+    sv.overflowX=el.style.overflowX; sv.overflowY=el.style.overflowY;
 
-    // CRITICAL: flex:none so the flex container no longer controls width;
-    // then explicit 840px clips right-overflow and matches A4 content width.
+    // CRITICAL: flex:none so the flex container no longer controls width.
+    // overflow-x clips right-overflow; overflow-y stays visible so full content
+    // height is captured (overflow:hidden would clip it to viewport height).
+    // html2canvas.width=840 is the belt-and-suspenders guarantee.
     el.scrollTo(0,0);
     el.style.flex='none';
     el.style.width='840px';
     el.style.maxWidth='840px';
-    el.style.overflow='hidden';
+    el.style.overflowX='hidden';
+    el.style.overflowY='visible';
 
     // Tables: reflow to container width
     el.querySelectorAll('table').forEach(t=>{
@@ -1699,7 +1703,7 @@ async function exportValueReport(inv, r){
       margin:[8,8,8,8],
       filename:filename,
       image:{type:'jpeg',quality:0.97},
-      html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,scrollX:0,scrollY:0},
+      html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,width:840,scrollX:0,scrollY:0},
       jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
       pagebreak:{mode:['css','legacy'],avoid:['.card']}
     };
@@ -1713,7 +1717,8 @@ async function exportValueReport(inv, r){
     // Restore everything
     hideSv.forEach(s=>{s.el.style.display=s.d;});
     el.style.flex=sv.flex; el.style.width=sv.width;
-    el.style.maxWidth=sv.maxWidth; el.style.overflow=sv.overflow;
+    el.style.maxWidth=sv.maxWidth;
+    el.style.overflowX=sv.overflowX; el.style.overflowY=sv.overflowY;
     el.scrollTo(sv.scrollLeft,sv.scrollTop);
     tblSv.forEach(s=>{s.el.style.width=s.w; s.el.style.minWidth=s.mw; s.el.style.tableLayout=s.tl; s.el.style.wordBreak=s.wb;});
     cardSv.forEach(s=>{s.el.style.breakInside=s.bi; s.el.style.pageBreakInside=s.pbi;});
@@ -1913,7 +1918,7 @@ function renderValueCircleChart(){
         legend:{display:true,position:'left',align:'start',labels:{font:{size:11},boxWidth:12,padding:10,usePointStyle:false}},
         ...(_dlr?{datalabels:{display:false}}:{})
       },
-      scales:{r:{min:1,max:6,angleLines:{color:'#e6e1f0'},grid:{color:'#e6e1f0'},pointLabels:{font:{size:9},color:'#4a5568'},ticks:{backdropColor:'transparent',font:{size:8},stepSize:1}}}
+      scales:{r:{min:1,max:6,angleLines:{color:'#e6e1f0'},grid:{color:'#e6e1f0'},pointLabels:{display:false,font:{size:9},color:'#4a5568'},ticks:{backdropColor:'transparent',font:{size:8},stepSize:1}}}
     }
   });
 }
