@@ -1408,7 +1408,7 @@ function clBC(step){
 // ══ VALUES (PVQ-RR) ═════════════════════════════════
 let VLIST=[];
 let V_PROFILE_FILTER='all';
-let V_RESULT_CHARTS={bar:null,circle:null,im:null};
+let V_RESULT_CHARTS={bar:null,circle:null,im:null,meta:null};
 let V_RESULT_VIEW={mode:'centered',centered:null,base:null,circleCentered:null,circleBase:null};
 let V_RESULT_CONTEXT={invite:null,result:null};
 const VALUE_SHORT_LABEL_BY_ABBR={
@@ -1551,6 +1551,42 @@ function computeBaseFromRawObject(result, centered){
   });
   if(data.some(v=>v==null)) return null;
   return { labels, data };
+}
+
+const META_GROUPS=[
+  {label:'Открытость изменениям',abbrs:['SDT','SDA','ST','HE'],     color:'#3B82F6'},
+  {label:'Самоутверждение',       abbrs:['AC','POD','POR','FAC'],    color:'#F59E0B'},
+  {label:'Сохранение',            abbrs:['SEP','SES','TR','COR','COI'],color:'#10B981'},
+  {label:'Самоопределение',       abbrs:['HUM','BEC','BED','UNC','UNN','UNT'],color:'#8B5CF6'}
+];
+
+function computeMetaAverages(r){
+  // Build abbr→score from raw_scores/base_scores (id keys → abbr via VALUE_ABBR_BY_ID_FRONT)
+  const rawObj=r?.raw_scores||r?.base_scores||r?.values_raw||null;
+  const scores=r?.scores||null;
+  const mean=Number(r?.mean57||0);
+  const map={};
+  if(rawObj&&typeof rawObj==='object'&&!Array.isArray(rawObj)){
+    Object.keys(rawObj).forEach(k=>{
+      const abbr=VALUE_ABBR_BY_ID_FRONT[k]||k;
+      const v=Number(rawObj[k]);
+      if(Number.isFinite(v))map[abbr]=v;
+    });
+  }
+  // Fallback: centered scores + mean57
+  if(!Object.keys(map).length&&scores&&Number.isFinite(mean)&&mean!==0){
+    Object.keys(scores).forEach(id=>{
+      const abbr=VALUE_ABBR_BY_ID_FRONT[id]||id;
+      const v=Number(scores[id])+mean;
+      if(Number.isFinite(v))map[abbr]=v;
+    });
+  }
+  if(!Object.keys(map).length)return null;
+  const avgs=META_GROUPS.map(g=>{
+    const vals=g.abbrs.map(a=>map[a]).filter(v=>Number.isFinite(v));
+    return vals.length?{label:g.label,color:g.color,avg:vals.reduce((a,b)=>a+b,0)/vals.length}:null;
+  }).filter(Boolean);
+  return avgs.length>=2?avgs:null;
 }
 
 function getBaseBarData(result, centered){
@@ -2116,18 +2152,28 @@ async function viewValueResult(id){
         Совпадение считается по двум частям: насколько профиль по всем 19 ценностям близок к эталону и нет ли выходов за критические пороги риска.
       </div>
     </div>
-    <div class="card" data-im-block="1" style="padding:12px 14px;margin-bottom:10px;max-width:520px;margin-left:auto;margin-right:auto">
-      <div class="ct" style="margin-bottom:6px">Контроль социальной желательности (IM)</div>
-      <div style="font-size:12px;color:var(--ink3);line-height:1.6">
-        Этот показатель не влияет на PVQ‑RR и служит контролем «приукрашивания» ответов.
-      </div>
-      <div style="display:flex;gap:14px;align-items:center;margin-top:10px;flex-wrap:wrap">
-        <div style="flex-shrink:0">
-          <div style="font-size:22px;font-weight:800;color:var(--ink2);line-height:1.1">${Number.isFinite(imSum)?imSum:'—'} <span style="font-size:13px;font-weight:600;color:var(--ink3)">/ 60</span></div>
-          <div style="font-size:11px;color:var(--ink3);margin-top:2px;max-width:180px">${escapeHtml(imLevel||(!Number.isFinite(imSum)?'IM не записан для этой записи.':''))}</div>
+    <div class="card" data-im-block="1" style="padding:12px 14px;margin-bottom:10px;max-width:980px;margin-left:auto;margin-right:auto">
+      <div style="display:flex;gap:0;align-items:stretch;flex-wrap:wrap">
+        <!-- IM block -->
+        <div style="flex:1;min-width:240px;padding-right:20px;border-right:1px solid var(--bg2)">
+          <div class="ct" style="margin-bottom:6px">Контроль социальной желательности (IM)</div>
+          <div style="font-size:12px;color:var(--ink3);line-height:1.6">
+            Этот показатель не влияет на PVQ‑RR и служит контролем «приукрашивания» ответов.
+          </div>
+          <div style="display:flex;gap:14px;align-items:center;margin-top:10px;flex-wrap:wrap">
+            <div style="flex-shrink:0">
+              <div style="font-size:22px;font-weight:800;color:var(--ink2);line-height:1.1">${Number.isFinite(imSum)?imSum:'—'} <span style="font-size:13px;font-weight:600;color:var(--ink3)">/ 60</span></div>
+              <div style="font-size:11px;color:var(--ink3);margin-top:2px;max-width:180px">${escapeHtml(imLevel||(!Number.isFinite(imSum)?'IM не записан для этой записи.':''))}</div>
+            </div>
+            <div style="flex:1;min-width:160px;height:88px">
+              <canvas id="im-bar"></canvas>
+            </div>
+          </div>
         </div>
-        <div style="flex:1;min-width:160px;height:88px">
-          <canvas id="im-bar"></canvas>
+        <!-- Meta-values donut -->
+        <div style="flex:1;min-width:240px;padding-left:20px">
+          <div class="ct" style="margin-bottom:6px">Метаценности — средний балл</div>
+          <div style="height:140px"><canvas id="meta-donut"></canvas></div>
         </div>
       </div>
     </div>
@@ -2155,6 +2201,7 @@ async function viewValueResult(id){
     if(V_RESULT_CHARTS.bar)V_RESULT_CHARTS.bar.destroy();
     if(V_RESULT_CHARTS.circle)V_RESULT_CHARTS.circle.destroy();
     if(V_RESULT_CHARTS.im)V_RESULT_CHARTS.im.destroy();
+    if(V_RESULT_CHARTS.meta)V_RESULT_CHARTS.meta.destroy();
     const barModes=pickBarModeData(r);
     const mean57=Number(r.mean57||0);
     const circleCentered=r.circle_chart||{};
@@ -2242,6 +2289,57 @@ async function viewValueResult(id){
           scales:{
             y:{ min:10, max:60, ticks:{ stepSize:10, font:{size:8} }, title:{ display:false }, grid:{color:'rgba(0,0,0,0.04)'} },
             x:{ ticks:{ display:false }, grid:{display:false} }
+          }
+        }
+      });
+    }
+
+    // Meta-values doughnut chart
+    const metaAvgs=computeMetaAverages(r);
+    const metaCtx=document.getElementById('meta-donut');
+    if(metaAvgs&&metaCtx){
+      V_RESULT_CHARTS.meta=new Chart(metaCtx.getContext('2d'),{
+        type:'doughnut',
+        data:{
+          labels:metaAvgs.map(g=>g.label),
+          datasets:[{
+            data:metaAvgs.map(g=>g.avg),
+            backgroundColor:metaAvgs.map(g=>g.color),
+            borderWidth:2,
+            borderColor:'#fff',
+            hoverOffset:4
+          }]
+        },
+        options:{
+          responsive:true,
+          maintainAspectRatio:false,
+          cutout:'52%',
+          plugins:{
+            legend:{
+              display:true,
+              position:'right',
+              labels:{
+                font:{size:10},
+                boxWidth:10,
+                padding:6,
+                generateLabels(chart){
+                  const ds=chart.data.datasets[0];
+                  return chart.data.labels.map((lbl,i)=>({
+                    text:`${lbl}: ${ds.data[i].toFixed(2)}`,
+                    fillStyle:ds.backgroundColor[i],
+                    strokeStyle:'#fff',
+                    lineWidth:1,
+                    hidden:false,
+                    index:i
+                  }));
+                }
+              }
+            },
+            tooltip:{
+              callbacks:{
+                label:ctx=>`${ctx.label}: ${Number(ctx.raw).toFixed(2)} (ср. балл)`
+              }
+            }
           }
         }
       });
