@@ -1618,15 +1618,23 @@ function stripInterpretationSummary(text){
 
 async function exportValueReport(inv, r){
   let el=document.getElementById('content');
-  let savedW='',savedMW='',savedOX='';
+  const saved={w:'',mw:'',ov:'',fl:'',tbl:[]};
   try{
     await ensureHtml2Pdf();
     const filename='value-report-'+((inv?.candidate_name||'employee').replace(/[^\wа-яА-ЯёЁ-]+/g,'_'))+'.pdf';
     const hideEls=el.querySelectorAll('[data-act="val-export"],[data-act="val-list"]');
     hideEls.forEach(x=>{x.dataset._pdfDisplay=x.style.display;x.style.display='none';});
-    // Constrain to A4-friendly width so content reflows, tables don't overflow, radar fills container
-    savedW=el.style.width; savedMW=el.style.maxWidth; savedOX=el.style.overflowX;
-    el.style.width='860px'; el.style.maxWidth='860px'; el.style.overflowX='hidden';
+
+    // Constrain element to A4-friendly width so flex layout doesn't stretch it
+    saved.w=el.style.width; saved.mw=el.style.maxWidth; saved.ov=el.style.overflow; saved.fl=el.style.flex;
+    el.style.width='860px'; el.style.maxWidth='860px'; el.style.overflow='hidden'; el.style.flex='none';
+
+    // Force inner tables to adapt to the constrained width
+    el.querySelectorAll('table').forEach(t=>{
+      saved.tbl.push({el:t,w:t.style.width,mw:t.style.minWidth,tl:t.style.tableLayout,wb:t.style.wordBreak});
+      t.style.width='100%'; t.style.minWidth='0'; t.style.tableLayout='fixed'; t.style.wordBreak='break-word';
+    });
+
     await new Promise(res=>requestAnimationFrame(res));
     const opt={
       margin:[8,8,8,8],
@@ -1646,7 +1654,8 @@ async function exportValueReport(inv, r){
     el=document.getElementById('content');
     if(el){
       el.querySelectorAll('[data-act="val-export"],[data-act="val-list"]').forEach(x=>{x.style.display=x.dataset._pdfDisplay||'';});
-      el.style.width=savedW; el.style.maxWidth=savedMW; el.style.overflowX=savedOX;
+      el.style.width=saved.w; el.style.maxWidth=saved.mw; el.style.overflow=saved.ov; el.style.flex=saved.fl;
+      saved.tbl.forEach(s=>{s.el.style.width=s.w; s.el.style.minWidth=s.mw; s.el.style.tableLayout=s.tl; s.el.style.wordBreak=s.wb;});
     }
   }
 }
@@ -1771,6 +1780,8 @@ function renderValueCircleChart(){
         ctx.fillText(txt,lx,ly);
         ctx.restore();
       });
+      // Repaint Chart.js point labels on top of arcs
+      try{sc.drawPointLabels(chart.data.labels.length);}catch(e){}
     }
   };
   const _dlr=window.ChartDataLabels;

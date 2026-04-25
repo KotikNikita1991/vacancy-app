@@ -197,19 +197,21 @@
       }
     }
     if(!syn.length&&!con.length)return'';
+    function valLabel(cfg){
+      var mark=keyAbbrs[cfg.a]?'<span title="Ключевая ценность профиля компании" style="color:#276749;font-weight:800;font-size:10px;vertical-align:middle"> ✓</span>':'';
+      return'<b>'+esc(cfg.n)+'</b><span style="color:#a0aec0"> ('+cfg.a+')</span>'+mark;
+    }
     function pairRows(pairs){
       if(!pairs.length)return'<div style="font-size:11px;color:#a0aec0;padding:4px 0">—</div>';
       return pairs.map(function(p){
-        var isKey=keyAbbrs[p.a.a]||keyAbbrs[p.b.a];
-        return'<div style="padding:5px 0;border-bottom:1px solid rgba(0,0,0,0.06);display:flex;align-items:baseline;gap:5px">'+
-          (isKey?'<span title="Ключевая ценность профиля компании" style="color:#276749;font-weight:800;font-size:12px;flex-shrink:0">✓</span>':'<span style="display:inline-block;width:14px;flex-shrink:0"></span>')+
-          '<span style="font-size:11px;color:#2d3748"><b>'+esc(p.a.n)+'</b> <span style="color:#a0aec0">('+p.a.a+')</span> ↔ <b>'+esc(p.b.n)+'</b> <span style="color:#a0aec0">('+p.b.a+')</span></span>'+
+        return'<div style="padding:5px 0;border-bottom:1px solid rgba(0,0,0,0.06);font-size:11px;color:#2d3748;line-height:1.5">'+
+          valLabel(p.a)+' <span style="color:#718096">↔</span> '+valLabel(p.b)+
         '</div>';
       }).join('');
     }
     var html='<div style="margin-top:14px">';
-    html+='<div style="font-size:13px;font-weight:700;color:#1a202c;margin-bottom:6px;padding-bottom:5px;border-bottom:2px solid #bee3f8">Взаимодействие ведущих ценностей (топ-5 по баллу)</div>';
-    html+='<div style="font-size:10px;color:#718096;margin-bottom:8px">✓ — одна из ценностей является ключевой в профиле компании</div>';
+    html+='<div style="font-size:13px;font-weight:700;color:#1a202c;margin-bottom:6px;padding-bottom:5px;border-bottom:2px solid #bee3f8">Взаимодействие ведущих ценностей (топ-7 по баллу)</div>';
+    html+='<div style="font-size:10px;color:#718096;margin-bottom:8px">✓ — ценность является ключевой в профиле компании</div>';
     html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
     html+='<div style="background:#f0fff4;border-radius:8px;padding:10px 12px">';
     html+='<div style="font-size:11px;font-weight:700;color:#276749;margin-bottom:6px">🟢 Синергия — ценности усиливают друг друга</div>';
@@ -233,7 +235,7 @@
     if(vals.length<10)return'';
 
     var byScore=vals.slice().sort(function(a,b){return b.sc-a.sc;});
-    var top5=byScore.slice(0,5);
+    var top5=byScore.slice(0,7);
 
     var html='';
     html+='<div style="font-size:13px;font-weight:700;color:#1a202c;margin-bottom:6px;padding-bottom:5px;border-bottom:2px solid #e2e8f0">Обзор всех 19 ценностей</div>';
