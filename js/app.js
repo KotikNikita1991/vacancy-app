@@ -1617,25 +1617,41 @@ function stripInterpretationSummary(text){
 }
 
 async function exportValueReport(inv, r){
-  let el=document.getElementById('content');
-  const saved={w:'',mw:'',ov:'',fl:'',tbl:[]};
+  let pdfWrap=null;
   try{
     await ensureHtml2Pdf();
+    const el=document.getElementById('content');
     const filename='value-report-'+((inv?.candidate_name||'employee').replace(/[^\wа-яА-ЯёЁ-]+/g,'_'))+'.pdf';
-    const hideEls=el.querySelectorAll('[data-act="val-export"],[data-act="val-list"]');
-    hideEls.forEach(x=>{x.dataset._pdfDisplay=x.style.display;x.style.display='none';});
+    toast('Формируем PDF...');
 
-    // Constrain element to A4-friendly width so flex layout doesn't stretch it
-    saved.w=el.style.width; saved.mw=el.style.maxWidth; saved.ov=el.style.overflow; saved.fl=el.style.flex;
-    el.style.width='860px'; el.style.maxWidth='860px'; el.style.overflow='hidden'; el.style.flex='none';
+    // Off-screen fixed-width container — no flex conflicts, full style preserved
+    pdfWrap=document.createElement('div');
+    pdfWrap.style.cssText='position:absolute;left:-9999px;top:0;width:840px;';
+    document.body.appendChild(pdfWrap);
 
-    // Force inner tables to adapt to the constrained width
-    el.querySelectorAll('table').forEach(t=>{
-      saved.tbl.push({el:t,w:t.style.width,mw:t.style.minWidth,tl:t.style.tableLayout,wb:t.style.wordBreak});
+    // Clone content, strip id to avoid duplicate, remove action buttons
+    const clone=el.cloneNode(true);
+    clone.removeAttribute('id');
+    clone.style.cssText='width:840px;max-width:840px;overflow:visible;padding:20px;box-sizing:border-box;background:var(--sur,#fff);font-family:var(--font,"Onest",sans-serif);';
+    clone.querySelectorAll('[data-act="val-export"],[data-act="val-list"]').forEach(x=>x.remove());
+    // Tables: fit to container
+    clone.querySelectorAll('table').forEach(t=>{
       t.style.width='100%'; t.style.minWidth='0'; t.style.tableLayout='fixed'; t.style.wordBreak='break-word';
     });
+    pdfWrap.appendChild(clone);
 
+    // Let the clone layout settle before copying canvas pixel data
     await new Promise(res=>requestAnimationFrame(res));
+
+    // Copy Chart.js canvas contents into the clone's canvas elements
+    const origCanvases=Array.from(el.querySelectorAll('canvas'));
+    const cloneCanvases=Array.from(clone.querySelectorAll('canvas'));
+    origCanvases.forEach((oc,i)=>{
+      const cc=cloneCanvases[i]; if(!cc)return;
+      cc.width=oc.width; cc.height=oc.height;
+      try{cc.getContext('2d').drawImage(oc,0,0);}catch(e){}
+    });
+
     const opt={
       margin:[8,8,8,8],
       filename:filename,
@@ -1644,19 +1660,13 @@ async function exportValueReport(inv, r){
       jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
       pagebreak:{mode:['css','legacy'],avoid:['.card']}
     };
-    toast('Формируем PDF...');
-    await html2pdf().from(el).set(opt).save();
+    await html2pdf().from(clone).set(opt).save();
     toast('PDF готов ✓');
   }catch(e){
     console.error('PDF export error:',e);
     toast('Ошибка PDF: '+(e?.message||'неизвестная ошибка'),'err');
   }finally{
-    el=document.getElementById('content');
-    if(el){
-      el.querySelectorAll('[data-act="val-export"],[data-act="val-list"]').forEach(x=>{x.style.display=x.dataset._pdfDisplay||'';});
-      el.style.width=saved.w; el.style.maxWidth=saved.mw; el.style.overflow=saved.ov; el.style.flex=saved.fl;
-      saved.tbl.forEach(s=>{s.el.style.width=s.w; s.el.style.minWidth=s.mw; s.el.style.tableLayout=s.tl; s.el.style.wordBreak=s.wb;});
-    }
+    if(pdfWrap)pdfWrap.remove();
   }
 }
 function renderValueBarChart(){
