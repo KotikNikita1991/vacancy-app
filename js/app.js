@@ -103,6 +103,40 @@ function sortVacanciesForDash(list,key,dir){
 const IC_PENCIL='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
 
 // ══ API ══════════════════════════════════════════════
+// ══ SESSION (Remember Me) ════════════════════════════
+function _sessionCfg(){
+  return (typeof VACANCY_APP!=='undefined' && VACANCY_APP.config) ? VACANCY_APP.config : {};
+}
+function saveSession(user){
+  try{
+    const cfg=_sessionCfg();
+    if(!cfg.LS_SESSION||!user)return;
+    localStorage.setItem(cfg.LS_SESSION, JSON.stringify({user:user, savedAt:Date.now()}));
+  }catch(e){}
+}
+function loadSession(){
+  try{
+    const cfg=_sessionCfg();
+    if(!cfg.LS_SESSION)return null;
+    const raw=localStorage.getItem(cfg.LS_SESSION);
+    if(!raw)return null;
+    const obj=JSON.parse(raw);
+    if(!obj||!obj.user||!obj.savedAt)return null;
+    const ttl=Number(cfg.SESSION_TTL_MS)||0;
+    if(ttl>0 && (Date.now()-Number(obj.savedAt))>ttl){
+      localStorage.removeItem(cfg.LS_SESSION);
+      return null;
+    }
+    return obj.user;
+  }catch(e){return null;}
+}
+function clearSession(){
+  try{
+    const cfg=_sessionCfg();
+    if(cfg.LS_SESSION)localStorage.removeItem(cfg.LS_SESSION);
+  }catch(e){}
+}
+
 // ══ LOGIN ════════════════════════════════════════════
 function initLoginPage(){
   ['il','ip'].forEach(id => {
@@ -146,7 +180,7 @@ async function doLogin(){
   document.getElementById('lerr').style.display='none';
 
   const res=await api('login',{login,password:pass});
-  if(res?.ok&&res.user){if(typeof hideBar==='function')hideBar();U=res.user;startApp();return;}
+  if(res?.ok&&res.user){if(typeof hideBar==='function')hideBar();U=res.user;saveSession(U);startApp();return;}
   showLErr(res?.error||(res===null?'Сервер недоступен. Попробуйте позже.':'Неверный логин или пароль'));
   rstBtn();
 }
@@ -157,10 +191,16 @@ function rstBtn(){const b=document.getElementById('lbtn');b.disabled=false;b.inn
 async function startApp(){
   document.getElementById('ls').style.display='none';
   document.getElementById('app').style.display='flex';
+  // UI-улучшения: тема и хлебные крошки в шапке
+  if(window.VAC_UI){
+    try{window.VAC_UI.theme.injectButton();}catch(e){}
+    try{window.VAC_UI.crumbs.inject();}catch(e){}
+  }
   const rc=ROLES[U.role]||{};
   const ini=U.name.split(' ').map(w=>w[0]).join('').slice(0,2);
   document.getElementById('sbav').textContent=ini;
-  document.getElementById('sbav').style.background=rc.c||'#888';
+  // Цвет аватарки в сайдбаре — детерминированный по имени (если доступен хелпер)
+  document.getElementById('sbav').style.background=(window.VAC_UI&&window.VAC_UI.color)?window.VAC_UI.color(U.name):(rc.c||'#888');
   document.getElementById('sbnm').textContent=U.name;
   document.getElementById('sbrl').textContent=rc.l||U.role;
   document.getElementById('hnm').textContent=U.name;
@@ -203,11 +243,27 @@ function navigate(page){
   document.querySelectorAll('.ni').forEach(el=>el.classList.toggle('active',el.id===`ni-${page}`));
   const ttls={dashboard:'Дашборд',analytics:'Аналитика',checklist:'Оценка кандидата',values:'Оценка ценностей',users:'Пользователи'};
   document.getElementById('httl').textContent=ttls[page]||page;
-  document.getElementById('content').innerHTML=`<div class="loading"><span class="spin spd"></span> Загружаем...</div>`;
-  renderPage(page);
+  // Сбрасываем хлебные крошки на корневую страницу
+  if(window.VAC_UI&&window.VAC_UI.crumbs){
+    try{window.VAC_UI.crumbs.set([{label:ttls[page]||page}]);}catch(e){}
+  }
+  // Skeleton-загрузка вместо «Загружаем...»
+  if(window.VAC_UI&&window.VAC_UI.skeleton){
+    try{window.VAC_UI.skeleton.show(page);}catch(e){
+      document.getElementById('content').innerHTML=`<div class="loading"><span class="spin spd"></span> Загружаем...</div>`;
+    }
+  }else{
+    document.getElementById('content').innerHTML=`<div class="loading"><span class="spin spd"></span> Загружаем...</div>`;
+  }
+  renderPage(page).finally(()=>{
+    if(window.VAC_UI&&window.VAC_UI.fade){try{window.VAC_UI.fade();}catch(e){}}
+    // Обновляем URL: страница в query (не для dashboard, чтобы было чище)
+    if(window.VAC_UI&&window.VAC_UI.url){try{window.VAC_UI.url.write();}catch(e){}}
+  });
 }
 function toggleSB(){COLSB=!COLSB;document.getElementById('sidebar').classList.toggle('col',COLSB)}
 function doLogout(){
+  clearSession();
   U=null;VACS=[];ASSESSMENTS=[];PLANS={};PERIOD=defPeriod();FStat=[];FGrp=[];FRec=[];FQ='';
   document.getElementById('app').style.display='none';
   document.getElementById('ls').style.display='flex';
@@ -261,6 +317,17 @@ async function renderDash(){
       if(dp.FQ!==undefined)FQ=dp.FQ;
     }
   }catch(e){}
+  // URL имеет приоритет над localStorage — позволяет делиться ссылкой
+  if(window.VAC_UI&&window.VAC_UI.url){
+    try{
+      const u=window.VAC_UI.url.read();
+      if(u.PERIOD)PERIOD=u.PERIOD;
+      if(u.FStat)FStat=u.FStat;
+      if(u.FGrp)FGrp=u.FGrp;
+      if(u.FRec)FRec=u.FRec;
+      if(u.FQ!==undefined)FQ=u.FQ;
+    }catch(e){}
+  }
   document.getElementById('content').innerHTML=buildDash(recNames,groups);
   bindDash();
 }
@@ -403,6 +470,8 @@ function refreshDash(){
   const filtered=applyF();
   renderStats(filtered);
   renderVacTbl(filtered);
+  // Синхронизируем фильтры в URL
+  if(window.VAC_UI&&window.VAC_UI.url){try{window.VAC_UI.url.write();}catch(e){}}
 }
 
 function renderStats(vacs){
@@ -465,7 +534,8 @@ function renderVacTbl(vacs){
     const grpBadge=v.vacancy_group?`<span style="font-size:10px;color:var(--ink3);background:var(--bg);padding:2px 7px;border-radius:5px;white-space:nowrap">${escapeHtml(v.vacancy_group)}</span>`:'';
     const overNote=isOver?'<span class="dover" style="color:var(--red)">просрочено</span>':'';
     const nm=escapeHtml(v.name||'');
-    return`<tr>
+    const heatCls=(window.VAC_UI&&window.VAC_UI.vacancyHeatClass)?window.VAC_UI.vacancyHeatClass(v):'';
+    return`<tr data-vacid="${escapeHtml(v.id)}"${heatCls?` class="${heatCls}"`:''}>
       <td style="font-size:12px;color:var(--ink2);white-space:nowrap">${fru(v.date_opened)}</td>
       <td class="td-vac-name">
         <div class="vn-clamp" title="${nm}">${nm}</div>
@@ -638,6 +708,10 @@ async function openVacModal(vac=null){
   if(_fs)_fs.addEventListener('change',e=>onStatusChange(e.target.value));
   if(_fg)_fg.addEventListener('change',e=>onGroupChange(e.target.value));
   onStatusChange(v.status||'В работе');
+  // Включаем отслеживание изменений для подтверждения закрытия
+  if(window.VAC_UI&&window.VAC_UI.modal){
+    try{window.VAC_UI.modal.track(document.getElementById('vac-modal'));}catch(e){}
+  }
 }
 
 function onGroupChange(grp){
@@ -671,9 +745,13 @@ function onStatusChange(status){
   }
 }
 
-function closeModal(){
+function closeModal(force){
   const m=document.getElementById('vac-modal');
-  if(m)m.remove();
+  if(!m)return;
+  if(!force&&window.VAC_UI&&window.VAC_UI.modal){
+    if(!window.VAC_UI.modal.confirmClose(m))return;
+  }
+  m.remove();
 }
 
 async function openQuickStatusModal(vac){
@@ -710,11 +788,18 @@ async function openQuickStatusModal(vac){
   };
   document.getElementById('qst-status')?.addEventListener('change',sync);
   sync();
+  if(window.VAC_UI&&window.VAC_UI.modal){
+    try{window.VAC_UI.modal.track(document.getElementById('qst-modal'));}catch(e){}
+  }
 }
 
-function closeQuickStatusModal(){
+function closeQuickStatusModal(force){
   const m=document.getElementById('qst-modal');
-  if(m)m.remove();
+  if(!m)return;
+  if(!force&&window.VAC_UI&&window.VAC_UI.modal){
+    if(!window.VAC_UI.modal.confirmClose(m))return;
+  }
+  m.remove();
 }
 
 async function saveQuickStatus(vacId){
@@ -740,12 +825,44 @@ async function saveQuickStatus(vacId){
   }else{
     fields.transferred = vac.transferred && st!=='Передана' ? vac.transferred : false;
   }
+  // Снимаем «снимок» предыдущих значений для возможного отката
+  const prev={
+    status:vac.status,
+    fact_date:vac.fact_date||'',
+    transfer_date:vac.transfer_date||'',
+    transferred:!!vac.transferred,
+    transferred_from_id:vac.transferred_from_id||'',
+    transferred_from_name:vac.transferred_from_name||'',
+    current_recruiter_id:vac.current_recruiter_id||'',
+    current_recruiter_name:vac.current_recruiter_name||''
+  };
   const res=await api('updateVacancy',{id:vacId,fields});
   if(res?.ok||res===null){
     Object.assign(vac,fields,{fact_date:fields.fact_date||vac.fact_date,transfer_date:fields.transfer_date||vac.transfer_date,current_recruiter_id:fields.current_recruiter_id||vac.current_recruiter_id,current_recruiter_name:fields.current_recruiter_name||vac.current_recruiter_name});
-    closeQuickStatusModal();
-    toast('Статус обновлён');
+    if(window.VAC_UI&&window.VAC_UI.modal){try{window.VAC_UI.modal.markClean(document.getElementById('qst-modal'));}catch(e){}}
+    closeQuickStatusModal(true);
     refreshDash();
+    toast(`Статус: ${prev.status} → ${st}`,'ok',{
+      undo:async function(){
+        // Откат: применяем prev и отправляем обратно на сервер
+        const undoFields={
+          status:prev.status,
+          fact_date:prev.fact_date,
+          transfer_date:prev.transfer_date,
+          transferred:prev.transferred,
+          transferred_from_id:prev.transferred_from_id,
+          transferred_from_name:prev.transferred_from_name,
+          current_recruiter_id:prev.current_recruiter_id,
+          current_recruiter_name:prev.current_recruiter_name
+        };
+        Object.assign(vac,undoFields);
+        refreshDash();
+        const r2=await api('updateVacancy',{id:vacId,fields:undoFields});
+        if(r2?.ok||r2===null)toast('Изменение статуса отменено','ok');
+        else toast('Откат не удался — обновите страницу','err');
+      },
+      duration:6000
+    });
   }else toast(res?.error||'Не удалось обновить статус','err');
 }
 
@@ -861,19 +978,48 @@ async function saveVac(existingId){
     }
   }
 
-  closeModal();
+  // Помечаем модалку «чистой», чтобы при закрытии не спросили про несохранённые изменения
+  if(window.VAC_UI&&window.VAC_UI.modal){
+    try{window.VAC_UI.modal.markClean(document.getElementById('vac-modal'));}catch(e){}
+  }
+  closeModal(true);
   toast(isEdit?'Вакансия обновлена ✓':'Вакансия создана ✓');
   refreshDash(); // сразу обновляем таблицу без перезагрузки страницы
 }
 
 async function deleteVac(id,fromModal=false){
   if(!canDelete())return;
-  if(!confirm('Удалить вакансию? Это действие нельзя отменить.'))return;
-  const res=await api('deleteVacancy',{id});
-  VACS=VACS.filter(v=>v.id!==id);
+  // Найдём вакансию и запомним для возможной отмены
+  const idx=VACS.findIndex(v=>String(v.id)===String(id));
+  if(idx===-1)return;
+  const vac=VACS[idx];
+  // Оптимистичное удаление из UI; реальный DELETE через 6 сек,
+  // если за это время пользователь не нажал «Отменить»
+  VACS.splice(idx,1);
   if(fromModal)closeModal();
-  toast('Вакансия удалена');
   refreshDash();
+  let cancelled=false;
+  const finalize=async ()=>{
+    if(cancelled)return;
+    const res=await api('deleteVacancy',{id});
+    if(!res||(res.ok===false&&!res.silent)){
+      // Откатываем локально, если бэк не подтвердил
+      VACS.splice(Math.min(idx,VACS.length),0,vac);
+      refreshDash();
+      toast('Не удалось удалить — восстановлено','err');
+    }
+  };
+  const timer=setTimeout(finalize,6000);
+  toast(`Вакансия «${vac.name||''}» удалена`,'ok',{
+    undo:function(){
+      cancelled=true;
+      clearTimeout(timer);
+      VACS.splice(Math.min(idx,VACS.length),0,vac);
+      refreshDash();
+      toast('Удаление отменено','ok');
+    },
+    duration:6000
+  });
 }
 
 // ══ ANALYTICS ════════════════════════════════════════
@@ -1010,7 +1156,7 @@ async function renderAnalytics(){
           ?`<div class="empty" style="padding:32px"><p style="color:var(--ink3)">Нет данных за выбранный период</p></div>`
           :Object.entries(byRec).map(([id,r])=>`
           <div class="rec-row">
-            <div class="rec-av">${r.name.charAt(0)}</div>
+            <div class="rec-av av-shimmer" style="background:${(window.VAC_UI&&window.VAC_UI.color)?window.VAC_UI.color(r.name):'var(--acc)'}">${(window.VAC_UI&&window.VAC_UI.initials)?window.VAC_UI.initials(r.name,2):r.name.charAt(0)}</div>
             <div style="min-width:140px">
               <div style="font-weight:600;font-size:13px">${r.name}</div>
               <div style="font-size:11px;color:var(--ink3)">${r.opened} откр. · ${r.in_work_period} в работе за период · ${r.atStart} на начало</div>
@@ -1992,11 +2138,18 @@ function openValueModal(){
     </div>
   </div>`;
   document.body.insertAdjacentHTML('beforeend',html);
+  if(window.VAC_UI&&window.VAC_UI.modal){
+    try{window.VAC_UI.modal.track(document.getElementById('val-modal'));}catch(e){}
+  }
 }
 
-function closeValueModal(){
+function closeValueModal(force){
   const m=document.getElementById('val-modal');
-  if(m)m.remove();
+  if(!m)return;
+  if(!force&&window.VAC_UI&&window.VAC_UI.modal){
+    if(!window.VAC_UI.modal.confirmClose(m))return;
+  }
+  m.remove();
 }
 
 async function sendValueInvite(){
@@ -2018,7 +2171,8 @@ async function sendValueInvite(){
   });
   if(res?.ok){
     toast('Ссылка отправлена кандидату ✓');
-    closeValueModal();
+    if(window.VAC_UI&&window.VAC_UI.modal){try{window.VAC_UI.modal.markClean(document.getElementById('val-modal'));}catch(e){}}
+    closeValueModal(true);
     await renderValues();
   }else{
     toast(res?.error||'Не удалось отправить ссылку','err');
@@ -2405,9 +2559,10 @@ async function renderUsers(){
     const isMe=u.id===U.id;
     // Храним данные в data-атрибуте, читаем через dataset в обработчике
     const di=users.indexOf(u);
+    const _av=(window.VAC_UI&&window.VAC_UI.avatarHtml)?window.VAC_UI.avatarHtml(u.name,32,{shimmer:true}):('<div style="width:32px;height:32px;border-radius:50%;background:'+rc.c+';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0">'+u.name.charAt(0)+'</div>');
     return '<tr>'
       +'<td><div style="display:flex;align-items:center;gap:10px">'
-      +'<div style="width:32px;height:32px;border-radius:50%;background:'+rc.c+';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0">'+u.name.charAt(0)+'</div>'
+      +_av
       +'<div><div style="font-weight:600;font-size:13px">'+u.name+(isMe?' <span style="font-size:10px;color:var(--ink3)">(вы)</span>':'')+'</div></div>'
       +'</div></td>'
       +'<td style="font-size:13px;color:var(--ink2)">'+u.login+'</td>'
@@ -2488,10 +2643,18 @@ function openUserModal(user){
   if(uc)uc.addEventListener('click',()=>closeUserModal());
   const sb=document.getElementById('btn-save-user');
   if(sb)sb.addEventListener('click',()=>saveUser());
+  if(window.VAC_UI&&window.VAC_UI.modal){
+    try{window.VAC_UI.modal.track(document.getElementById('user-modal'));}catch(e){}
+  }
 }
 
-function closeUserModal(){
-  const m=document.getElementById('user-modal');if(m)m.remove();
+function closeUserModal(force){
+  const m=document.getElementById('user-modal');
+  if(!m)return;
+  if(!force&&window.VAC_UI&&window.VAC_UI.modal){
+    if(!window.VAC_UI.modal.confirmClose(m))return;
+  }
+  m.remove();
 }
 
 async function saveUser(){
@@ -2516,7 +2679,8 @@ async function saveUser(){
   });
   if(res?.ok||!res){
     toast(isEdit?'Пользователь обновлён ✓':'Пользователь создан ✓');
-    closeUserModal();
+    if(window.VAC_UI&&window.VAC_UI.modal){try{window.VAC_UI.modal.markClean(document.getElementById('user-modal'));}catch(e){}}
+    closeUserModal(true);
     navigate('users');
   }else{
     toast(res.error||'Ошибка','err');
@@ -2706,3 +2870,12 @@ function exportCsvVacancies(){
 }
 
 initLoginPage();
+
+// Автовосстановление сессии: если в localStorage есть валидный пользователь —
+// сразу запускаем приложение, минуя экран входа.
+(function tryRestoreSession(){
+  try{
+    const u=loadSession();
+    if(u&&u.role){U=u;startApp();}
+  }catch(e){}
+})();

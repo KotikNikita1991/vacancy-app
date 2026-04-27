@@ -10,6 +10,10 @@
     LS_API_LAST_OK: 'vacancy_app_api_last_ok',
     LS_DASH_PREFS: 'vacancy_app_dash_prefs',
     LS_PLANS: 'vacancy_app_plans',
+    // Сессия пользователя (Remember Me): храним {user, savedAt}.
+    // Срок жизни — 14 дней; по истечении токена снова показываем экран входа.
+    LS_SESSION: 'vacancy_app_session_v1',
+    SESSION_TTL_MS: 14 * 24 * 60 * 60 * 1000,
     // Холодный старт Apps Script + отправка письма (GmailApp) часто > 20 с.
     API_TIMEOUT_MS: 120000
   };
