@@ -5,6 +5,10 @@ let FStat=[], FGrp=[], FRec=[];
 const FILTER_STATUS_OPTS=['В работе','Закрыта','Приостановлена','Отменена','Передана'];
 // Сортировка таблицы дашборда
 let DASH_SORT={key:'date_opened',dir:'desc'};
+// Вид дашборда: 'table' | 'kanban'
+let VAC_VIEW='table';
+// Чекбоксы выбранных вакансий (Set строковых id)
+let VAC_SELECTED=new Set();
 // Планы: {recruiterId: {month(YYYY-MM): count}}
 let PLANS = {};
 let UL = [];
@@ -328,6 +332,8 @@ async function renderDash(){
       if(u.FQ!==undefined)FQ=u.FQ;
     }catch(e){}
   }
+  // Восстановим выбранный вид
+  try{const sv=localStorage.getItem('vacancy_app_view');if(sv==='table'||sv==='kanban')VAC_VIEW=sv;}catch(e){}
   document.getElementById('content').innerHTML=buildDash(recNames,groups);
   bindDash();
 }
@@ -367,7 +373,18 @@ function buildDash(recNames,groups){
       Новая вакансия
     </button>`:''}
     <button type="button" class="papply" id="btn-export-csv-vac">CSV</button>
+    <div class="view-toggle" role="tablist" aria-label="Вид">
+      <button type="button" class="vt-btn${VAC_VIEW==='table'?' on':''}" data-view="table" title="Таблица">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+        Таблица
+      </button>
+      <button type="button" class="vt-btn${VAC_VIEW==='kanban'?' on':''}" data-view="kanban" title="Канбан">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="18" rx="1"/><rect x="11" y="3" width="6" height="11" rx="1"/><rect x="19" y="3" width="2" height="6" rx="1"/></svg>
+        Канбан
+      </button>
+    </div>
   </div>
+  <div id="bulk-bar" class="bulk-bar" hidden></div>
   <div id="stats-row" class="stats-row"></div>
   <div class="card">
     <div class="ch">
@@ -407,6 +424,19 @@ function bindDash(){
   if(bn)bn.addEventListener('click',()=>openVacModal());
   const bx=document.getElementById('btn-export-csv-vac');
   if(bx)bx.addEventListener('click',()=>exportCsvVacancies());
+  // Переключатель Таблица / Канбан
+  document.querySelectorAll('.vt-btn[data-view]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const v=b.dataset.view;
+      if(v!=='table'&&v!=='kanban')return;
+      if(VAC_VIEW===v)return;
+      VAC_VIEW=v;
+      try{localStorage.setItem('vacancy_app_view',v);}catch(e){}
+      document.querySelectorAll('.vt-btn[data-view]').forEach(x=>x.classList.toggle('on',x.dataset.view===v));
+      VAC_SELECTED.clear();
+      refreshDash();
+    });
+  });
   refreshDash();
 }
 
@@ -504,14 +534,26 @@ function thSort(key,label){
 
 function renderVacTbl(vacs){
   const el=document.getElementById('vtbl');if(!el)return;
+  // Если выбран канбан-вид — рендерим канбан и выходим
+  if(VAC_VIEW==='kanban'&&window.VAC_DASH&&window.VAC_DASH.renderKanban){
+    window.VAC_DASH.renderKanban(vacs);
+    return;
+  }
   const showRec=U.role!=='recruiter';
+  const showCb=canEdit();
   if(!vacs.length){
     el.innerHTML=`<div class="empty" style="padding:36px"><p style="color:var(--ink3)">Нет вакансий по выбранным фильтрам</p></div>`;
+    if(window.VAC_DASH&&window.VAC_DASH.refreshBulkBar)window.VAC_DASH.refreshBulkBar();
     return;
   }
   const sorted=sortVacanciesForDash(vacs,DASH_SORT.key,DASH_SORT.dir);
   const editTitle=canEdit()?'Редактировать':'Просмотр';
+  // Чистим выбранные id, которых нет среди отображаемых
+  const visibleIds=new Set(sorted.map(v=>String(v.id)));
+  Array.from(VAC_SELECTED).forEach(id=>{if(!visibleIds.has(id))VAC_SELECTED.delete(id);});
+  const allChecked=sorted.length>0&&sorted.every(v=>VAC_SELECTED.has(String(v.id)));
   el.innerHTML=`<table><thead><tr>
+    ${showCb?`<th style="width:32px;padding-left:14px"><input type="checkbox" id="cb-all" ${allChecked?'checked':''} aria-label="Выбрать все" style="accent-color:var(--acc);cursor:pointer"></th>`:''}
     ${thSort('date_opened','Дата')}
     ${thSort('name','Вакансия')}
     ${thSort('vacancy_group','Группа')}
@@ -535,7 +577,10 @@ function renderVacTbl(vacs){
     const overNote=isOver?'<span class="dover" style="color:var(--red)">просрочено</span>':'';
     const nm=escapeHtml(v.name||'');
     const heatCls=(window.VAC_UI&&window.VAC_UI.vacancyHeatClass)?window.VAC_UI.vacancyHeatClass(v):'';
-    return`<tr data-vacid="${escapeHtml(v.id)}"${heatCls?` class="${heatCls}"`:''}>
+    const checked=VAC_SELECTED.has(String(v.id));
+    const trCls=[heatCls,checked?'row-checked':''].filter(Boolean).join(' ');
+    return`<tr data-vacid="${escapeHtml(v.id)}"${trCls?` class="${trCls}"`:''}>
+      ${showCb?`<td style="padding-left:14px"><input type="checkbox" class="cb-row" data-vacid="${escapeHtml(v.id)}" ${checked?'checked':''} aria-label="Выбрать" style="accent-color:var(--acc);cursor:pointer"></td>`:''}
       <td style="font-size:12px;color:var(--ink2);white-space:nowrap">${fru(v.date_opened)}</td>
       <td class="td-vac-name">
         <div class="vn-clamp" title="${nm}">${nm}</div>
@@ -543,9 +588,9 @@ function renderVacTbl(vacs){
         ${v.transferred?`<div class="btag">↗ от ${escapeHtml(v.transferred_from_name||'')} · ${fru(v.transfer_date)}</div>`:''}
       </td>
       <td>${grpBadge}</td>
-      ${showRec?`<td style="font-size:12px;color:var(--ink2);white-space:nowrap">${escapeHtml(v.current_recruiter_name||'')}</td>`:''}
-      <td style="vertical-align:middle">
-        <button type="button" class="badge ${sc}" data-act="quick-status" data-vacid="${escapeHtml(v.id)}" style="border:0;cursor:pointer">${escapeHtml(v.status)}</button>
+      ${showRec?`<td class="td-recruiter" data-cell="recruiter" data-vacid="${escapeHtml(v.id)}" style="font-size:12px;color:var(--ink2);white-space:nowrap;${canEdit()?'cursor:pointer':''}" title="${canEdit()?'Кликни для смены рекрутера':''}">${escapeHtml(v.current_recruiter_name||'—')}</td>`:''}
+      <td class="td-status" data-cell="status" data-vacid="${escapeHtml(v.id)}" style="vertical-align:middle">
+        <button type="button" class="badge ${sc}" data-act="status-inline" data-vacid="${escapeHtml(v.id)}" style="border:0;cursor:pointer">${escapeHtml(v.status)}</button>
       </td>
       <td style="font-size:12px;color:var(--ink2);white-space:nowrap">${fru(v.fact_date||'')||'—'}</td>
       <td style="font-size:12px;color:var(--ink2);white-space:nowrap">${escapeHtml(v.salary_offer||'—')}</td>
@@ -557,10 +602,12 @@ function renderVacTbl(vacs){
       </td>
       <td style="white-space:nowrap;display:flex;gap:4px;align-items:center">
         <button type="button" class="btn-icon-pencil" data-act="edit-vac" data-vacid="${escapeHtml(v.id)}" title="${escapeHtml(editTitle)}" aria-label="${escapeHtml(editTitle)}">${IC_PENCIL}</button>
+        ${canCreate()?`<button type="button" class="btn-icon-pencil" data-act="dup-vac" data-vacid="${escapeHtml(v.id)}" title="Создать копию" aria-label="Дублировать" style="background:var(--bg);color:var(--ink2);border-color:var(--bg2)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>`:''}
         ${canDelete()?`<button type="button" class="btn-danger" data-act="del-vac" data-vacid="${escapeHtml(v.id)}">✕</button>`:''}
       </td>
     </tr>`;
   }).join('')}</tbody></table>`;
+  if(window.VAC_DASH&&window.VAC_DASH.refreshBulkBar)window.VAC_DASH.refreshBulkBar();
 }
 
 // ══ VACANCY MODAL ════════════════════════════════════
@@ -2751,9 +2798,20 @@ function initGlobalActs(){
       if(v) openVacModal(v);
     } else if(act==='del-vac'){
       deleteVac(el.dataset.vacid, el.dataset.force==='1');
+    } else if(act==='dup-vac'){
+      if(window.VAC_DASH&&window.VAC_DASH.duplicateVac)window.VAC_DASH.duplicateVac(el.dataset.vacid);
     } else if(act==='quick-status'){
+      // legacy alias — оставляем для обратной совместимости
       const v=VACS.find(x=>String(x.id)===String(el.dataset.vacid));
       if(v)openQuickStatusModal(v);
+    } else if(act==='status-inline'){
+      // Новый inline-режим: пробует inline-select; если в нём requires modal — откроет
+      if(window.VAC_DASH&&window.VAC_DASH.startInlineStatus){
+        window.VAC_DASH.startInlineStatus(el.dataset.vacid);
+      }else{
+        const v=VACS.find(x=>String(x.id)===String(el.dataset.vacid));
+        if(v)openQuickStatusModal(v);
+      }
     } else if(act==='vac-overlay'){
       if(ev.target===el) closeModal();
     } else if(act==='close-vac-modal'){

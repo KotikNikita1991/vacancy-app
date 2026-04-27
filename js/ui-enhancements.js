@@ -555,22 +555,24 @@
     PREVIEW_EL=el;
     requestAnimationFrame(function(){el.classList.add('show');});
   }
-  // Делегирование hover на таблицу вакансий
+  // Делегирование hover ТОЛЬКО на ячейку «Вакансия» (.td-vac-name)
+  // — чтобы превью не вылезало при наведении на статус, чекбоксы, действия.
   document.addEventListener('mouseenter',function(e){
-    var tr=e.target&&e.target.closest&&e.target.closest('#vtbl tbody tr[data-vacid]');
-    if(!tr)return;
-    var id=tr.dataset.vacid;
-    if(!id||typeof VACS==='undefined')return;
-    var vac=VACS.find(function(x){return String(x.id)===String(id);});
+    var td=e.target&&e.target.closest&&e.target.closest('#vtbl tbody td.td-vac-name');
+    if(!td)return;
+    var tr=td.parentNode;
+    if(!tr||!tr.dataset||!tr.dataset.vacid)return;
+    if(typeof VACS==='undefined')return;
+    var vac=VACS.find(function(x){return String(x.id)===String(tr.dataset.vacid);});
     if(!vac)return;
     PREVIEW_TIMER=setTimeout(function(){
-      var rect=tr.getBoundingClientRect();
+      var rect=td.getBoundingClientRect();
       previewShow(vac,rect);
-    },350);
+    },400);
   },true);
   document.addEventListener('mouseleave',function(e){
-    var tr=e.target&&e.target.closest&&e.target.closest('#vtbl tbody tr[data-vacid]');
-    if(!tr)return;
+    var td=e.target&&e.target.closest&&e.target.closest('#vtbl tbody td.td-vac-name');
+    if(!td)return;
     previewHide();
   },true);
   // Скрываем превью при скролле/клике
