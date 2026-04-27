@@ -223,6 +223,7 @@ function route(action, data) {
       createValueAssessmentInvite: () => createValueAssessmentInvite(data),
       getValueAssessments:         () => getValueAssessments(data),
       getValueAssessmentResult:    () => getValueAssessmentResult(data),
+      updateValueInviteFields:     () => updateValueInviteFields(data),
       deleteValueAssessment:       () => deleteValueAssessment(data),
       startValueSurvey:            () => startValueSurvey(data),
       submitValueSurvey:           () => submitValueSurvey(data),
@@ -842,6 +843,40 @@ function deleteValueAssessment(data) {
   deleteRowByValue_(getSheet(SH.VALUE_RESULTS), 2, id);
 
   return { ok: true, message: 'Оценка ценностей удалена' };
+}
+
+// Точечное обновление полей строки приглашения (department / employee_group).
+// Используется для пост-фактум классификации старых записей, у которых эти
+// поля были пустые. Меняет только те поля, что переданы в data.fields.
+function updateValueInviteFields(data) {
+  const id = String(data.id || '');
+  if (!id) return { ok: false, error: 'Нет id' };
+  const fields = data.fields || {};
+  const ALLOWED = ['department','employee_group'];
+  const sheet = getSheet(SH.VALUE_INVITES);
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length < 2) return { ok: false, error: 'Запись не найдена' };
+  const map = headerMap_(sheet);
+  // Ищем строку по id (1-я колонка)
+  let rowIdx = -1;
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === id) { rowIdx = i; break; }
+  }
+  if (rowIdx < 0) return { ok: false, error: 'Запись не найдена' };
+  const updatedFields = {};
+  ALLOWED.forEach(function(k){
+    if (!Object.prototype.hasOwnProperty.call(fields, k)) return;
+    if (!map.hasOwnProperty(k)) return;
+    const newVal = fields[k] == null ? '' : String(fields[k]);
+    sheet.getRange(rowIdx + 1, map[k] + 1).setValue(newVal);
+    updatedFields[k] = newVal;
+  });
+  // Обновим updated_at, если такая колонка есть
+  if (map.hasOwnProperty('updated_at')) {
+    sheet.getRange(rowIdx + 1, map['updated_at'] + 1).setValue(new Date());
+  }
+  try { SpreadsheetApp.flush(); } catch (e) {}
+  return { ok: true, updated: updatedFields };
 }
 
 function startValueSurvey(data) {

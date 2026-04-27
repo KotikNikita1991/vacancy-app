@@ -396,3 +396,36 @@ td.td-recruiter:hover{background:var(--bg)}
 .kb-days{font-weight:700;color:var(--ink2)}
 .kb-date{color:var(--ink3)}
 :root[data-theme="dark"] .kb-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.4)}
+
+/* ═══════════════════════════════════════════════════════════════
+   PDF-выгрузка — общий запрет разрывов внутри блоков
+   ═══════════════════════════════════════════════════════════════ */
+[data-vcard]{break-inside:avoid;page-break-inside:avoid}
+.card{break-inside:avoid;page-break-inside:avoid}
+canvas{break-inside:avoid;page-break-inside:avoid}
+
+/* ═══════════════════════════════════════════════════════════════
+   Кандидатский PDF-режим: нейтральные цвета, без оценочных меток
+   Активируется атрибутом body[data-pdf-mode="candidate"] во время
+   выгрузки. После сохранения PDF атрибут снимается.
+   Используем !important, потому что у элементов есть inline-style.
+   ═══════════════════════════════════════════════════════════════ */
+[data-pdf-mode="candidate"] [data-vcard]{
+  background:#ffffff!important;
+  border-color:#e2e8f0!important;
+}
+[data-pdf-mode="candidate"] [data-vbadge],
+[data-pdf-mode="candidate"] [data-vscore]{
+  background:#f7fafc!important;
+  border-color:#e2e8f0!important;
+  color:#2d3748!important;
+}
+[data-pdf-mode="candidate"] [data-vband]{display:none!important}
+[data-pdf-mode="candidate"] [data-videal]{display:none!important}
+[data-pdf-mode="candidate"] [data-vrisk]{display:none!important}
+[data-pdf-mode="candidate"] [data-vatt]{display:none!important}
+[data-pdf-mode="candidate"] [data-vrec]{display:none!important}
+[data-pdf-mode="candidate"] [data-vdem]{display:none!important}
+/* «Мотивирует» нейтрализуем по цвету, но оставляем — это полезно кандидату */
+[data-pdf-mode="candidate"] [data-vmot]{color:#4a5568!important}
+[data-pdf-mode="candidate"] .vac-alt-calc{display:none!important}

@@ -169,24 +169,26 @@
     var interpTxt=interp?interp[b]:'';
     var isHigh=b==='hi'||b==='vh';
     var st=status(v.sc,v.cfg);
-    var html='<div style="border:1px solid '+c.bd+';border-radius:8px;padding:10px 14px;margin-bottom:8px;background:'+c.bg+'">';
+    // data-vcard/data-vband/data-videal/data-vrisk — маркеры для кандидатского
+    // PDF-режима (см. CSS правила [data-pdf-mode="candidate"]).
+    var html='<div data-vcard="1" style="border:1px solid '+c.bd+';border-radius:8px;padding:10px 14px;margin-bottom:8px;background:'+c.bg+';break-inside:avoid;page-break-inside:avoid">';
     html+='<div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:5px">';
-    if(typeof idx==='number'){html+='<span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#fff;border:1px solid '+c.bd+';font-size:11px;font-weight:700;color:'+c.tx+'">'+idx+'</span>';}
+    if(typeof idx==='number'){html+='<span data-vbadge="1" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#fff;border:1px solid '+c.bd+';font-size:11px;font-weight:700;color:'+c.tx+'">'+idx+'</span>';}
     html+='<span style="font-weight:700;font-size:13px;color:#1a202c">'+esc(v.cfg.n)+'</span>';
     html+='<span style="font-size:10px;color:#a0aec0">('+esc(v.cfg.a)+')</span>';
-    html+='<span style="padding:2px 9px;border-radius:999px;background:#fff;border:1px solid '+c.bd+';font-size:11px;font-weight:700;color:'+c.tx+'">'+v.sc.toFixed(2)+'</span>';
-    html+='<span style="font-size:10px;color:'+c.tx+'">'+bandLabel(b)+'</span>';
-    html+='<span style="font-size:10px;color:#a0aec0">Идеал: '+v.cfg.mn+'–'+v.cfg.mx+'</span>';
+    html+='<span data-vscore="1" style="padding:2px 9px;border-radius:999px;background:#fff;border:1px solid '+c.bd+';font-size:11px;font-weight:700;color:'+c.tx+'">'+v.sc.toFixed(2)+'</span>';
+    html+='<span data-vband="1" style="font-size:10px;color:'+c.tx+'">'+bandLabel(b)+'</span>';
+    html+='<span data-videal="1" style="font-size:10px;color:#a0aec0">Идеал: '+v.cfg.mn+'–'+v.cfg.mx+'</span>';
     html+='</div>';
-    if(interpTxt){html+='<div style="font-size:11px;font-style:italic;color:#4a5568;margin-bottom:6px;line-height:1.5">'+esc(interpTxt)+'</div>';}
+    if(interpTxt){html+='<div data-vinterp="1" style="font-size:11px;font-style:italic;color:#4a5568;margin-bottom:6px;line-height:1.5">'+esc(interpTxt)+'</div>';}
     if(card){
-      html+='<div style="font-size:11px;color:#4a5568;line-height:1.6">';
-      html+='<div><b>Поведение:</b> '+esc(isHigh?card.bH:card.bL)+'</div>';
-      if((b==='vh'||st!=='in')&&isHigh&&card.rH){html+='<div style="color:#744210;margin-top:2px"><b>Риск:</b> '+esc(card.rH)+'</div>';}
-      html+='<div style="color:#276749;margin-top:3px"><b>Мотивирует:</b> '+esc(card.mot)+'</div>';
-      if(card.dem){html+='<div style="color:#9b2c2c;margin-top:2px"><b>Демотивирует:</b> '+esc(card.dem)+'</div>';}
-      if(st!=='in'&&card.att){html+='<div style="margin-top:5px;padding:5px 8px;background:rgba(0,0,0,0.04);border-radius:5px;color:#744210"><b>На заметку:</b> '+esc(card.att)+'</div>';}
-      if(st!=='in'&&card.rec){html+='<div style="margin-top:4px;padding:5px 8px;background:rgba(43,108,176,0.06);border-radius:5px;color:#2b6cb0"><b>Рекомендация:</b> '+esc(card.rec)+'</div>';}
+      html+='<div data-vdetails="1" style="font-size:11px;color:#4a5568;line-height:1.6">';
+      html+='<div data-vbehavior="1"><b>Поведение:</b> '+esc(isHigh?card.bH:card.bL)+'</div>';
+      if((b==='vh'||st!=='in')&&isHigh&&card.rH){html+='<div data-vrisk="1" style="color:#744210;margin-top:2px"><b>Риск:</b> '+esc(card.rH)+'</div>';}
+      html+='<div data-vmot="1" style="color:#276749;margin-top:3px"><b>Мотивирует:</b> '+esc(card.mot)+'</div>';
+      if(card.dem){html+='<div data-vdem="1" style="color:#9b2c2c;margin-top:2px"><b>Демотивирует:</b> '+esc(card.dem)+'</div>';}
+      if(st!=='in'&&card.att){html+='<div data-vatt="1" style="margin-top:5px;padding:5px 8px;background:rgba(0,0,0,0.04);border-radius:5px;color:#744210"><b>На заметку:</b> '+esc(card.att)+'</div>';}
+      if(st!=='in'&&card.rec){html+='<div data-vrec="1" style="margin-top:4px;padding:5px 8px;background:rgba(43,108,176,0.06);border-radius:5px;color:#2b6cb0"><b>Рекомендация:</b> '+esc(card.rec)+'</div>';}
       html+='</div>';
     }
     html+='</div>';

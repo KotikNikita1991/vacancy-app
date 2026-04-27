@@ -1,18 +1,23 @@
-﻿let U=null, VACS=[], ASSESSMENTS=[], PAGE='dashboard', COLSB=false;
-let PERIOD=defPeriod(), FQ='';
+﻿// ВАЖНО: на верхнем уровне используем var (а не let), чтобы переменные становились
+// свойствами window и были доступны другим скриптам (ui-enhancements.js,
+// dashboard-enhancements.js). С let они «висят» в lexical-scope текущего скрипта,
+// а window.VACS / window.U / window.VAC_SELECTED оказываются undefined — из-за
+// чего ломаются чекбоксы, inline-edit и дубликат вакансии.
+var U=null, VACS=[], ASSESSMENTS=[], PAGE='dashboard', COLSB=false;
+var PERIOD=defPeriod(), FQ='';
 // Пустой массив = «все» (мультивыбор фильтров)
-let FStat=[], FGrp=[], FRec=[];
+var FStat=[], FGrp=[], FRec=[];
 const FILTER_STATUS_OPTS=['В работе','Закрыта','Приостановлена','Отменена','Передана'];
 // Сортировка таблицы дашборда
-let DASH_SORT={key:'date_opened',dir:'desc'};
+var DASH_SORT={key:'date_opened',dir:'desc'};
 // Вид дашборда: 'table' | 'kanban'
-let VAC_VIEW='table';
+var VAC_VIEW='table';
 // Чекбоксы выбранных вакансий (Set строковых id)
-let VAC_SELECTED=new Set();
+var VAC_SELECTED=new Set();
 // Планы: {recruiterId: {month(YYYY-MM): count}}
-let PLANS = {};
-let UL = [];
-let ACTIVE_TRANSFER_USERS = [];
+var PLANS = {};
+var UL = [];
+var ACTIVE_TRANSFER_USERS = [];
 
 function filterDdHtml(ddId,label,opts,selected){
   const boxes=opts.map(o=>{
@@ -372,7 +377,6 @@ function buildDash(recNames,groups){
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       Новая вакансия
     </button>`:''}
-    <button type="button" class="papply" id="btn-export-csv-vac">CSV</button>
     <div class="view-toggle" role="tablist" aria-label="Вид">
       <button type="button" class="vt-btn${VAC_VIEW==='table'?' on':''}" data-view="table" title="Таблица">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
@@ -422,8 +426,6 @@ function bindDash(){
   if(br)br.addEventListener('click',()=>{resetF();});
   const bn=document.getElementById('btn-new-vac');
   if(bn)bn.addEventListener('click',()=>openVacModal());
-  const bx=document.getElementById('btn-export-csv-vac');
-  if(bx)bx.addEventListener('click',()=>exportCsvVacancies());
   // Переключатель Таблица / Канбан
   document.querySelectorAll('.vt-btn[data-view]').forEach(b=>{
     b.addEventListener('click',()=>{
@@ -1674,27 +1676,18 @@ function renderValuesList(el){
         Новая оценка ценностей
       </button>
     </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-      ${[
-        ['all','Все'],
-        ['red','Красный'],
-        ['yellow','Жёлтый'],
-        ['blue','Синий'],
-        ['green','Зелёный']
-      ].map(([id,label])=>`<button type="button" class="btn-sm" data-act="val-filter" data-filter="${id}" style="${V_PROFILE_FILTER===id?'background:#7B5EA7;color:#fff;border-color:#7B5EA7':''}">${label}</button>`).join('')}
-    </div>
     ${filtered.length===0
       ?`<div class="card"><div class="empty" style="padding:60px">
         <div class="empty-ico" style="background:var(--accbg)"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--acc)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${IC.val}</svg></div>
-        <h3>${VLIST.length===0?'Нет отправленных опросов':'Нет данных по фильтру'}</h3><p>Измените фильтр или отправьте новый опрос.</p>
+        <h3>Нет отправленных опросов</h3><p>Отправьте новый опрос кандидату — он появится здесь.</p>
       </div></div>`
       :`<div class="card"><div class="tbl-wrap"><table>
         <thead><tr><th>Сотрудник</th><th>Подразделение</th><th>Группа</th><th>Рекрутер</th><th>Дата отправки</th><th>Статус</th><th>Совпадение</th><th>Действия</th></tr></thead>
         <tbody>${filtered.map(v=>`
           <tr>
             <td><div style="font-weight:600;font-size:13px">${escapeHtml(v.candidate_name||'')}</div><div style="font-size:11px;color:var(--ink3)">${escapeHtml(v.candidate_email||'')}</div></td>
-            <td><div style="font-size:12px;color:var(--ink2)">${escapeHtml(v.department||'—')}</div></td>
-            <td><div style="font-size:12px;color:var(--ink2)">${escapeHtml(v.employee_group||'—')}</div></td>
+            <td class="td-val-dept" data-vid="${escapeHtml(v.id)}" title="Кликните, чтобы изменить подразделение" style="cursor:${canEdit()?'pointer':'default'}"><div style="font-size:12px;color:var(--ink2)">${escapeHtml(v.department||'—')}</div></td>
+            <td class="td-val-grp" data-vid="${escapeHtml(v.id)}" title="Кликните, чтобы изменить группу" style="cursor:${canEdit()?'pointer':'default'}"><div style="font-size:12px;color:var(--ink2)">${escapeHtml(v.employee_group||'—')}</div></td>
             <td><div style="font-size:12px;color:var(--ink2)">${escapeHtml(v.recruiter_name||'')}</div></td>
             <td><div style="font-size:12px;color:var(--ink3)">${escapeHtml(v.sent_at||'')}</div></td>
             <td>${statusBadge(v.status)}</td>
@@ -1707,6 +1700,50 @@ function renderValuesList(el){
         `).join('')}</tbody>
       </table></div></div>`
     }`;
+}
+
+// Inline-редактирование подразделения / группы для строки списка оценок ценностей.
+// Используется делегированием клика (см. initGlobalActs).
+async function inlineEditValueField(cell, kind){
+  if(!cell||!canEdit())return;
+  if(cell.querySelector('select.inline-vfield'))return;
+  const vid=cell.dataset.vid;
+  const item=VLIST.find(x=>String(x.id)===String(vid));
+  if(!item)return;
+  const isDept=kind==='dept';
+  const cur=isDept?(item.department||''):(item.employee_group||'');
+  const opts=isDept
+    ? (Array.isArray(REF?.['Подразделения'])&&REF['Подразделения'].length?REF['Подразделения']:['IT','Финансы','Продажи','HR','Производство'])
+    : (Array.isArray(REF?.['Группы'])&&REF['Группы'].length?REF['Группы']:['ТОП','Офис','Рабочий','Линейный']);
+  const original=cell.innerHTML;
+  const optsHtml='<option value="">— не задано —</option>'+
+    opts.map(o=>`<option${o===cur?' selected':''}>${escapeHtml(o)}</option>`).join('');
+  cell.innerHTML='<select class="inline-vfield finp" style="padding:4px 22px 4px 8px;font-size:12px;background-position:right 6px center">'+optsHtml+'</select>';
+  const sel=cell.querySelector('select');
+  sel.focus();
+  let done=false;
+  const restore=()=>{cell.innerHTML=original;};
+  sel.addEventListener('change',async ()=>{
+    const newVal=sel.value;
+    if(newVal===cur){restore();return;}
+    done=true;
+    const fieldKey=isDept?'department':'employee_group';
+    const fields={}; fields[fieldKey]=newVal;
+    // Оптимистичное обновление UI
+    if(isDept)item.department=newVal; else item.employee_group=newVal;
+    cell.innerHTML='<div style="font-size:12px;color:var(--ink2)">'+escapeHtml(newVal||'—')+'</div>';
+    const res=await api('updateValueInviteFields',{id:vid,fields});
+    if(!res||res.ok===false){
+      // Откат
+      if(isDept)item.department=cur; else item.employee_group=cur;
+      cell.innerHTML=original;
+      toast(res?.error||'Не удалось сохранить','err');
+      return;
+    }
+    toast(isDept?'Подразделение обновлено':'Группа обновлена');
+  });
+  sel.addEventListener('blur',()=>setTimeout(()=>{if(!done)restore();},150));
+  sel.addEventListener('keydown',e=>{if(e.key==='Escape')restore();});
 }
 
 function pickBarModeData(result){
@@ -1845,30 +1882,42 @@ function stripInterpretationSummary(text){
   return cleaned.join('\n').trim();
 }
 
-async function exportValueReport(inv, r){
+async function exportValueReport(inv, r, opts){
+  opts=opts||{};
+  const candidateMode=!!opts.candidate;
   const el=document.getElementById('content');
-  // Saved state for all modifications we make
   const sv={flex:'',width:'',maxWidth:'',overflowX:'',overflowY:'',scrollTop:0,scrollLeft:0};
   const tblSv=[], cardSv=[], hideSv=[];
+  // chartSv ОБЪЯВЛЯЕМ снаружи try, чтобы finally мог его восстановить
+  // даже если ошибка случилась раньше точки наполнения.
+  const chartSv=[];
+  // Флаг режима PDF выставляем на body — CSS-правила [data-pdf-mode="candidate"]
+  // (см. css/app.css) скроют альт-расчёт, диапазоны идеала, риски и нейтрализуют
+  // цвета карточек ценностей.
+  if(candidateMode)document.body.setAttribute('data-pdf-mode','candidate');
   try{
     await ensureHtml2Pdf();
-    const filename='value-report-'+((inv?.candidate_name||'employee').replace(/[^\wа-яА-ЯёЁ-]+/g,'_'))+'.pdf';
+    const baseName=(inv?.candidate_name||'employee').replace(/[^\wа-яА-ЯёЁ-]+/g,'_');
+    const filename=(candidateMode?'value-report-candidate-':'value-report-')+baseName+'.pdf';
 
-    // Hide action buttons
-    el.querySelectorAll('[data-act="val-export"],[data-act="val-list"]').forEach(x=>{
+    // Скрываем все кнопки действий (включая кандидатскую кнопку и переключатель альт. расчёта)
+    el.querySelectorAll('[data-act="val-export"],[data-act="val-export-candidate"],[data-act="val-list"],[data-act="val-chart-mode"]').forEach(x=>{
       hideSv.push({el:x,d:x.style.display}); x.style.display='none';
     });
+    // В кандидатском режиме скрываем целые блоки, которые не нужны кандидату
+    if(candidateMode){
+      el.querySelectorAll('.vac-alt-calc').forEach(x=>{
+        hideSv.push({el:x,d:x.style.display}); x.style.display='none';
+      });
+    }
 
-    // Save element scroll & style
     sv.scrollTop=el.scrollTop; sv.scrollLeft=el.scrollLeft;
     sv.flex=el.style.flex; sv.width=el.style.width;
     sv.maxWidth=el.style.maxWidth;
     sv.overflowX=el.style.overflowX; sv.overflowY=el.style.overflowY;
 
-    // CRITICAL: flex:none so the flex container no longer controls width.
-    // overflow-x clips right-overflow; overflow-y stays visible so full content
-    // height is captured (overflow:hidden would clip it to viewport height).
-    // html2canvas.width=840 is the belt-and-suspenders guarantee.
+    // CRITICAL: flex:none → ширина 840px не подавляется flex-контейнером.
+    // overflow-x clips, overflow-y visible — иначе captured будет только viewport.
     el.scrollTo(0,0);
     el.style.flex='none';
     el.style.width='840px';
@@ -1876,46 +1925,43 @@ async function exportValueReport(inv, r){
     el.style.overflowX='hidden';
     el.style.overflowY='visible';
 
-    // Tables: reflow to container width
     el.querySelectorAll('table').forEach(t=>{
       tblSv.push({el:t,w:t.style.width,mw:t.style.minWidth,tl:t.style.tableLayout,wb:t.style.wordBreak});
       t.style.width='100%'; t.style.minWidth='0'; t.style.tableLayout='fixed'; t.style.wordBreak='break-word';
     });
 
-    // Cards: no page-break inside
-    el.querySelectorAll('.card').forEach(c=>{
+    // Cards и карточки ценностей (data-vcard) — запрет page-break внутри
+    el.querySelectorAll('.card, [data-vcard]').forEach(c=>{
       cardSv.push({el:c,bi:c.style.breakInside,pbi:c.style.pageBreakInside});
       c.style.breakInside='avoid'; c.style.pageBreakInside='avoid';
     });
 
-    // Two frames — browser reflows at new 840px width
     await new Promise(res=>requestAnimationFrame(res));
     await new Promise(res=>requestAnimationFrame(res));
 
-    // Resize Chart.js canvases to match the new 840px container dimensions
-    const chartSv=[];
+    // Resize Chart.js canvases — после ресайза контейнера они должны перерисоваться
     [V_RESULT_CHARTS.bar,V_RESULT_CHARTS.circle,V_RESULT_CHARTS.im,V_RESULT_CHARTS.meta].forEach(ch=>{
       if(ch){chartSv.push(ch); try{ch.resize();}catch(e){}}
     });
-    // One extra frame so charts finish redrawing
     await new Promise(res=>requestAnimationFrame(res));
 
     const opt={
-      margin:[8,8,8,8],
+      margin:[10,8,10,8],
       filename:filename,
       image:{type:'jpeg',quality:0.97},
       html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,width:840,scrollX:0,scrollY:0},
       jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
-      pagebreak:{mode:['css','legacy'],avoid:['.card']}
+      // avoid — НЕ резать .card И карточки ценностей по page-break
+      pagebreak:{mode:['css','legacy'],avoid:['.card','[data-vcard]']}
     };
-    toast('Формируем PDF...');
+    toast(candidateMode?'Формируем PDF для кандидата...':'Формируем PDF...');
     await html2pdf().from(el).set(opt).save();
     toast('PDF готов ✓');
   }catch(e){
     console.error('PDF export error:',e);
     toast('Ошибка PDF: '+(e?.message||'неизвестная ошибка'),'err');
   }finally{
-    // Restore everything
+    if(candidateMode)document.body.removeAttribute('data-pdf-mode');
     hideSv.forEach(s=>{s.el.style.display=s.d;});
     el.style.flex=sv.flex; el.style.width=sv.width;
     el.style.maxWidth=sv.maxWidth;
@@ -1923,7 +1969,6 @@ async function exportValueReport(inv, r){
     el.scrollTo(sv.scrollLeft,sv.scrollTop);
     tblSv.forEach(s=>{s.el.style.width=s.w; s.el.style.minWidth=s.mw; s.el.style.tableLayout=s.tl; s.el.style.wordBreak=s.wb;});
     cardSv.forEach(s=>{s.el.style.breakInside=s.bi; s.el.style.pageBreakInside=s.pbi;});
-    // Restore chart sizes to browser viewport width
     chartSv.forEach(ch=>{try{ch.resize();}catch(e){}});
   }
 }
@@ -2368,7 +2413,8 @@ async function viewValueResult(id){
         <p style="font-size:13px;color:var(--ink3)">${escapeHtml(inv.department||'—')} · ${escapeHtml(inv.employee_group||'—')} · ${escapeHtml(inv.submitted_at||'')}</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button type="button" class="btn-sm" data-act="val-export">Экспорт отчёта PDF</button>
+        <button type="button" class="btn-sm" data-act="val-export" title="Полный отчёт со всеми данными для рекрутера/руководителя">Экспорт PDF (полный)</button>
+        <button type="button" class="btn-sm" data-act="val-export-candidate" title="Сухой нейтральный отчёт без оценок и интерпретаций — можно отдать кандидату">Экспорт PDF (для кандидата)</button>
         <button type="button" class="btn-cancel" data-act="val-list">← К списку</button>
       </div>
     </div>
@@ -2409,7 +2455,7 @@ async function viewValueResult(id){
         </div>
       </div>
     </div>
-    <div class="card" style="padding:10px 12px;margin-bottom:10px">
+    <div class="card vac-alt-calc" style="padding:10px 12px;margin-bottom:10px">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span style="font-size:12px;color:var(--ink3)">Столбчатая диаграмма:</span>
         <div style="display:inline-flex;gap:6px;background:#f3f4f6;padding:4px;border-radius:10px">
@@ -2789,6 +2835,13 @@ function initNavDelegation(){
 function initGlobalActs(){
   if(document.body._vacGlobalActs) return;
   document.body._vacGlobalActs = true;
+  // Делегирование клика по ячейкам подразделения/группы в таблице оценок
+  document.addEventListener('click', (ev)=>{
+    const dCell=ev.target&&ev.target.closest&&ev.target.closest('td.td-val-dept');
+    if(dCell){inlineEditValueField(dCell,'dept');return;}
+    const gCell=ev.target&&ev.target.closest&&ev.target.closest('td.td-val-grp');
+    if(gCell){inlineEditValueField(gCell,'grp');return;}
+  });
   document.addEventListener('click', (ev)=>{
     const _vt=document.getElementById('vtbl');
     const sortTh=ev.target.closest('#vtbl thead th[data-sort]');
@@ -2875,6 +2928,8 @@ function initGlobalActs(){
       renderValuesList(document.getElementById('content'));
     } else if(act==='val-export'){
       exportValueReport(V_RESULT_CONTEXT.invite||{}, V_RESULT_CONTEXT.result||{}).catch((e)=>toast(e?.message||'Не удалось подготовить PDF-экспорт','err'));
+    } else if(act==='val-export-candidate'){
+      exportValueReport(V_RESULT_CONTEXT.invite||{}, V_RESULT_CONTEXT.result||{}, {candidate:true}).catch((e)=>toast(e?.message||'Не удалось подготовить PDF-экспорт','err'));
     } else if(act==='val-list'){
       renderValues();
     } else if(act==='val-del'){
