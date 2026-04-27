@@ -573,6 +573,14 @@ function createValueAssessmentInvite(data) {
     if (!data[required[i]]) return { ok: false, error: 'Не заполнено поле: ' + required[i] };
   }
 
+  // Валидация email ДО записи в Sheet — иначе при ошибке GmailApp.sendEmail
+  // (например «Invalid email») остаётся «осиротевшая» строка с токеном, которой
+  // нет соответствующего письма. Регекс умышленно нестрогий: домен.tld + @.
+  const emailNorm = String(data.email).trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailNorm)) {
+    return { ok: false, error: 'Адрес e-mail не выглядит действительным: ' + data.email };
+  }
+
   const id = generateId();
   const token = buildSecureToken_();
   const sentAt = new Date(data.sent_date);
@@ -593,7 +601,7 @@ function createValueAssessmentInvite(data) {
     vacancy_name: data.vacancy_name || '',
     candidate_name: data.candidate_name,
     candidate_gender: data.gender,
-    candidate_email: String(data.email).trim().toLowerCase(),
+    candidate_email: emailNorm,
     department: data.department || '',
     employee_group: data.employee_group || '',
     recruiter_id: data.recruiter_id,
@@ -613,7 +621,24 @@ function createValueAssessmentInvite(data) {
     'После отправки ответы изменить нельзя.\n\n' +
     'С уважением,\nКоманда подбора';
 
-  GmailApp.sendEmail(String(data.email).trim(), subject, body);
+  // Отправляем письмо В try/catch: если GmailApp по какой-то причине не смог отправить
+  // (квота, странный домен, временный сбой) — откатываем добавленную строку приглашения,
+  // чтобы не было «фантомных» приглашений в таблице.
+  try {
+    GmailApp.sendEmail(emailNorm, subject, body);
+  } catch (mailErr) {
+    try {
+      deleteRowByValue_(sheet, 1, id);
+      try { SpreadsheetApp.flush(); } catch (_e) {}
+    } catch (rbErr) {
+      // даже если откат не сработал — всё равно сообщаем главную причину
+    }
+    return {
+      ok: false,
+      error: 'Письмо не отправлено: ' + (mailErr && mailErr.message ? mailErr.message : String(mailErr)) +
+             '. Запись о приглашении удалена.'
+    };
+  }
 
   return {
     ok: true,
@@ -936,16 +961,20 @@ function buildRowByHeaders_(sheet, valuesByHeader, hm) {
 }
 
 function appendRowByHeaders_(sheet, valuesByHeader) {
-  const cols = Math.max(sheet.getLastColumn(), 1);
-  const empty = [];
-  for (let i = 0; i < cols; i++) empty.push('');
-  sheet.appendRow(empty);
-  const rowNum = sheet.getLastRow();
+  // ВАЖНО: раньше тут было два шага — сначала appendRow(empty), затем setValue по каждой
+  // ячейке. На пустом ряде getLastRow() мог возвращать номер ПРЕДЫДУЩЕЙ непустой строки —
+  // и setValue затирал данные предыдущей записи (тест 1 пропадал, оставался только тест 2).
+  // Сейчас собираем всю строку с непустыми значениями и пишем за один appendRow.
   const map = headerMap_(sheet);
+  const cols = Math.max(sheet.getLastColumn(), 1);
+  const row = new Array(cols).fill('');
   Object.keys(valuesByHeader || {}).forEach(h => {
     if (!map.hasOwnProperty(h)) return;
-    sheet.getRange(rowNum, map[h] + 1).setValue(valuesByHeader[h]);
+    row[map[h]] = valuesByHeader[h];
   });
+  sheet.appendRow(row);
+  // Гарантируем сохранность строки до возврата управления (на случай гонок с следующим запросом)
+  try { SpreadsheetApp.flush(); } catch (e) {}
 }
 
 function parseSurveyAnswers_(rawAnswers) {

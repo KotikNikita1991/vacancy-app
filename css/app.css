@@ -347,3 +347,52 @@ tbody tr.vac-hot td:first-child,tbody tr.vac-warn td:first-child{padding-left:14
 .vac-preview-row{font-size:11px;color:var(--ink2);margin-top:4px;display:flex;justify-content:space-between;gap:8px}
 .vac-preview-row b{color:var(--ink);font-weight:600}
 .vac-preview-cmt{font-size:11px;color:var(--ink3);margin-top:8px;padding-top:8px;border-top:1px solid var(--bg2);font-style:italic;line-height:1.45;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+
+/* ═══════════════════════════════════════════════════════════════
+   UI Enhancements — Этап 2 (канбан, bulk, inline, дубликат)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Переключатель Таблица / Канбан ───────────────────────── */
+.view-toggle{display:inline-flex;border:1px solid var(--bg2);border-radius:8px;overflow:hidden;margin-left:auto;background:var(--sur)}
+.vt-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;font-size:12px;font-weight:600;color:var(--ink2);background:transparent;border:none;cursor:pointer;font-family:var(--font);transition:background var(--tr),color var(--tr)}
+.vt-btn:hover{background:var(--bg)}
+.vt-btn.on{background:var(--acc);color:#fff}
+.vt-btn svg{flex-shrink:0}
+
+/* ── Bulk action bar ──────────────────────────────────────── */
+.bulk-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--accbg);border:1px solid var(--acc2);border-radius:var(--rl);margin-bottom:12px;flex-wrap:wrap;animation:bulk-in .2s ease}
+@keyframes bulk-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.bulk-bar-info{font-size:13px;color:var(--ink);margin-right:8px}
+.bulk-bar-info b{color:var(--acc);font-weight:800}
+.bulk-bar .papply,.bulk-bar .btn-cancel,.bulk-bar .btn-danger{padding:5px 12px;font-size:12px}
+
+/* ── Чекбоксы и подсветка выбранных строк ─────────────────── */
+tbody tr.row-checked{background:rgba(123,94,167,.08)}
+tbody tr.row-checked:hover{background:rgba(123,94,167,.14)}
+:root[data-theme="dark"] tbody tr.row-checked{background:rgba(155,126,200,.14)}
+
+/* ── Inline-редактирование ячейки ─────────────────────────── */
+td .inline-status,td .inline-rec{min-width:120px;max-width:200px;font-family:var(--font);background:var(--sur)!important}
+td.td-recruiter:hover{background:var(--bg)}
+:root[data-theme="dark"] td.td-recruiter:hover{background:var(--bg2)}
+
+/* ── Канбан-доска ─────────────────────────────────────────── */
+.kanban-board{display:flex;gap:12px;padding:14px;overflow-x:auto;align-items:flex-start;min-height:60vh}
+.kb-col{flex:0 0 240px;display:flex;flex-direction:column;background:var(--bg);border:1px solid var(--bg2);border-radius:12px;max-height:75vh;overflow:hidden;transition:border-color .15s,background .15s}
+.kb-col.drop-active{border-color:var(--acc);background:var(--accbg);box-shadow:0 0 0 2px rgba(123,94,167,.15) inset}
+.kb-col-hdr{padding:10px 12px;border-bottom:1px solid var(--bg2);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:var(--sur);border-radius:12px 12px 0 0}
+.kb-cnt{font-size:11px;font-weight:700;color:var(--ink3);background:var(--bg);padding:2px 8px;border-radius:12px}
+.kb-col-body{padding:8px;flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+.kb-empty{padding:20px;text-align:center;color:var(--ink3);font-size:11px;font-style:italic}
+.kb-card{background:var(--sur);border:1px solid var(--bg2);border-radius:9px;padding:9px 11px;cursor:grab;transition:box-shadow .15s,transform .12s;user-select:none}
+.kb-card:hover{box-shadow:0 4px 12px rgba(30,26,60,.10);transform:translateY(-1px)}
+.kb-card.kb-dragging{opacity:.4;cursor:grabbing}
+.kb-card.vac-hot{box-shadow:inset 3px 0 0 var(--red)}
+.kb-card.vac-warn{box-shadow:inset 3px 0 0 var(--amber)}
+.kb-card-ttl{font-size:13px;font-weight:600;color:var(--ink);line-height:1.35;margin-bottom:6px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;word-break:break-word}
+.kb-card-meta{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px;align-items:center}
+.kb-rec{font-size:10px;color:var(--ink2);background:var(--accbg);padding:1px 6px;border-radius:4px}
+.kb-card-foot{display:flex;justify-content:space-between;align-items:center;font-size:10px;color:var(--ink3)}
+.kb-days{font-weight:700;color:var(--ink2)}
+.kb-date{color:var(--ink3)}
+:root[data-theme="dark"] .kb-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.4)}

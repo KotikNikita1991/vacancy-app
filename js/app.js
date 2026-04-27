@@ -2205,9 +2205,16 @@ async function sendValueInvite(){
   const employeeGroup=(document.getElementById('val-group')?.value||'').trim();
   const sentDate=document.getElementById('val-date')?.value||'';
   const gender=document.getElementById('val-gender')?.value||'';
-  const email=(document.getElementById('val-email')?.value||'').trim();
+  const email=(document.getElementById('val-email')?.value||'').trim().toLowerCase();
   if(!candidateName||!department||!employeeGroup||!sentDate||!gender||!email){
     toast('Заполните все обязательные поля','err');return;
+  }
+  // Клиентская проверка email — те же правила, что на бэке (createValueAssessmentInvite).
+  // Сразу прерываемся, чтобы не дёргать API с заведомо невалидным адресом.
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)){
+    toast('Адрес e-mail не выглядит действительным','err');
+    document.getElementById('val-email')?.focus();
+    return;
   }
   const btn=document.getElementById('btn-send-val');
   if(btn){btn.disabled=true;btn.innerHTML='<span class="spin"></span>';}
@@ -2224,6 +2231,9 @@ async function sendValueInvite(){
   }else{
     toast(res?.error||'Не удалось отправить ссылку','err');
     if(btn){btn.disabled=false;btn.textContent='Отправить ссылку';}
+    // На случай, если на бэке остались «фантомные» строки от прошлых багов —
+    // обновим список, чтобы пользователь видел реальное состояние, а не предположения UI.
+    try{await renderValues();}catch(e){}
   }
 }
 
