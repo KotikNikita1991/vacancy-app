@@ -1994,6 +1994,8 @@ async function exportValueReport(inv, r, opts){
   const chartSv=[];
   // Для кандидатского PDF: запоминаем скрытые датасеты "Эталонный профиль"
   const idealHidden=[];
+  // Умные разрывы страниц — восстанавливаются в finally
+  const smartBreaks=[];
   // Флаг режима PDF выставляем на body — CSS-правила [data-pdf-mode="candidate"]
   // (см. css/app.css) скроют оценочные элементы и нейтрализуют цвета карточек.
   if(candidateMode)document.body.setAttribute('data-pdf-mode','candidate');
@@ -2039,12 +2041,13 @@ async function exportValueReport(inv, r, opts){
       t.style.width='100%'; t.style.minWidth='0'; t.style.tableLayout='fixed'; t.style.wordBreak='break-word';
     });
 
-    // Только крупные секционные карточки (.card) запрещаем разрывать —
-    // кандидатские [data-vcard] НЕ добавляем в avoid: они создают большие
-    // белые гэпы когда не влезают на страницу. Лучше разрыв, чем пустота.
-    el.querySelectorAll('.card').forEach(c=>{
+    // Убираем break-inside:avoid со всех .card и [data-vcard].
+    // break-inside:avoid вызывает белые пустые гэпы (html2pdf добавляет отступ
+    // до следующей страницы). Вместо этого — умный алгоритм smartBreaks ниже
+    // добавит page-break-before:always только нужным блокам (без гэпов).
+    el.querySelectorAll('.card,[data-vcard]').forEach(c=>{
       cardSv.push({el:c,bi:c.style.breakInside,pbi:c.style.pageBreakInside});
-      c.style.breakInside='avoid'; c.style.pageBreakInside='avoid';
+      c.style.breakInside='auto'; c.style.pageBreakInside='auto';
     });
 
     // Диаграммы (столбчатая + радар) — принудительно на отдельный лист.
@@ -2075,16 +2078,51 @@ async function exportValueReport(inv, r, opts){
     await new Promise(res=>requestAnimationFrame(res));
     await new Promise(res=>requestAnimationFrame(res));
 
+    // ── Smart page-break injection ──────────────────────────────────
+    // A4 portrait, поля [10,8,10,8]мм → рабочая высота 277мм, ширина 194мм.
+    // Контейнер 840px → 1px = 194/840 мм → высота страницы ≈ 277×840/194 ≈ 1199px.
+    // Алгоритм: мультипроход (до 5 итераций).
+    // Для каждого элемента [data-vcard]/.card:
+    //   - Если уже стоит page-break-before:always — это новая страница, сбрасываем offset.
+    //   - Иначе: если блок пересекает границу страницы И вмещается на одну страницу
+    //     → ставим page-break-before:always (НЕ вызывает гэпы, в отличие от break-inside:avoid).
+    // pageStart отслеживает реальное начало текущей страницы (в DOM-координатах).
+    (function injectSmartBreaks(){
+      const PAGE_H=Math.round(840*277/194); // ≈1199px
+      let changed=true, pass=0;
+      while(changed&&pass<5){
+        changed=false; pass++;
+        let pageStart=0;
+        const ctTop=el.getBoundingClientRect().top;
+        el.querySelectorAll('[data-vcard],.card').forEach(function(c){
+          const hasPB=c.style.pageBreakBefore==='always'||c.style.breakBefore==='page';
+          const rect=c.getBoundingClientRect();
+          const top=rect.top-ctTop;
+          const h=rect.height;
+          if(hasPB){pageStart=top;return;} // уже есть разрыв — начало новой стр.
+          const pageEnd=pageStart+PAGE_H;
+          if(top+h>pageEnd&&h<PAGE_H){
+            // Блок пересекает границу страницы и влезает на одну → переносим
+            smartBreaks.push({el:c,pb:c.style.pageBreakBefore,bb:c.style.breakBefore});
+            c.style.pageBreakBefore='always';
+            c.style.breakBefore='page';
+            pageStart=top; // новая страница начинается здесь
+            changed=true;
+          }
+        });
+      }
+    })();
+    // ───────────────────────────────────────────────────────────────
+
     const opt={
       margin:[10,8,10,8],
       filename:filename,
       image:{type:'jpeg',quality:0.97},
       html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,width:840,scrollX:0,scrollY:0},
       jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
-      // css — читает page-break-before:always для принудительных разрывов (диаграммы)
-      // legacy — fallback для старых браузеров
-      // avoid только для .card (секционные блоки) — без [data-vcard] чтобы не было гэпов
-      pagebreak:{mode:['css','legacy'],avoid:['.card']}
+      // css — читает page-break-before:always (диаграммы + smartBreaks)
+      // legacy — fallback; avoid убран: разрывами управляет injectSmartBreaks выше
+      pagebreak:{mode:['css','legacy']}
     };
     // Сохраняем ссылку для finally чтобы восстановить page-break-before
     cardSv._chartPageBreakSv=chartPageBreakSv;
@@ -2107,8 +2145,9 @@ async function exportValueReport(inv, r, opts){
     el.scrollTo(sv.scrollLeft,sv.scrollTop);
     tblSv.forEach(s=>{s.el.style.width=s.w; s.el.style.minWidth=s.mw; s.el.style.tableLayout=s.tl; s.el.style.wordBreak=s.wb;});
     cardSv.forEach(s=>{s.el.style.breakInside=s.bi; s.el.style.pageBreakInside=s.pbi;});
-    // Восстанавливаем page-break-before у карточек диаграмм
+    // Восстанавливаем page-break-before у карточек диаграмм и smart-breaks
     (cardSv._chartPageBreakSv||[]).forEach(s=>{s.el.style.pageBreakBefore=s.pb; s.el.style.breakBefore=s.bb;});
+    smartBreaks.forEach(s=>{s.el.style.pageBreakBefore=s.pb; s.el.style.breakBefore=s.bb;});
     chartSv.forEach(ch=>{try{ch.resize();}catch(e){}});
   }
 }

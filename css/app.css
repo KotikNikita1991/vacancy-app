@@ -404,7 +404,9 @@ td.td-recruiter:hover{background:var(--bg)}
    Диаграммы (val-bar/val-circle) получают page-break-before:always
    программно, поэтому canvas тоже не трогаем здесь.
    ═══════════════════════════════════════════════════════════════ */
-.card{break-inside:avoid;page-break-inside:avoid}
+/* break-inside убран — html2pdf читает CSS и avoid вызывает белые гэпы.
+   Разрывами управляет injectSmartBreaks() в exportValueReport(). */
+.card{break-inside:auto;page-break-inside:auto}
 
 /* ═══════════════════════════════════════════════════════════════
    Кандидатский PDF-режим: нейтральные цвета, без оценочных меток
