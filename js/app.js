@@ -1987,169 +1987,43 @@ async function exportValueReport(inv, r, opts){
   opts=opts||{};
   const candidateMode=!!opts.candidate;
   const el=document.getElementById('content');
-  const sv={flex:'',width:'',maxWidth:'',overflowX:'',overflowY:'',scrollTop:0,scrollLeft:0};
-  const tblSv=[], cardSv=[], hideSv=[];
-  // chartSv ОБЪЯВЛЯЕМ снаружи try, чтобы finally мог его восстановить
-  // даже если ошибка случилась раньше точки наполнения.
-  const chartSv=[];
-  // Для кандидатского PDF: запоминаем скрытые датасеты "Эталонный профиль"
+
+  // Кандидатский режим: CSS [data-pdf-mode="candidate"] скрывает оценочные блоки
+  if(candidateMode) document.body.setAttribute('data-pdf-mode','candidate');
+
+  // В кандидатском режиме скрываем «Эталонный профиль» на диаграммах
   const idealHidden=[];
-  // Умные разрывы страниц — восстанавливаются в finally
-  const smartBreaks=[];
-  // Флаг режима PDF выставляем на body — CSS-правила [data-pdf-mode="candidate"]
-  // (см. css/app.css) скроют оценочные элементы и нейтрализуют цвета карточек.
-  if(candidateMode)document.body.setAttribute('data-pdf-mode','candidate');
-  try{
-    await ensureHtml2Pdf();
-    const baseName=(inv?.candidate_name||'employee').replace(/[^\wа-яА-ЯёЁ-]+/g,'_');
-    const filename=(candidateMode?'value-report-candidate-':'value-report-')+baseName+'.pdf';
-
-    // Скрываем кнопки действий
-    el.querySelectorAll('[data-act="val-export"],[data-act="val-export-candidate"],[data-act="val-list"]').forEach(x=>{
-      hideSv.push({el:x,d:x.style.display}); x.style.display='none';
-    });
-
-    // В кандидатском режиме скрываем «Эталонный профиль» на диаграммах
-    if(candidateMode){
-      [V_RESULT_CHARTS.bar,V_RESULT_CHARTS.circle].forEach(ch=>{
-        if(!ch||!ch.data)return;
-        ch.data.datasets.forEach((ds,i)=>{
-          if(ds.label==='Эталонный профиль'){
-            try{ch.setDatasetVisibility(i,false);}catch(e){}
-            idealHidden.push({ch,i});
-          }
-        });
-        try{ch.update('none');}catch(e){}
+  if(candidateMode){
+    [V_RESULT_CHARTS.bar,V_RESULT_CHARTS.circle].forEach(ch=>{
+      if(!ch?.data)return;
+      ch.data.datasets.forEach((ds,i)=>{
+        if(ds.label==='Эталонный профиль'){
+          try{ch.setDatasetVisibility(i,false);}catch(e){}
+          idealHidden.push({ch,i});
+        }
       });
-    }
-
-    sv.scrollTop=el.scrollTop; sv.scrollLeft=el.scrollLeft;
-    sv.flex=el.style.flex; sv.width=el.style.width;
-    sv.maxWidth=el.style.maxWidth;
-    sv.overflowX=el.style.overflowX; sv.overflowY=el.style.overflowY;
-
-    // CRITICAL: flex:none → ширина 840px не подавляется flex-контейнером.
-    el.scrollTo(0,0);
-    el.style.flex='none';
-    el.style.width='840px';
-    el.style.maxWidth='840px';
-    el.style.overflowX='hidden';
-    el.style.overflowY='visible';
-
-    el.querySelectorAll('table').forEach(t=>{
-      tblSv.push({el:t,w:t.style.width,mw:t.style.minWidth,tl:t.style.tableLayout,wb:t.style.wordBreak});
-      t.style.width='100%'; t.style.minWidth='0'; t.style.tableLayout='fixed'; t.style.wordBreak='break-word';
+      try{ch.update('none');}catch(e){}
     });
-
-    // Убираем break-inside:avoid со всех .card и [data-vcard].
-    // break-inside:avoid вызывает белые пустые гэпы (html2pdf добавляет отступ
-    // до следующей страницы). Вместо этого — умный алгоритм smartBreaks ниже
-    // добавит page-break-before:always только нужным блокам (без гэпов).
-    el.querySelectorAll('.card,[data-vcard]').forEach(c=>{
-      cardSv.push({el:c,bi:c.style.breakInside,pbi:c.style.pageBreakInside});
-      c.style.breakInside='auto'; c.style.pageBreakInside='auto';
-    });
-
-    // Диаграммы (столбчатая + радар) — принудительно на отдельный лист.
-    // Ищем .card-контейнеры, содержащие canvas#val-bar и canvas#val-circle.
-    const chartPageBreakSv=[];
-    ['val-bar','val-circle'].forEach(id=>{
-      const canvas=document.getElementById(id);
-      if(!canvas)return;
-      // Поднимаемся к ближайшей .card
-      let cardEl=canvas.parentElement;
-      while(cardEl&&!cardEl.classList.contains('card'))cardEl=cardEl.parentElement;
-      if(!cardEl)return;
-      chartPageBreakSv.push({el:cardEl,pb:cardEl.style.pageBreakBefore,bb:cardEl.style.breakBefore});
-      cardEl.style.pageBreakBefore='always';
-      cardEl.style.breakBefore='page';
-      // Сам canvas — break-inside:avoid чтобы диаграмма не резалась внутри листа
-      cardSv.push({el:canvas,bi:canvas.style.breakInside,pbi:canvas.style.pageBreakInside});
-      canvas.style.breakInside='avoid'; canvas.style.pageBreakInside='avoid';
-    });
-
-    await new Promise(res=>requestAnimationFrame(res));
-    await new Promise(res=>requestAnimationFrame(res));
-
-    // Resize Chart.js canvases — после ресайза контейнера они должны перерисоваться
-    [V_RESULT_CHARTS.bar,V_RESULT_CHARTS.circle,V_RESULT_CHARTS.im,V_RESULT_CHARTS.meta].forEach(ch=>{
-      if(ch){chartSv.push(ch); try{ch.resize();}catch(e){}}
-    });
-    await new Promise(res=>requestAnimationFrame(res));
-    await new Promise(res=>requestAnimationFrame(res));
-
-    // ── Smart page-break injection ──────────────────────────────────
-    // A4 portrait, поля [10,8,10,8]мм → рабочая высота 277мм, ширина 194мм.
-    // Контейнер 840px → 1px = 194/840 мм → высота страницы ≈ 277×840/194 ≈ 1199px.
-    // Алгоритм: мультипроход (до 5 итераций).
-    // Для каждого элемента [data-vcard]/.card:
-    //   - Если уже стоит page-break-before:always — это новая страница, сбрасываем offset.
-    //   - Иначе: если блок пересекает границу страницы И вмещается на одну страницу
-    //     → ставим page-break-before:always (НЕ вызывает гэпы, в отличие от break-inside:avoid).
-    // pageStart отслеживает реальное начало текущей страницы (в DOM-координатах).
-    (function injectSmartBreaks(){
-      const PAGE_H=Math.round(840*277/194); // ≈1199px
-      let changed=true, pass=0;
-      while(changed&&pass<5){
-        changed=false; pass++;
-        let pageStart=0;
-        const ctTop=el.getBoundingClientRect().top;
-        el.querySelectorAll('[data-vcard],.card').forEach(function(c){
-          const hasPB=c.style.pageBreakBefore==='always'||c.style.breakBefore==='page';
-          const rect=c.getBoundingClientRect();
-          const top=rect.top-ctTop;
-          const h=rect.height;
-          if(hasPB){pageStart=top;return;} // уже есть разрыв — начало новой стр.
-          const pageEnd=pageStart+PAGE_H;
-          if(top+h>pageEnd&&h<PAGE_H){
-            // Блок пересекает границу страницы и влезает на одну → переносим
-            smartBreaks.push({el:c,pb:c.style.pageBreakBefore,bb:c.style.breakBefore});
-            c.style.pageBreakBefore='always';
-            c.style.breakBefore='page';
-            pageStart=top; // новая страница начинается здесь
-            changed=true;
-          }
-        });
-      }
-    })();
-    // ───────────────────────────────────────────────────────────────
-
-    const opt={
-      margin:[10,8,10,8],
-      filename:filename,
-      image:{type:'jpeg',quality:0.97},
-      html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,width:840,scrollX:0,scrollY:0},
-      jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
-      // css — читает page-break-before:always (диаграммы + smartBreaks)
-      // legacy — fallback; avoid убран: разрывами управляет injectSmartBreaks выше
-      pagebreak:{mode:['css','legacy']}
-    };
-    // Сохраняем ссылку для finally чтобы восстановить page-break-before
-    cardSv._chartPageBreakSv=chartPageBreakSv;
-    toast(candidateMode?'Формируем PDF для кандидата...':'Формируем PDF...');
-    await html2pdf().from(el).set(opt).save();
-    toast('PDF готов ✓');
-  }catch(e){
-    console.error('PDF export error:',e);
-    toast('Ошибка PDF: '+(e?.message||'неизвестная ошибка'),'err');
-  }finally{
-    if(candidateMode)document.body.removeAttribute('data-pdf-mode');
-    // Восстанавливаем «Эталонный профиль» на диаграммах
-    idealHidden.forEach(({ch,i})=>{
-      try{ch.setDatasetVisibility(i,true);ch.update('none');}catch(e){}
-    });
-    hideSv.forEach(s=>{s.el.style.display=s.d;});
-    el.style.flex=sv.flex; el.style.width=sv.width;
-    el.style.maxWidth=sv.maxWidth;
-    el.style.overflowX=sv.overflowX; el.style.overflowY=sv.overflowY;
-    el.scrollTo(sv.scrollLeft,sv.scrollTop);
-    tblSv.forEach(s=>{s.el.style.width=s.w; s.el.style.minWidth=s.mw; s.el.style.tableLayout=s.tl; s.el.style.wordBreak=s.wb;});
-    cardSv.forEach(s=>{s.el.style.breakInside=s.bi; s.el.style.pageBreakInside=s.pbi;});
-    // Восстанавливаем page-break-before у карточек диаграмм и smart-breaks
-    (cardSv._chartPageBreakSv||[]).forEach(s=>{s.el.style.pageBreakBefore=s.pb; s.el.style.breakBefore=s.bb;});
-    smartBreaks.forEach(s=>{s.el.style.pageBreakBefore=s.pb; s.el.style.breakBefore=s.bb;});
-    chartSv.forEach(ch=>{try{ch.resize();}catch(e){}});
   }
+
+  // Заголовок страницы → браузер предложит его как имя файла PDF
+  const baseName=(inv?.candidate_name||'employee').replace(/[^\wа-яА-ЯёЁ-]+/g,'_');
+  const docTitle=(candidateMode?'value-report-candidate-':'value-report-')+baseName;
+  const prevTitle=document.title;
+  document.title=docTitle;
+
+  // Восстанавливаем всё после закрытия диалога печати
+  const restore=()=>{
+    if(candidateMode) document.body.removeAttribute('data-pdf-mode');
+    idealHidden.forEach(({ch,i})=>{try{ch.setDatasetVisibility(i,true);ch.update('none');}catch(e){}});
+    document.title=prevTitle;
+    window.removeEventListener('afterprint',restore);
+  };
+  window.addEventListener('afterprint',restore);
+
+  toast('Откроется диалог печати → выберите «Сохранить как PDF»');
+  await new Promise(res=>setTimeout(res,350));
+  window.print();
 }
 function renderValueBarChart(){
   // Всегда показываем базовые средние (1–6). Если base недоступен — fallback на centered.
