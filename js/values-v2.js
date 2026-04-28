@@ -196,9 +196,6 @@
     inject:injectV2
   };
 
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',startObserver);
-  }else{
-    startObserver();
-  }
+  // Визуальный инжект карточки V2 отключён — блок убран из интерфейса.
+  // window.VALUES_V2 остаётся: extractRawScoresByAbbr нужна values-interpretation.js.
 })();
