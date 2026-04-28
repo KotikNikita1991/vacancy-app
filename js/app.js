@@ -2037,10 +2037,9 @@ async function exportValueReport(inv, r, opts){
       margin:[10,8,10,8],
       filename:filename,
       image:{type:'jpeg',quality:0.97},
-      html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,width:840,scrollX:0,scrollY:0,windowWidth:840},
+      html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,width:840,scrollX:0,scrollY:0},
       jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
-      // avoid-all + явный список элементов, которые нельзя разрывать
-      pagebreak:{mode:['avoid-all','css'],avoid:['.card','[data-vcard]','[data-im-block]','[data-interp-section]','canvas']}
+      pagebreak:{mode:['css','legacy'],avoid:['.card','[data-vcard]','[data-im-block]','[data-interp-section]','canvas']}
     };
     toast(candidateMode?'Формируем PDF для кандидата...':'Формируем PDF...');
     await html2pdf().from(el).set(opt).save();
