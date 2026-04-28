@@ -1781,10 +1781,16 @@ function renderValuesList(el){
         <h2 style="font-size:18px;font-weight:700">Оценка ценностей (PVQ-RR)</h2>
         <p style="font-size:13px;color:var(--ink3);margin-top:2px">67 вопросов (57 PVQ‑RR + 10 контрольных), одноразовая ссылка на 7 дней, диаграмма + круг ценностей</p>
       </div>
-      <button type="button" class="btn-primary" data-act="val-new">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Новая оценка ценностей
-      </button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button type="button" class="btn-sm" data-act="val-group-report" title="Сформировать групповой профиль по выбранным сотрудникам">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+          Собрать групповой отчёт
+        </button>
+        <button type="button" class="btn-primary" data-act="val-new">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Новая оценка ценностей
+        </button>
+      </div>
     </div>
     ${filtered.length===0
       ?`<div class="card"><div class="empty" style="padding:60px">
@@ -2932,6 +2938,9 @@ function initGlobalActs(){
       clSubmit();
     } else if(act==='cl-del'){
       deleteAssessment(el.dataset.aid);
+    } else if(act==='val-group-report'){
+      if(typeof window.GROUP_REPORT?.renderFilter==='function') window.GROUP_REPORT.renderFilter();
+      else toast('Модуль группового отчёта не загружен','err');
     } else if(act==='val-new'){
       openValueModal();
     } else if(act==='val-overlay'){

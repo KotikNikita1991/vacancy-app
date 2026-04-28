@@ -305,4 +305,7 @@
 
   if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',startObserver);}
   else{startObserver();}
+
+  // Публичный API для group-report.js
+  window.VALUES_INTERP={CP:CP,INTERP:INTERP,CARDS:CARDS,META:META,MCOL:MCOL,renderGrid:renderGrid,renderSection:renderSection};
 })();

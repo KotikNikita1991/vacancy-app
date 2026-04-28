@@ -398,6 +398,38 @@ td.td-recruiter:hover{background:var(--bg)}
 :root[data-theme="dark"] .kb-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.4)}
 
 /* ═══════════════════════════════════════════════════════════════
+   GROUP REPORT — фильтр и список выборки
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Чипы (кнопки-переключатели фильтра) */
+.gr-chips{display:flex;flex-wrap:wrap;gap:6px}
+.gr-chip{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:4px 12px;border-radius:999px;
+  border:1px solid var(--bg2);background:var(--sur);
+  cursor:pointer;font-size:12px;color:var(--ink2);
+  user-select:none;transition:background .12s,border-color .12s,color .12s;
+}
+.gr-chip input[type="checkbox"]{display:none}
+.gr-chip:hover{background:var(--bg);border-color:var(--acc)}
+.gr-chip:has(input:checked){
+  background:var(--accbg);border-color:var(--acc);color:var(--acc);font-weight:600;
+}
+
+/* Строки сотрудников */
+.gr-emp-row{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 12px;border-bottom:1px solid var(--bg);
+  cursor:pointer;user-select:none;transition:background .1s;
+}
+.gr-emp-row:last-child{border-bottom:none}
+.gr-emp-row:hover{background:var(--bg)}
+.gr-emp-row input[type="checkbox"]{
+  width:15px;height:15px;flex-shrink:0;
+  cursor:pointer;accent-color:var(--acc);
+}
+
+/* ═══════════════════════════════════════════════════════════════
    PRINT — window.print() вместо html2pdf
    Браузер реформатирует контент нативно: break-inside:avoid
    работает без гэпов (html2pdf резал bitmap — отсюда были пустоты).
