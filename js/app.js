@@ -2012,14 +2012,36 @@ async function exportValueReport(inv, r, opts){
   const prevTitle=document.title;
   document.title=docTitle;
 
+  // Переразмеряем Chart.js под ширину A4, чтобы не было горизонтального сжатия.
+  // При печати контейнер становится шире/уже экрана, но Chart.js уже зафиксировал
+  // инлайн-стили width/height — холст отображается с неправильным соотношением сторон.
+  // Решение: принудительно задаём ширину ~A4 (680px) до вызова print().
+  const PRINT_W=680;
+  const chartPrintSv=[];   // объявляем ДО restore, чтобы он мог его видеть
+
   // Восстанавливаем всё после закрытия диалога печати
   const restore=()=>{
     if(candidateMode) document.body.removeAttribute('data-pdf-mode');
     idealHidden.forEach(({ch,i})=>{try{ch.setDatasetVisibility(i,true);ch.update('none');}catch(e){}});
     document.title=prevTitle;
     window.removeEventListener('afterprint',restore);
+    // Возвращаем Chart.js к авто-размеру по контейнеру (небольшая задержка после afterprint)
+    setTimeout(()=>{ chartPrintSv.forEach(ch=>{try{ch.resize();}catch(e){}}); }, 150);
   };
   window.addEventListener('afterprint',restore);
+
+  [
+    {key:'bar',    w:PRINT_W,                  h:260},
+    {key:'circle', w:PRINT_W,                  h:580},
+    {key:'meta',   w:Math.round(PRINT_W*0.48), h:160},
+    {key:'im',     w:Math.round(PRINT_W*0.40), h:88},
+  ].forEach(({key,w,h})=>{
+    const ch=V_RESULT_CHARTS[key]; if(!ch)return;
+    chartPrintSv.push(ch);
+    try{ch.resize(w,h);}catch(e){}
+  });
+  await new Promise(res=>requestAnimationFrame(res));
+  await new Promise(res=>requestAnimationFrame(res));
 
   // Скроллируем в начало — иначе браузер может печатать с текущей позиции
   el.scrollTo(0,0);
