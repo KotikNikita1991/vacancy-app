@@ -24,11 +24,7 @@
     if(!isReady())return;
     const vac=window.VACS.find(v=>String(v.id)===String(vacId));
     if(!vac)return;
-    if(typeof window.canEdit==='function'&&!window.canEdit()){
-      // Рекрутер не может менять статус инлайн — открываем читаемую модалку
-      if(typeof window.openQuickStatusModal==='function')window.openQuickStatusModal(vac);
-      return;
-    }
+    // Все роли могут менять статус своих вакансий (canChangeStatus = true)
     const cell=document.querySelector('td.td-status[data-vacid="'+CSS.escape(String(vacId))+'"]');
     if(!cell)return;
     // Если уже открыт inline-select — не открываем второй
@@ -92,10 +88,10 @@
     sel.addEventListener('keydown',e=>{if(e.key==='Escape'){restore();}});
   }
 
-  // ═══ INLINE-РЕДАКТИРОВАНИЕ РЕКРУТЕРА ═════════════════════════════
+  // ═══ INLINE-ПЕРЕДАЧА ВАКАНСИИ ДРУГОМУ РЕКРУТЕРУ ══════════════════
   function startInlineRecruiter(cell){
     if(!isReady())return;
-    if(typeof window.canEdit==='function'&&!window.canEdit())return;
+    // Все роли могут передавать вакансию (canTransfer = true)
     if(!cell||cell.querySelector('select.inline-rec'))return;
     const vacId=cell.dataset.vacid;
     const vac=window.VACS.find(v=>String(v.id)===String(vacId));

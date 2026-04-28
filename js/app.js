@@ -298,10 +298,13 @@ async function renderPage(p){
 }
 
 // ══ PERMISSIONS ══════════════════════════════════════
-function canEdit()   {return U.role==='manager'||U.role==='admin'}
-function canCreate() {return true}
-function canDelete() {return U.role==='admin'}
-function canSetPlan(){return U.role==='manager'||U.role==='admin'}
+function canEdit()         {return U.role==='manager'||U.role==='admin'}
+function canCreate()       {return true}
+function canDelete()       {return U.role==='admin'}
+function canSetPlan()      {return U.role==='manager'||U.role==='admin'}
+// Все роли могут менять статус своих вакансий и передавать их другому рекрутеру
+function canChangeStatus() {return true}
+function canTransfer()     {return true}
 
 // Поля, которые рекрутер НЕ может редактировать
 // ══ DASHBOARD ════════════════════════════════════════
@@ -352,7 +355,9 @@ function buildDash(recNames,groups){
     {l:'Год',         f:fd(new Date(y,0,1)),   t:fd(new Date(y,11,31))},
     {l:'Всё время',   f:'2020-01-01',           t:fd(new Date(y+1,0,1))},
   ];
-  const showRec=U.role!=='recruiter';
+  // showRecFilter — фильтр «Рекрутеры» только для admin/manager (они видят всех)
+  // Колонка рекрутера показывается всем — рекрутер видит своё имя и может передать вакансию
+  const showRecFilter=U.role!=='recruiter';
   return`
   <div class="toolbar">
     <span class="tbar-lbl">Период</span>
@@ -371,7 +376,7 @@ function buildDash(recNames,groups){
     </div>
     ${filterDdHtml('fdd-dash-st','Статусы',FILTER_STATUS_OPTS,FStat)}
     ${filterDdHtml('fdd-dash-grp','Группы',groups,FGrp)}
-    ${showRec?filterDdHtml('fdd-dash-rec','Рекрутеры',recNames,FRec):''}
+    ${showRecFilter?filterDdHtml('fdd-dash-rec','Рекрутеры',recNames,FRec):''}
     <button type="button" class="papply" id="btn-dash-reset">Сбросить</button>
     ${canCreate()?`<button type="button" class="btn-primary" id="btn-new-vac">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -541,7 +546,8 @@ function renderVacTbl(vacs){
     window.VAC_DASH.renderKanban(vacs);
     return;
   }
-  const showRec=U.role!=='recruiter';
+  // Колонка рекрутера видна всем: рекрутер видит своё имя и может передать вакансию
+  const showRecCol=true;
   const showCb=canEdit();
   if(!vacs.length){
     el.innerHTML=`<div class="empty" style="padding:36px"><p style="color:var(--ink3)">Нет вакансий по выбранным фильтрам</p></div>`;
@@ -559,7 +565,7 @@ function renderVacTbl(vacs){
     ${thSort('date_opened','Дата')}
     ${thSort('name','Вакансия')}
     ${thSort('vacancy_group','Группа')}
-    ${showRec?thSort('recruiter','Рекрутер'):''}
+    ${showRecCol?thSort('recruiter','Рекрутер'):''}
     ${thSort('status','Статус')}
     ${thSort('fact_date','Дата закрытия')}
     ${thSort('salary_offer','ЗП оффер')}
@@ -590,7 +596,7 @@ function renderVacTbl(vacs){
         ${v.transferred?`<div class="btag">↗ от ${escapeHtml(v.transferred_from_name||'')} · ${fru(v.transfer_date)}</div>`:''}
       </td>
       <td>${grpBadge}</td>
-      ${showRec?`<td class="td-recruiter" data-cell="recruiter" data-vacid="${escapeHtml(v.id)}" style="font-size:12px;color:var(--ink2);white-space:nowrap;${canEdit()?'cursor:pointer':''}" title="${canEdit()?'Кликни для смены рекрутера':''}">${escapeHtml(v.current_recruiter_name||'—')}</td>`:''}
+      ${showRecCol?`<td class="td-recruiter" data-cell="recruiter" data-vacid="${escapeHtml(v.id)}" style="font-size:12px;color:var(--ink2);white-space:nowrap;${canTransfer()?'cursor:pointer':''}" title="${canTransfer()?'Кликни для передачи вакансии':''}">${escapeHtml(v.current_recruiter_name||'—')}</td>`:''}
       <td class="td-status" data-cell="status" data-vacid="${escapeHtml(v.id)}" style="vertical-align:middle">
         <button type="button" class="badge ${sc}" data-act="status-inline" data-vacid="${escapeHtml(v.id)}" style="border:0;cursor:pointer">${escapeHtml(v.status)}</button>
       </td>
