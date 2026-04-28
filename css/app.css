@@ -410,18 +410,33 @@ td.td-recruiter:hover{background:var(--bg)}
   [data-act="val-export"],[data-act="val-export-candidate"],[data-act="val-list"]{
     display:none!important;
   }
-  /* Сброс фонов */
-  body,html{background:#fff!important}
-  /* Убираем flex-layout */
-  #app{display:block!important}
-  #main{display:block!important;width:100%!important;margin:0!important;padding:0!important}
-  #content{
-    display:block!important;overflow:visible!important;height:auto!important;
-    width:100%!important;max-width:none!important;
-    padding:0!important;margin:0!important;background:#fff!important;
-  }
   /* Страница A4 */
   @page{size:A4 portrait;margin:12mm 10mm}
+  /* КРИТИЧНО: сбрасываем высоту всей цепочки контейнеров.
+     html/body/app/main имеют height:100vh и overflow:hidden —
+     браузер видит только первый экран. Сбрасываем все ограничения. */
+  html,body{
+    height:auto!important;min-height:0!important;
+    overflow:visible!important;background:#fff!important;
+  }
+  #app{
+    display:block!important;
+    height:auto!important;min-height:0!important;
+    overflow:visible!important;
+  }
+  #main{
+    display:block!important;
+    height:auto!important;min-height:0!important;
+    overflow:visible!important;
+    width:100%!important;margin:0!important;padding:0!important;
+  }
+  #content{
+    display:block!important;
+    height:auto!important;min-height:0!important;
+    overflow:visible!important;
+    width:100%!important;max-width:none!important;
+    padding:8px 0!important;margin:0!important;background:#fff!important;
+  }
   /* Карточки — не разрезать */
   .card{break-inside:avoid;page-break-inside:avoid;box-shadow:none!important;margin-bottom:6px!important}
   /* Блоки ценностей — не разрезать */

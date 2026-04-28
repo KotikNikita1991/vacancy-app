@@ -2021,8 +2021,11 @@ async function exportValueReport(inv, r, opts){
   };
   window.addEventListener('afterprint',restore);
 
+  // Скроллируем в начало — иначе браузер может печатать с текущей позиции
+  el.scrollTo(0,0);
+  window.scrollTo(0,0);
   toast('Откроется диалог печати → выберите «Сохранить как PDF»');
-  await new Promise(res=>setTimeout(res,350));
+  await new Promise(res=>setTimeout(res,400));
   window.print();
 }
 function renderValueBarChart(){
