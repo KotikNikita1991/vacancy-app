@@ -398,11 +398,13 @@ td.td-recruiter:hover{background:var(--bg)}
 :root[data-theme="dark"] .kb-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.4)}
 
 /* ═══════════════════════════════════════════════════════════════
-   PDF-выгрузка — общий запрет разрывов внутри блоков
+   PDF-выгрузка — разрывы управляются из JS во время экспорта.
+   [data-vcard] намеренно убран отсюда: статичный avoid создаёт
+   большие белые гэпы когда блок не влезает на страницу.
+   Диаграммы (val-bar/val-circle) получают page-break-before:always
+   программно, поэтому canvas тоже не трогаем здесь.
    ═══════════════════════════════════════════════════════════════ */
-[data-vcard]{break-inside:avoid;page-break-inside:avoid}
 .card{break-inside:avoid;page-break-inside:avoid}
-canvas{break-inside:avoid;page-break-inside:avoid}
 
 /* ═══════════════════════════════════════════════════════════════
    Кандидатский PDF-режим: нейтральные цвета, без оценочных меток

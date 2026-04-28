@@ -2018,15 +2018,30 @@ async function exportValueReport(inv, r, opts){
       t.style.width='100%'; t.style.minWidth='0'; t.style.tableLayout='fixed'; t.style.wordBreak='break-word';
     });
 
-    // Cards и карточки ценностей (data-vcard) — запрет page-break внутри
-    el.querySelectorAll('.card,[data-vcard],[data-im-block],[data-interp-section]').forEach(c=>{
+    // Только крупные секционные карточки (.card) запрещаем разрывать —
+    // кандидатские [data-vcard] НЕ добавляем в avoid: они создают большие
+    // белые гэпы когда не влезают на страницу. Лучше разрыв, чем пустота.
+    el.querySelectorAll('.card').forEach(c=>{
       cardSv.push({el:c,bi:c.style.breakInside,pbi:c.style.pageBreakInside});
       c.style.breakInside='avoid'; c.style.pageBreakInside='avoid';
     });
-    // Canvas — не разрывать
-    el.querySelectorAll('canvas').forEach(c=>{
-      cardSv.push({el:c,bi:c.style.breakInside,pbi:c.style.pageBreakInside});
-      c.style.breakInside='avoid'; c.style.pageBreakInside='avoid';
+
+    // Диаграммы (столбчатая + радар) — принудительно на отдельный лист.
+    // Ищем .card-контейнеры, содержащие canvas#val-bar и canvas#val-circle.
+    const chartPageBreakSv=[];
+    ['val-bar','val-circle'].forEach(id=>{
+      const canvas=document.getElementById(id);
+      if(!canvas)return;
+      // Поднимаемся к ближайшей .card
+      let cardEl=canvas.parentElement;
+      while(cardEl&&!cardEl.classList.contains('card'))cardEl=cardEl.parentElement;
+      if(!cardEl)return;
+      chartPageBreakSv.push({el:cardEl,pb:cardEl.style.pageBreakBefore,bb:cardEl.style.breakBefore});
+      cardEl.style.pageBreakBefore='always';
+      cardEl.style.breakBefore='page';
+      // Сам canvas — break-inside:avoid чтобы диаграмма не резалась внутри листа
+      cardSv.push({el:canvas,bi:canvas.style.breakInside,pbi:canvas.style.pageBreakInside});
+      canvas.style.breakInside='avoid'; canvas.style.pageBreakInside='avoid';
     });
 
     await new Promise(res=>requestAnimationFrame(res));
@@ -2045,8 +2060,13 @@ async function exportValueReport(inv, r, opts){
       image:{type:'jpeg',quality:0.97},
       html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,width:840,scrollX:0,scrollY:0},
       jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
-      pagebreak:{mode:['css','legacy'],avoid:['.card','[data-vcard]','[data-im-block]','[data-interp-section]','canvas']}
+      // css — читает page-break-before:always для принудительных разрывов (диаграммы)
+      // legacy — fallback для старых браузеров
+      // avoid только для .card (секционные блоки) — без [data-vcard] чтобы не было гэпов
+      pagebreak:{mode:['css','legacy'],avoid:['.card']}
     };
+    // Сохраняем ссылку для finally чтобы восстановить page-break-before
+    cardSv._chartPageBreakSv=chartPageBreakSv;
     toast(candidateMode?'Формируем PDF для кандидата...':'Формируем PDF...');
     await html2pdf().from(el).set(opt).save();
     toast('PDF готов ✓');
@@ -2066,6 +2086,8 @@ async function exportValueReport(inv, r, opts){
     el.scrollTo(sv.scrollLeft,sv.scrollTop);
     tblSv.forEach(s=>{s.el.style.width=s.w; s.el.style.minWidth=s.mw; s.el.style.tableLayout=s.tl; s.el.style.wordBreak=s.wb;});
     cardSv.forEach(s=>{s.el.style.breakInside=s.bi; s.el.style.pageBreakInside=s.pbi;});
+    // Восстанавливаем page-break-before у карточек диаграмм
+    (cardSv._chartPageBreakSv||[]).forEach(s=>{s.el.style.pageBreakBefore=s.pb; s.el.style.breakBefore=s.bb;});
     chartSv.forEach(ch=>{try{ch.resize();}catch(e){}});
   }
 }
