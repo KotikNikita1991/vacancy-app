@@ -1245,6 +1245,89 @@ async function renderAnalytics(){
         }
       </div>
 
+      ${(()=>{
+        // ═══ HEATMAP: нагрузка рекрутеров по месяцам ══════════════════
+        // Ось X — последние 12 месяцев (или меньше если данных нет).
+        // Ось Y — рекрутеры из byRec.
+        // Значение ячейки — количество вакансий, пересекающихся с этим месяцем.
+        const recList=Object.values(byRec).sort((a,b)=>b.in_work_period-a.in_work_period);
+        if(!recList.length)return'';
+        // Строим последние 12 месяцев
+        const today=new Date();
+        const months=[];
+        for(let i=11;i>=0;i--){
+          const d=new Date(today.getFullYear(),today.getMonth()-i,1);
+          months.push({
+            key:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,
+            label:`${d.toLocaleString('ru',{month:'short'})} ${d.getFullYear()}`
+          });
+        }
+        // Для каждого рекрутера × месяц считаем пересечение
+        const grid={};
+        recList.forEach(rc=>{grid[rc.id]={};});
+        allV.forEach(v=>{
+          const k=v.current_recruiter_id||v.recruiter_id;
+          if(!grid[k])return;
+          const opened=v.date_opened||'';
+          const closed=v.fact_date||'9999-12-31';
+          months.forEach(m=>{
+            const mStart=m.key+'-01';
+            const mEnd=m.key+'-31';
+            if(opened<=mEnd && closed>=mStart){
+              grid[k][m.key]=(grid[k][m.key]||0)+1;
+            }
+          });
+        });
+        // Максимум для нормализации цвета
+        let maxVal=1;
+        recList.forEach(rc=>{ months.forEach(m=>{ const v=grid[rc.id][m.key]||0; if(v>maxVal)maxVal=v; }); });
+        function heatColor(v){
+          if(!v)return'#f7f7f8';
+          const t=Math.min(v/maxVal,1);
+          // Белый(255,255,255) → фиолетовый(91,56,153)
+          const r=Math.round(255-(255-91)*t);
+          const g=Math.round(255-(255-56)*t);
+          const b=Math.round(255-(255-153)*t);
+          return`rgb(${r},${g},${b})`;
+        }
+        function textColor(v){
+          if(!v)return'var(--ink3)';
+          return Math.min(v/maxVal,1)>0.5?'#fff':'#2d3748';
+        }
+        const thStyle='padding:5px 6px;font-size:10px;color:var(--ink3);font-weight:600;text-align:center;white-space:nowrap;border-bottom:1px solid var(--bg2)';
+        const tdNameStyle='padding:5px 8px;font-size:11px;font-weight:600;color:var(--ink2);white-space:nowrap;border-right:1px solid var(--bg2)';
+        const headerCells=months.map(m=>`<th style="${thStyle}">${m.label}</th>`).join('');
+        const rows=recList.map(rc=>{
+          const cells=months.map(m=>{
+            const v=grid[rc.id][m.key]||0;
+            return`<td title="${rc.name} · ${m.label}: ${v} вак." style="padding:4px 3px;text-align:center;font-size:10px;font-weight:${v?'700':'400'};background:${heatColor(v)};color:${textColor(v)};min-width:36px;border:1px solid rgba(0,0,0,0.05)">${v||''}</td>`;
+          }).join('');
+          const av=window.VAC_UI;
+          const avHtml=av?`<span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;font-size:9px;font-weight:700;color:#fff;background:${av.color?av.color(rc.name):'var(--acc)'};flex-shrink:0">${av.initials?av.initials(rc.name,1):rc.name.charAt(0)}</span> `:'';
+          return`<tr><td style="${tdNameStyle}">${avHtml}${rc.name}</td>${cells}</tr>`;
+        }).join('');
+        return`<div class="card" style="margin-bottom:16px;overflow-x:auto">
+          <div class="ch"><span class="ct">Тепловая карта нагрузки рекрутеров</span><span style="font-size:11px;color:var(--ink3);margin-left:8px">вакансии в работе по месяцам</span></div>
+          <div style="overflow-x:auto">
+            <table style="border-collapse:collapse;min-width:100%">
+              <thead><tr><th style="${thStyle};text-align:left;border-right:1px solid var(--bg2)">Рекрутер</th>${headerCells}</tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+          <div style="padding:8px 0 0;font-size:10px;color:var(--ink3);display:flex;align-items:center;gap:6px">
+            <span>Интенсивность:</span>
+            ${[0,0.2,0.5,0.8,1].map(t=>{
+              const v=Math.round(t*maxVal);
+              const r=Math.round(255-(255-91)*t);
+              const g=Math.round(255-(255-56)*t);
+              const b=Math.round(255-(255-153)*t);
+              return`<span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:18px;border-radius:3px;background:rgb(${r},${g},${b});color:${t>0.5?'#fff':'#2d3748'};font-size:9px;font-weight:700">${v||'0'}</span>`;
+            }).join('')}
+            <span style="margin-left:4px">(вак.)</span>
+          </div>
+        </div>`;
+      })()}
+
       <div class="card" style="background:var(--accbg);border-color:#d4c2eb">
         <div class="ch" style="border-color:#d4c2eb"><span class="ct" style="color:var(--acc)">Логика расчётов</span></div>
         <div style="padding:12px 20px 16px;font-size:13px;color:var(--ink2);line-height:1.9">
@@ -1861,15 +1944,6 @@ function renderMetaLegend(containerId, metas, colors){
   `).join('');
 }
 
-function updateChartModeButtons(){
-  const btns=[...document.querySelectorAll('[data-act="val-chart-mode"]')];
-  btns.forEach(b=>{
-    const on=b.dataset.mode===V_RESULT_VIEW.mode;
-    b.style.background=on?'#7B5EA7':'';
-    b.style.color=on?'#fff':'';
-    b.style.borderColor=on?'#7B5EA7':'';
-  });
-}
 
 function stripInterpretationSummary(text){
   const raw=String(text||'').replace(/\r/g,'');
@@ -1891,23 +1965,32 @@ async function exportValueReport(inv, r, opts){
   // chartSv ОБЪЯВЛЯЕМ снаружи try, чтобы finally мог его восстановить
   // даже если ошибка случилась раньше точки наполнения.
   const chartSv=[];
+  // Для кандидатского PDF: запоминаем скрытые датасеты "Эталонный профиль"
+  const idealHidden=[];
   // Флаг режима PDF выставляем на body — CSS-правила [data-pdf-mode="candidate"]
-  // (см. css/app.css) скроют альт-расчёт, диапазоны идеала, риски и нейтрализуют
-  // цвета карточек ценностей.
+  // (см. css/app.css) скроют оценочные элементы и нейтрализуют цвета карточек.
   if(candidateMode)document.body.setAttribute('data-pdf-mode','candidate');
   try{
     await ensureHtml2Pdf();
     const baseName=(inv?.candidate_name||'employee').replace(/[^\wа-яА-ЯёЁ-]+/g,'_');
     const filename=(candidateMode?'value-report-candidate-':'value-report-')+baseName+'.pdf';
 
-    // Скрываем все кнопки действий (включая кандидатскую кнопку и переключатель альт. расчёта)
-    el.querySelectorAll('[data-act="val-export"],[data-act="val-export-candidate"],[data-act="val-list"],[data-act="val-chart-mode"]').forEach(x=>{
+    // Скрываем кнопки действий
+    el.querySelectorAll('[data-act="val-export"],[data-act="val-export-candidate"],[data-act="val-list"]').forEach(x=>{
       hideSv.push({el:x,d:x.style.display}); x.style.display='none';
     });
-    // В кандидатском режиме скрываем целые блоки, которые не нужны кандидату
+
+    // В кандидатском режиме скрываем «Эталонный профиль» на диаграммах
     if(candidateMode){
-      el.querySelectorAll('.vac-alt-calc').forEach(x=>{
-        hideSv.push({el:x,d:x.style.display}); x.style.display='none';
+      [V_RESULT_CHARTS.bar,V_RESULT_CHARTS.circle].forEach(ch=>{
+        if(!ch||!ch.data)return;
+        ch.data.datasets.forEach((ds,i)=>{
+          if(ds.label==='Эталонный профиль'){
+            try{ch.setDatasetVisibility(i,false);}catch(e){}
+            idealHidden.push({ch,i});
+          }
+        });
+        try{ch.update('none');}catch(e){}
       });
     }
 
@@ -1917,7 +2000,6 @@ async function exportValueReport(inv, r, opts){
     sv.overflowX=el.style.overflowX; sv.overflowY=el.style.overflowY;
 
     // CRITICAL: flex:none → ширина 840px не подавляется flex-контейнером.
-    // overflow-x clips, overflow-y visible — иначе captured будет только viewport.
     el.scrollTo(0,0);
     el.style.flex='none';
     el.style.width='840px';
@@ -1931,7 +2013,12 @@ async function exportValueReport(inv, r, opts){
     });
 
     // Cards и карточки ценностей (data-vcard) — запрет page-break внутри
-    el.querySelectorAll('.card, [data-vcard]').forEach(c=>{
+    el.querySelectorAll('.card,[data-vcard],[data-im-block],[data-interp-section]').forEach(c=>{
+      cardSv.push({el:c,bi:c.style.breakInside,pbi:c.style.pageBreakInside});
+      c.style.breakInside='avoid'; c.style.pageBreakInside='avoid';
+    });
+    // Canvas — не разрывать
+    el.querySelectorAll('canvas').forEach(c=>{
       cardSv.push({el:c,bi:c.style.breakInside,pbi:c.style.pageBreakInside});
       c.style.breakInside='avoid'; c.style.pageBreakInside='avoid';
     });
@@ -1944,15 +2031,16 @@ async function exportValueReport(inv, r, opts){
       if(ch){chartSv.push(ch); try{ch.resize();}catch(e){}}
     });
     await new Promise(res=>requestAnimationFrame(res));
+    await new Promise(res=>requestAnimationFrame(res));
 
     const opt={
       margin:[10,8,10,8],
       filename:filename,
       image:{type:'jpeg',quality:0.97},
-      html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,width:840,scrollX:0,scrollY:0},
+      html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,width:840,scrollX:0,scrollY:0,windowWidth:840},
       jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
-      // avoid — НЕ резать .card И карточки ценностей по page-break
-      pagebreak:{mode:['css','legacy'],avoid:['.card','[data-vcard]']}
+      // avoid-all + явный список элементов, которые нельзя разрывать
+      pagebreak:{mode:['avoid-all','css'],avoid:['.card','[data-vcard]','[data-im-block]','[data-interp-section]','canvas']}
     };
     toast(candidateMode?'Формируем PDF для кандидата...':'Формируем PDF...');
     await html2pdf().from(el).set(opt).save();
@@ -1962,6 +2050,10 @@ async function exportValueReport(inv, r, opts){
     toast('Ошибка PDF: '+(e?.message||'неизвестная ошибка'),'err');
   }finally{
     if(candidateMode)document.body.removeAttribute('data-pdf-mode');
+    // Восстанавливаем «Эталонный профиль» на диаграммах
+    idealHidden.forEach(({ch,i})=>{
+      try{ch.setDatasetVisibility(i,true);ch.update('none');}catch(e){}
+    });
     hideSv.forEach(s=>{s.el.style.display=s.d;});
     el.style.flex=sv.flex; el.style.width=sv.width;
     el.style.maxWidth=sv.maxWidth;
@@ -1973,33 +2065,18 @@ async function exportValueReport(inv, r, opts){
   }
 }
 function renderValueBarChart(){
-  if(!V_RESULT_VIEW.centered)return;
-  const mode = V_RESULT_VIEW.mode === 'base' && V_RESULT_VIEW.base ? 'base' : 'centered';
-  const src = mode === 'base' ? V_RESULT_VIEW.base : V_RESULT_VIEW.centered;
+  // Всегда показываем базовые средние (1–6). Если base недоступен — fallback на centered.
+  const src = V_RESULT_VIEW.base || V_RESULT_VIEW.centered;
+  if(!src) return;
   const abbrs = Array.isArray(V_RESULT_VIEW.abbrs) ? V_RESULT_VIEW.abbrs.slice() : [];
   const labelsRaw = abbrs.length ? abbrs.map(a=>VALUE_SHORT_LABEL_BY_ABBR[a]||a) : (Array.isArray(src?.labels) ? src.labels.slice() : []);
   const dataRaw = Array.isArray(src?.data) ? src.data.slice() : [];
-  const idealRaw = mode === 'base'
-    ? (Array.isArray(V_RESULT_VIEW.idealBase) ? V_RESULT_VIEW.idealBase.slice() : null)
-    : null;
+  const idealRaw = Array.isArray(V_RESULT_VIEW.idealBase) ? V_RESULT_VIEW.idealBase.slice() : null;
   const pairs = labelsRaw.map((label,i)=>({label,value:Number(dataRaw[i])||0,ideal:idealRaw?Number(idealRaw[i])||0:null}));
-  if(mode==='base'){
-    pairs.sort((a,b)=>b.value-a.value);
-    V_RESULT_VIEW.baseOrder=pairs.map(p=>p.label);
-  }else if(Array.isArray(V_RESULT_VIEW.baseOrder) && V_RESULT_VIEW.baseOrder.length){
-    const rank={};
-    V_RESULT_VIEW.baseOrder.forEach((lbl,idx)=>{ rank[lbl]=idx; });
-    pairs.sort((a,b)=>{
-      const ra=(rank[a.label]??999), rb=(rank[b.label]??999);
-      return ra-rb;
-    });
-  }else{
-    pairs.sort((a,b)=>b.value-a.value);
-  }
+  pairs.sort((a,b)=>b.value-a.value);
   const labels = pairs.map(p=>p.label);
   const data = pairs.map(p=>p.value);
   const ideal = idealRaw ? pairs.map(p=>p.ideal) : null;
-  const yTitle = mode === 'base' ? 'Средние баллы' : 'Отклонение';
   if(V_RESULT_CHARTS.bar)V_RESULT_CHARTS.bar.destroy();
   const _dl=window.ChartDataLabels;
   V_RESULT_CHARTS.bar=new Chart(document.getElementById('val-bar').getContext('2d'),{
@@ -2010,7 +2087,7 @@ function renderValueBarChart(){
       datasets:[
         {
           type:'bar',
-          label:mode === 'base' ? 'Профиль' : 'Профиль (центр.)',
+          label:'Профиль',
           data,
           backgroundColor:'rgba(123,94,167,0.82)',
           borderColor:'#7B5EA7',
@@ -2047,18 +2124,16 @@ function renderValueBarChart(){
       },
       scales:{
         x:{ticks:{autoSkip:false,maxRotation:45,minRotation:45,font:{size:9},color:'#4a5568'},grid:{color:'rgba(0,0,0,0.04)'}},
-        y: mode === 'base'
-          ? {min:1,max:6,beginAtZero:false,title:{display:true,text:yTitle,font:{size:10}},grid:{color:'rgba(0,0,0,0.06)'},ticks:{font:{size:9}}}
-          : {min:-3,max:3,beginAtZero:true,title:{display:true,text:yTitle,font:{size:10}},grid:{color:'rgba(0,0,0,0.06)'},ticks:{font:{size:9}}}
+        y:{min:1,max:6,beginAtZero:false,title:{display:true,text:'Средние баллы',font:{size:10}},grid:{color:'rgba(0,0,0,0.06)'},ticks:{font:{size:9}}}
       }
     }
   });
 }
 
 function renderValueCircleChart(){
-  if(!V_RESULT_VIEW.circleCentered)return;
-  const mode = V_RESULT_VIEW.circleBase ? 'base' : 'centered';
-  const src = mode === 'base' ? V_RESULT_VIEW.circleBase : V_RESULT_VIEW.circleCentered;
+  // Всегда показываем базовые средние (1–6). Если base недоступен — fallback на centered.
+  const src = V_RESULT_VIEW.circleBase || V_RESULT_VIEW.circleCentered;
+  if(!src)return;
   const abbrs = Array.isArray(V_RESULT_VIEW.circleAbbrs) ? V_RESULT_VIEW.circleAbbrs : [];
   const labels = abbrs.length ? abbrs.map(a=>VALUE_SHORT_LABEL_BY_ABBR[a]||a) : (src.labels||[]);
   if(V_RESULT_CHARTS.circle)V_RESULT_CHARTS.circle.destroy();
@@ -2136,19 +2211,9 @@ function renderValueCircleChart(){
           borderWidth:2,
           ...(_dlr?{datalabels:{display:true,anchor:'end',align:'end',offset:4,color:'#7B5EA7',backgroundColor:'rgba(255,255,255,0.88)',borderColor:'#7B5EA7',borderWidth:1,borderRadius:4,padding:{top:1,bottom:1,left:3,right:3},font:{size:9,weight:'700'},formatter:v=>Number(v).toFixed(1)}}:{})
         },
-        ...(mode==='base' && Array.isArray(V_RESULT_VIEW.circleIdealBase) ? [{
+        ...(Array.isArray(V_RESULT_VIEW.circleIdealBase) ? [{
           label:'Эталонный профиль',
           data:V_RESULT_VIEW.circleIdealBase,
-          borderColor:'#E11D48',
-          backgroundColor:'rgba(225,29,72,.04)',
-          pointBackgroundColor:'#E11D48',
-          pointRadius:3,
-          borderWidth:2,
-          ...(_dlr?{datalabels:{display:false}}:{})
-        }] : []),
-        ...(mode!=='base' && Array.isArray(V_RESULT_VIEW.circleIdealCentered) ? [{
-          label:'Эталонный профиль',
-          data:V_RESULT_VIEW.circleIdealCentered,
           borderColor:'#E11D48',
           backgroundColor:'rgba(225,29,72,.04)',
           pointBackgroundColor:'#E11D48',
@@ -2421,7 +2486,7 @@ async function viewValueResult(id){
     ${interpText ? `<div class="card" style="padding:12px 14px;margin-bottom:10px">
       <div style="font-size:13px;color:var(--ink2);line-height:1.7">${interpHtml}</div>
     </div>` : ''}
-    <div class="card" style="padding:14px 16px;margin-bottom:10px;background:${_mbg};border-color:${_mbd}">
+    <div class="card" data-vprofile="1" style="padding:14px 16px;margin-bottom:10px;background:${_mbg};border-color:${_mbd}">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
         <div class="ct" style="color:${_mtx};font-size:15px">Итог соответствия профилю компании</div>
         ${levelBadgeHtml(profile)}
@@ -2455,17 +2520,6 @@ async function viewValueResult(id){
         </div>
       </div>
     </div>
-    <div class="card vac-alt-calc" style="padding:10px 12px;margin-bottom:10px">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span style="font-size:12px;color:var(--ink3)">Столбчатая диаграмма:</span>
-        <div style="display:inline-flex;gap:6px;background:#f3f4f6;padding:4px;border-radius:10px">
-          <button type="button" class="btn-sm" data-act="val-chart-mode" data-mode="centered">Центрированные</button>
-          <button type="button" class="btn-sm" data-act="val-chart-mode" data-mode="base">Базовые средние</button>
-        </div>
-        <span style="font-size:11px;color:var(--ink3)">(радар всегда в базовых)</span>
-      </div>
-      <div id="val-base-note" style="margin-top:8px;font-size:12px;color:var(--ink3);display:none"></div>
-    </div>
     <div class="card" style="padding:12px;margin-bottom:10px;max-width:980px;margin-left:auto;margin-right:auto">
       <div class="ct" style="margin-bottom:10px">Столбчатая диаграмма ценностей</div>
       <div style="height:260px"><canvas id="val-bar"></canvas></div>
@@ -2487,27 +2541,18 @@ async function viewValueResult(id){
       ? { labels:circleCentered.labels||[], data:circleCentered.data.map(v=>Number(v)+mean57), order:circleCentered.order }
       : null;
     V_RESULT_VIEW={
-      mode:'base',
       centered:barModes.centered,
       base:getBaseBarData(r, barModes.centered),
       idealBase:Array.isArray(r?.bar_chart?.ideal_data)?r.bar_chart.ideal_data:null,
-      idealCentered:Array.isArray(r?.bar_chart?.ideal_centered_data)?r.bar_chart.ideal_centered_data:null,
       colors:Array.isArray(r?.bar_chart?.colors)?r.bar_chart.colors:null,
       abbrs:Array.isArray(r?.bar_chart?.abbrs)?r.bar_chart.abbrs:null,
       circleCentered,
       circleBase,
       circleAbbrs:Array.isArray(r?.circle_chart?.order)?r.circle_chart.order.map(id=>VALUE_ABBR_BY_ID_FRONT[id]||id):null,
-      circleIdealBase:Array.isArray(r?.circle_chart?.ideal_data)?r.circle_chart.ideal_data:null,
-      circleIdealCentered:Array.isArray(r?.circle_chart?.ideal_centered_data)?r.circle_chart.ideal_centered_data:null
+      circleIdealBase:Array.isArray(r?.circle_chart?.ideal_data)?r.circle_chart.ideal_data:null
     };
-    const noteEl=document.getElementById('val-base-note');
-    if(noteEl && !V_RESULT_VIEW.base){
-      noteEl.style.display='block';
-      noteEl.textContent='Базовые средние не удалось восстановить: backend не вернул ни сырые значения, ни общий средний балл. Показаны центрированные данные.';
-    }
     renderValueBarChart();
     renderValueCircleChart();
-    updateChartModeButtons();
 
     // IM chart (simple bar 10..60)
     const imChart = im?.chart || null;
@@ -2915,14 +2960,6 @@ function initGlobalActs(){
         return;
       }
       viewValueResult(el.dataset.vid);
-    } else if(act==='val-chart-mode'){
-      const mode=el.dataset.mode;
-      if(mode==='centered' || mode==='base'){
-        V_RESULT_VIEW.mode=mode;
-        renderValueBarChart();
-        renderValueCircleChart();
-        updateChartModeButtons();
-      }
     } else if(act==='val-filter'){
       V_PROFILE_FILTER=el.dataset.filter||'all';
       renderValuesList(document.getElementById('content'));

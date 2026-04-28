@@ -177,8 +177,6 @@
     html+='<span style="font-weight:700;font-size:13px;color:#1a202c">'+esc(v.cfg.n)+'</span>';
     html+='<span style="font-size:10px;color:#a0aec0">('+esc(v.cfg.a)+')</span>';
     html+='<span data-vscore="1" style="padding:2px 9px;border-radius:999px;background:#fff;border:1px solid '+c.bd+';font-size:11px;font-weight:700;color:'+c.tx+'">'+v.sc.toFixed(2)+'</span>';
-    html+='<span data-vband="1" style="font-size:10px;color:'+c.tx+'">'+bandLabel(b)+'</span>';
-    html+='<span data-videal="1" style="font-size:10px;color:#a0aec0">Идеал: '+v.cfg.mn+'–'+v.cfg.mx+'</span>';
     html+='</div>';
     if(interpTxt){html+='<div data-vinterp="1" style="font-size:11px;font-style:italic;color:#4a5568;margin-bottom:6px;line-height:1.5">'+esc(interpTxt)+'</div>';}
     if(card){
@@ -209,7 +207,7 @@
     }
     if(!syn.length&&!con.length)return'';
     function valLabel(cfg){
-      var mark=keyAbbrs[cfg.a]?'<span title="Ключевая ценность профиля компании" style="color:#276749;font-weight:800;font-size:10px;vertical-align:middle"> ✓</span>':'';
+      var mark=keyAbbrs[cfg.a]?'<span data-vkeymark="1" title="Ключевая ценность профиля компании" style="color:#276749;font-weight:800;font-size:10px;vertical-align:middle"> ✓</span>':'';
       return'<b>'+esc(cfg.n)+'</b><span style="color:#a0aec0"> ('+cfg.a+')</span>'+mark;
     }
     function pairRows(pairs){
@@ -222,7 +220,7 @@
     }
     var html='<div style="margin-top:14px">';
     html+='<div style="font-size:13px;font-weight:700;color:#1a202c;margin-bottom:6px;padding-bottom:5px;border-bottom:2px solid #bee3f8">Взаимодействие ведущих ценностей (топ-7 по баллу)</div>';
-    html+='<div style="font-size:10px;color:#718096;margin-bottom:8px">✓ — ценность является ключевой в профиле компании</div>';
+    html+='<div data-vkeylgd="1" style="font-size:10px;color:#718096;margin-bottom:8px">✓ — ценность является ключевой в профиле компании</div>';
     html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
     html+='<div style="background:#f0fff4;border-radius:8px;padding:10px 12px">';
     html+='<div style="font-size:11px;font-weight:700;color:#276749;margin-bottom:6px">🟢 Синергия — ценности усиливают друг друга</div>';
@@ -249,9 +247,11 @@
     var top5=byScore.slice(0,7);
 
     var html='';
+    html+='<div data-vgrid="1">';
     html+='<div style="font-size:13px;font-weight:700;color:#1a202c;margin-bottom:6px;padding-bottom:5px;border-bottom:2px solid #e2e8f0">Обзор всех 19 ценностей</div>';
     html+='<div style="font-size:10px;color:#a0aec0;margin-bottom:6px">К — Ключевая · В — Важная · Н — Нейтральная · × — Нежелательная · ✓ в диапазоне · ↑↓ вне диапазона</div>';
     html+=renderGrid(vals);
+    html+='</div>';
 
     html+='<div style="font-size:13px;font-weight:700;color:#1a202c;margin:16px 0 6px;padding-bottom:5px;border-bottom:2px solid #c6f6d5">Детальная интерпретация всех 19 ценностей</div>';
     html+='<div style="font-size:11px;color:#718096;margin-bottom:10px">Порядок — по убыванию балла кандидата. Вверху — ценности, которые сильнее всего определяют поведение.</div>';

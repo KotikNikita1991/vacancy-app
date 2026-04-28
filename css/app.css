@@ -428,4 +428,10 @@ canvas{break-inside:avoid;page-break-inside:avoid}
 [data-pdf-mode="candidate"] [data-vdem]{display:none!important}
 /* «Мотивирует» нейтрализуем по цвету, но оставляем — это полезно кандидату */
 [data-pdf-mode="candidate"] [data-vmot]{color:#4a5568!important}
-[data-pdf-mode="candidate"] .vac-alt-calc{display:none!important}
+/* Итог соответствия профилю компании — скрыть для кандидата */
+[data-pdf-mode="candidate"] [data-vprofile]{display:none!important}
+/* Таблица «Обзор всех 19 ценностей» — скрыть для кандидата */
+[data-pdf-mode="candidate"] [data-vgrid]{display:none!important}
+/* Галочки ключевых ценностей и их легенда — скрыть для кандидата */
+[data-pdf-mode="candidate"] [data-vkeymark]{display:none!important}
+[data-pdf-mode="candidate"] [data-vkeylgd]{display:none!important}
