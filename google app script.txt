@@ -18,6 +18,7 @@ const SH = {
   VALUE_INVITES:   'ОценкаЦенностей_Приглашения',
   VALUE_RESPONSES: 'ОценкаЦенностей_Ответы',
   VALUE_RESULTS:   'ОценкаЦенностей_Результаты',
+  PLANS:           'Планы',
 };
 
 // Для тестов можно "*", в проде лучше ограничить
@@ -83,8 +84,22 @@ function initDatabase() {
   }
 
   ensureValueSheets_(ss);
+  ensurePlansSheet_(ss);
 
   return '✅ База инициализирована';
+}
+
+function ensurePlansSheet_(ss) {
+  const sp = ss || SpreadsheetApp.openById(SPREADSHEET_ID);
+  let s = sp.getSheetByName(SH.PLANS);
+  if (!s) s = sp.insertSheet(SH.PLANS);
+  if (s.getLastRow() === 0) {
+    s.appendRow(['id', 'recruiter_id', 'month', 'plan', 'updated_by', 'updated_at']);
+    s.getRange('1:1').setFontWeight('bold').setBackground('#f3f4f6');
+    s.setFrozenRows(1);
+  } else {
+    ensureHeaders_(s, ['id', 'recruiter_id', 'month', 'plan', 'updated_by', 'updated_at']);
+  }
 }
 
 function ensureValueSheets_(ss) {
@@ -218,6 +233,10 @@ function route(action, data) {
       activateUser:            () => setUserActive(data, true),
       deactivateUser:          () => setUserActive(data, false),
       deleteUser:              () => deleteUser(data),
+
+      // Планы рекрутеров
+      setPlan:                     () => setPlan(data),
+      getPlans:                    () => getPlans(data),
 
       // Новый модуль — Оценка ценностей
       createValueAssessmentInvite: () => createValueAssessmentInvite(data),
@@ -1812,6 +1831,81 @@ function updateAllDays() {
     const daysFrom = transDate || opened;
     sheet.getRange(i + 1, 25).setValue(calcDays(daysFrom, today)); // days_current
   }
+}
+
+// ───────────────────────────────────────────────────────────────────
+// ПЛАНЫ РЕКРУТЕРОВ
+// ───────────────────────────────────────────────────────────────────
+function setPlan(data) {
+  const recruiter_id = String(data.recruiter_id || '').trim();
+  const month        = String(data.month || '').trim();   // формат YYYY-MM
+  const planVal      = Number(data.plan) || 0;
+  const updated_by   = String(data.updated_by || '');
+
+  if (!recruiter_id || !month) return { ok: false, error: 'Не указан recruiter_id или month' };
+
+  ensurePlansSheet_();   // создаст лист, если ещё нет
+
+  const sheet = getSheet(SH.PLANS);
+  const hm    = headerMap_(sheet);
+  const rows  = sheet.getDataRange().getValues();
+  const now   = new Date().toISOString();
+
+  // Ищем существующую строку с таким же recruiter_id + month
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r[0]) continue;
+    const rId = String(getCellByHeader_(r, hm, 'recruiter_id', '') || '');
+    const rMo = String(getCellByHeader_(r, hm, 'month', '') || '');
+    if (rId === recruiter_id && rMo === month) {
+      // Обновляем существующую строку
+      const planCol = (hm['plan'] != null ? hm['plan'] : 3) + 1;
+      const updByCol = (hm['updated_by'] != null ? hm['updated_by'] : 4) + 1;
+      const updAtCol = (hm['updated_at'] != null ? hm['updated_at'] : 5) + 1;
+      sheet.getRange(i + 1, planCol).setValue(planVal);
+      sheet.getRange(i + 1, updByCol).setValue(updated_by);
+      sheet.getRange(i + 1, updAtCol).setValue(now);
+      return { ok: true, action: 'updated', recruiter_id, month, plan: planVal };
+    }
+  }
+
+  // Вставляем новую строку
+  const newRow = buildRowByHeaders_(sheet, {
+    id:           generateId(),
+    recruiter_id: recruiter_id,
+    month:        month,
+    plan:         planVal,
+    updated_by:   updated_by,
+    updated_at:   now
+  }, hm);
+  sheet.appendRow(newRow);
+  return { ok: true, action: 'created', recruiter_id, month, plan: planVal };
+}
+
+function getPlans(data) {
+  let sheet;
+  try {
+    sheet = getSheet(SH.PLANS);
+  } catch (e) {
+    // Лист ещё не создан — возвращаем пустой список
+    return { ok: true, plans: [] };
+  }
+
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length < 2) return { ok: true, plans: [] };
+
+  const hm = headerMap_(sheet);
+  const plans = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r[0]) continue;
+    plans.push({
+      recruiter_id: String(getCellByHeader_(r, hm, 'recruiter_id', '') || ''),
+      month:        String(getCellByHeader_(r, hm, 'month', '') || ''),
+      plan:         Number(getCellByHeader_(r, hm, 'plan', 0) || 0)
+    });
+  }
+  return { ok: true, plans };
 }
 
 // ───────────────────────────────────────────────────────────────────

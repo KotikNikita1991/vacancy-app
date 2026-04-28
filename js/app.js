@@ -221,7 +221,9 @@ async function startApp(){
   b.textContent=rc.l||U.role;b.style.background=rc.bg||'#eee';b.style.color=rc.c||'#333';
   buildNav();
   initNavDelegation();
+  // Планы: сначала берём кэш из localStorage, потом актуальные данные из API
   try{ Object.assign(PLANS, loadPlans()||{}); }catch(e){}
+  loadPlansFromApi();
   initGlobalActs();
   initEscClose();
   initDocFilterDdClose();
@@ -1395,11 +1397,30 @@ async function renderAnalytics(){
   render();
 }
 
-function setPlan(recId,month,val){
+async function loadPlansFromApi(){
+  try{
+    const res=await api('getPlans');
+    if(res?.ok && Array.isArray(res.plans)){
+      res.plans.forEach(p=>{
+        if(p.recruiter_id && p.month) PLANS[`${p.recruiter_id}::${p.month}`]=Number(p.plan)||0;
+      });
+      try{ savePlans(PLANS); }catch(e){}
+      // Перерисовываем аналитику, если она открыта
+      if(PAGE==='analytics') renderAnalytics();
+    }
+  }catch(e){}
+}
+
+async function setPlan(recId,month,val){
   const key=`${recId}::${month}`;
   PLANS[key]=Number(val)||0;
   try{ savePlans(PLANS); }catch(e){}
-  // TODO: сохранить в API api('setPlan',{recruiter_id:recId,month,plan:PLANS[key]})
+  // Сохраняем в Google Sheets — все пользователи видят единый план
+  try{
+    await api('setPlan',{recruiter_id:recId,month,plan:PLANS[key],updated_by:U?.name||''});
+  }catch(e){
+    console.warn('setPlan API error',e);
+  }
 }
 
 // ══ CHECKLIST ════════════════════════════════════════
