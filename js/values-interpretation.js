@@ -276,8 +276,10 @@
 
   function tryInject(){
     if(document.querySelector('[data-interp-section]'))return;
-    var v2=document.querySelector('[data-v2-card]');
-    if(!v2)return;
+    // Маркер страницы результатов — IM-блок или карточка профиля.
+    // Раньше здесь проверяли [data-v2-card], но V2-инжект отключён.
+    var anchor=document.querySelector('[data-im-block]')||document.querySelector('[data-vprofile]');
+    if(!anchor)return;
     var r=currentResult(); if(!r)return;
     var raw=getRaw(r); if(!raw)return;
     var html=renderSection(raw); if(!html)return;
@@ -291,9 +293,7 @@
     hdr.innerHTML='Интерпретация ценностного профиля <span style="font-size:11px;font-weight:400;color:#a0aec0">по PVQ-RR (Шварц, 19 ценностей)</span>';
     wrap.appendChild(hdr);
     wrap.insertAdjacentHTML('beforeend',html);
-    // Insert AFTER the IM block if present, so IM stays above interpretation
-    var imBlock=document.querySelector('[data-im-block]');
-    var anchor=imBlock||v2;
+    // Вставляем ПОСЛЕ IM-блока — он должен быть выше интерпретации
     anchor.parentNode.insertBefore(wrap,anchor.nextSibling);
   }
 
