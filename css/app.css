@@ -498,8 +498,8 @@ td.td-recruiter:hover{background:var(--bg)}
 .dpi-viz-cl-hdr{padding:9px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .dpi-viz-cl-name{font-size:11px;font-weight:800;flex:1;text-transform:uppercase;letter-spacing:.3px}
 .dpi-viz-cl-score{font-size:13px;font-weight:700}
-.dpi-viz-row{display:flex;align-items:center;gap:10px;padding:7px 14px;border-top:1px solid rgba(0,0,0,.05);background:var(--sur,#fff);min-height:36px;break-inside:avoid;page-break-inside:avoid}
-.dpi-viz-sc-name{font-size:12px;color:var(--ink);width:188px;flex-shrink:0;line-height:1.3}
+.dpi-viz-row{display:flex;align-items:center;gap:10px;padding:5px 14px;border-top:1px solid rgba(0,0,0,.05);background:var(--sur,#fff);min-height:30px;break-inside:avoid;page-break-inside:avoid}
+.dpi-viz-sc-name{font-size:12px;color:var(--ink);width:188px;flex-shrink:0;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dpi-viz-track{flex:1;position:relative;height:10px;border-radius:5px;overflow:visible;background:linear-gradient(to right,#e6f9f2 30%,#fff6dd 30%,#fff6dd 53%,#fff0e0 53%,#fff0e0 73%,#ffe9ec 73%);border:1px solid rgba(0,0,0,.08)}
 .dpi-viz-marker{position:absolute;top:50%;width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.28);transform:translate(-50%,-50%);z-index:2}
 .dpi-viz-tip{position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);font-size:9px;font-weight:800;white-space:nowrap;pointer-events:none;line-height:1}
@@ -618,3 +618,47 @@ body[data-pdf-mode^="dpi"] #content{display:block!important;height:auto!importan
 body[data-pdf-mode^="dpi"] .tbl-wrap{overflow:visible!important}
 body[data-pdf-mode^="dpi"] .dpi-desc-expand{display:none!important}
 body[data-pdf-mode^="dpi"] #dpi-result-card{box-shadow:none!important;break-inside:auto!important;page-break-inside:auto!important}
+
+/* ═══════════════════════════════════════════════════════════════
+   DPI — TOP GRID (IM bar + cluster overview, Round 3)
+   ═══════════════════════════════════════════════════════════════ */
+.dpi-top-grid{display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+.dpi-im-card{flex:0 0 260px;padding:16px;border-radius:10px;border:1px solid;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+.dpi-im-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.dpi-im-lbl{font-size:12px;font-weight:600;color:var(--ink2)}
+.dpi-im-val{font-size:20px;font-weight:800}
+.dpi-im-track{position:relative;height:12px;border-radius:6px;overflow:visible;margin-bottom:8px;background:linear-gradient(to right,#e6f9f2 30%,#fff6dd 30%,#fff6dd 57%,#ffe9ec 57%);border:1px solid rgba(0,0,0,.08);print-color-adjust:exact;-webkit-print-color-adjust:exact}
+.dpi-im-lvl-txt{font-size:12px;font-weight:600}
+.dpi-cls-overview{flex:1;min-width:260px;border:1px solid var(--bg2);border-radius:10px;overflow:hidden}
+.dpi-cls-mini-hdr{padding:8px 14px;font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px;background:var(--bg);border-bottom:1px solid var(--bg2)}
+.dpi-cls-mini-row{display:flex;align-items:center;gap:8px;padding:5px 12px;border-bottom:1px solid rgba(0,0,0,.04);background:var(--sur);print-color-adjust:exact;-webkit-print-color-adjust:exact}
+.dpi-cls-mini-row:last-child{border-bottom:none}
+.dpi-cls-mini-name{font-size:11px;font-weight:700;width:110px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dpi-cls-mini-score{font-size:12px;font-weight:700;width:30px;text-align:right;flex-shrink:0}
+
+/* ═══════════════════════════════════════════════════════════════
+   DPI — SECTION CARDS (visual separation, Round 3)
+   ═══════════════════════════════════════════════════════════════ */
+.dpi-sect-card{background:var(--bg,#f4f5f7);border-radius:12px;padding:18px;margin-bottom:16px;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+.dpi-sect-hdr{font-size:14px;font-weight:700;color:var(--ink);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.dpi-sect-hdr::before{content:'';width:3px;height:14px;border-radius:2px;background:var(--acc,#7B5EA7);display:block;flex-shrink:0;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+
+/* ═══════════════════════════════════════════════════════════════
+   DPI — RISK HIGHLIGHT (Описания шкал, Round 3)
+   ═══════════════════════════════════════════════════════════════ */
+.dpi-desc-risk{border-left:3px solid #fca5a5;background:#fff9f9;padding:4px 8px;border-radius:0 4px 4px 0;margin-top:4px;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+.dpi-desc-risk b{color:var(--red,#B83232)!important}
+
+/* ═══════════════════════════════════════════════════════════════
+   DPI — PRINT COLOR ACCURACY
+   Без этого браузер не печатает фоновые цвета/градиенты
+   ═══════════════════════════════════════════════════════════════ */
+.dpi-viz-track,.dpi-viz-marker,.dpi-viz-cl-hdr,.dpi-lvl{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+body[data-pdf-mode^="dpi"]{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+@media print{
+  body[data-pdf-mode^="dpi"]{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .dpi-sect-card,.dpi-im-card,.dpi-im-track,.dpi-viz-track,.dpi-viz-marker,
+  .dpi-viz-cl-hdr,.dpi-cls-mini-row,.dpi-lvl,.dpi-desc-risk{
+    print-color-adjust:exact;-webkit-print-color-adjust:exact
+  }
+}

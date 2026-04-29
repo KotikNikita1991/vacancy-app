@@ -306,7 +306,45 @@
     var imLvl=D.getImLevel(im.sum||0);
     var imPct=Math.min(100,Math.round(((im.sum||10)-10)/30*100));
 
-    // ── Легенда уровней ────────────────────────────────────────
+    // ── Верхняя сетка: IM-диаграмма + обзор кластеров ─────────
+    var clsMiniRows=D.CLUSTERS.map(function(cl){
+      var col=D.CLUSTER_COLORS[cl.code]||'#888';
+      var clSc=clusters[cl.code];
+      var clLvl=clSc!=null?D.getLevel(clSc):null;
+      var clLv=clLvl?D.LEVEL_LABELS[clLvl]:null;
+      var clPct=clSc!=null?Math.round((clSc-1)/3*100):null;
+      var sColor=clLv?clLv.color:col;
+      return '<div class="dpi-cls-mini-row">'+
+        '<div class="dpi-cls-mini-name" style="color:'+col+'" title="'+escH(cl.name)+'">'+escH(cl.shortName)+'</div>'+
+        '<div class="dpi-viz-track" style="height:8px">'+
+          (clPct!=null?'<div class="dpi-viz-marker" style="left:'+clPct+'%;background:'+sColor+';width:12px;height:12px"></div>':'')+
+        '</div>'+
+        '<div class="dpi-cls-mini-score" style="color:'+sColor+'">'+(clSc!=null?clSc.toFixed(2):'—')+'</div>'+
+        (clLv?'<span class="dpi-lvl" style="background:'+clLv.bg+';color:'+clLv.color+';flex-shrink:0">'+clLv.label+'</span>':'')+
+      '</div>';
+    }).join('');
+
+    var topGrid=
+      '<div class="dpi-top-grid">'+
+        '<div class="dpi-im-card" style="background:'+imLvl.bg+';border-color:'+imLvl.color+'20">'+
+          '<div class="dpi-im-hdr">'+
+            '<span class="dpi-im-lbl">Контроль достоверности (IM)</span>'+
+            '<span class="dpi-im-val" style="color:'+imLvl.color+'">'+(im.sum||0)+' / 40</span>'+
+          '</div>'+
+          '<div class="dpi-im-track">'+
+            '<div class="dpi-viz-marker" style="left:'+imPct+'%;background:'+imLvl.color+'">'+
+              '<span class="dpi-viz-tip" style="color:'+imLvl.color+'">'+imPct+'</span>'+
+            '</div>'+
+          '</div>'+
+          '<div class="dpi-im-lvl-txt" style="color:'+imLvl.color+'">'+escH(imLvl.label)+'</div>'+
+        '</div>'+
+        '<div class="dpi-cls-overview">'+
+          '<div class="dpi-cls-mini-hdr">Кластеры</div>'+
+          clsMiniRows+
+        '</div>'+
+      '</div>';
+
+    // ── Легенда ────────────────────────────────────────────────
     var legendHtml='<div class="dpi-viz-legend">'+
       '<span class="dpi-viz-leg-item"><span class="dpi-viz-leg-dot" style="background:#2FAE7B"></span>Низкий (1.0–1.9)</span>'+
       '<span class="dpi-viz-leg-item"><span class="dpi-viz-leg-dot" style="background:#B7791F"></span>Умеренный (2.0–2.6)</span>'+
@@ -314,31 +352,29 @@
       '<span class="dpi-viz-leg-item"><span class="dpi-viz-leg-dot" style="background:#E35B6A"></span>Высокий (3.3–4.0)</span>'+
     '</div>';
 
-    // ── Визуализация: кластеры → шкалы ────────────────────────
+    // ── Профиль: кластеры → шкалы ─────────────────────────────
     var vizHtml=D.CLUSTERS.map(function(cl){
       var col=D.CLUSTER_COLORS[cl.code]||'#888';
       var clSc=clusters[cl.code];
       var clLvl=clSc!=null?D.getLevel(clSc):null;
       var clLv=clLvl?D.LEVEL_LABELS[clLvl]:null;
+      var sColor=clLv?clLv.color:col; // цвет балла = цвет уровня, не кластера
 
       var scRows=D.SCALES.filter(function(sc){return sc.cluster===cl.code;}).map(function(sc){
         var score=scales[sc.code];
         var lvl=score!=null?D.getLevel(score):null;
         var lv=lvl?D.LEVEL_LABELS[lvl]:null;
         var pct=score!=null?Math.round((score-1)/3*100):null;
-        var markerColor=lv?lv.color:'#9ca3af';
-        var icon=lvl==='high'?'<span class="dpi-viz-icon" style="color:#E35B6A" title="Высокий уровень">⬆</span>':
-                 lvl==='elevated'?'<span class="dpi-viz-icon" style="color:#E07000" title="Повышенный уровень">↑</span>':
+        var mc=lv?lv.color:'#9ca3af';
+        var icon=lvl==='high'?'<span class="dpi-viz-icon" style="color:#E35B6A">⬆</span>':
+                 lvl==='elevated'?'<span class="dpi-viz-icon" style="color:#E07000">↑</span>':
                  '<span class="dpi-viz-icon"></span>';
         return '<div class="dpi-viz-row">'+
-          '<div class="dpi-viz-sc-name">'+escH(sc.name)+'</div>'+
+          '<div class="dpi-viz-sc-name" title="'+escH(sc.name)+'">'+escH(sc.name)+'</div>'+
           '<div class="dpi-viz-track">'+
-            (pct!=null?
-              '<div class="dpi-viz-marker" style="left:'+pct+'%;background:'+markerColor+'">'+
-                '<span class="dpi-viz-tip" style="color:'+markerColor+'">'+pct+'</span>'+
-              '</div>':'')+
+            (pct!=null?'<div class="dpi-viz-marker" style="left:'+pct+'%;background:'+mc+'"><span class="dpi-viz-tip" style="color:'+mc+'">'+pct+'</span></div>':'')+
           '</div>'+
-          '<div class="dpi-viz-score" style="color:'+markerColor+'">'+(score!=null?score.toFixed(2):'—')+'</div>'+
+          '<div class="dpi-viz-score" style="color:'+mc+'">'+(score!=null?score.toFixed(2):'—')+'</div>'+
           icon+
         '</div>';
       }).join('');
@@ -346,15 +382,21 @@
       return '<div class="dpi-viz-cluster">'+
         '<div class="dpi-viz-cl-hdr" style="background:'+col+'18;border-left:4px solid '+col+'">'+
           '<span class="dpi-viz-cl-name" style="color:'+col+'">'+escH(cl.name)+'</span>'+
-          '<span class="dpi-viz-cl-score" style="color:'+col+'">'+(clSc!=null?clSc.toFixed(2):'—')+'</span>'+
+          '<span class="dpi-viz-cl-score" style="color:'+sColor+'">'+(clSc!=null?clSc.toFixed(2):'—')+'</span>'+
           (clLv?'<span class="dpi-lvl" style="background:'+clLv.bg+';color:'+clLv.color+'">'+clLv.label+'</span>':'')+
         '</div>'+
         scRows+
       '</div>';
     }).join('');
 
-    // ── Таблица с описаниями (HR) ──────────────────────────────
-    var tableRows=D.SCALES.map(function(sc){
+    // ── Таблица описаний: сортировка по убыванию балла ─────────
+    var sortedScales=D.SCALES.slice().sort(function(a,b){
+      var sa=scales[a.code]!=null?scales[a.code]:0;
+      var sb=scales[b.code]!=null?scales[b.code]:0;
+      return sb-sa;
+    });
+
+    var tableRows=sortedScales.map(function(sc){
       var score=scales[sc.code];
       var lvl=score!=null?D.getLevel(score):null;
       var lv=lvl?D.LEVEL_LABELS[lvl]:null;
@@ -372,7 +414,7 @@
           (desc.high?
             '<div class="dpi-desc-sec"><b>При высокой выраженности:</b> '+escH(desc.high)+'</div>'+
             '<div class="dpi-desc-sec"><b>Адаптивная сторона:</b> '+escH(desc.adaptive)+'</div>'+
-            '<div class="dpi-desc-sec"><b>Риски:</b> '+escH(desc.risks)+'</div>':'')+
+            '<div class="dpi-desc-sec dpi-desc-risk"><b>⚠ Риски:</b> '+escH(desc.risks)+'</div>':'')+
         '</td>'+
       '</tr>';
     }).join('');
@@ -392,28 +434,25 @@
         '<div class="dpi-res-meta">'+[invite.department,invite.employee_group,invite.sent_at].filter(Boolean).map(escH).join(' · ')+'</div>'+
       '</div>'+
 
-      '<div class="dpi-im-block" style="background:'+imLvl.bg+';border-left:4px solid '+imLvl.color+'">'+
-        '<div class="dpi-im-row">'+
-          '<span class="dpi-im-label">IM — Контроль достоверности</span>'+
-          '<span class="dpi-im-score" style="color:'+imLvl.color+'">'+(im.sum||0)+' / 40</span>'+
-        '</div>'+
-        '<div class="dpi-im-barwrap"><div class="dpi-im-barfill" style="width:'+imPct+'%;background:'+imLvl.color+'"></div></div>'+
-        '<div class="dpi-im-lvl" style="color:'+imLvl.color+'">'+escH(imLvl.label)+'</div>'+
+      topGrid+
+
+      '<div class="dpi-sect-card">'+
+        '<div class="dpi-sect-hdr">Профиль деструкторов</div>'+
+        legendHtml+
+        vizHtml+
       '</div>'+
 
-      '<div class="dpi-section-ttl">Профиль деструкторов</div>'+
-      legendHtml+
-      vizHtml+
-
-      '<div class="dpi-section-ttl dpi-hr-block" style="margin-top:24px">Описания шкал</div>'+
-      '<div class="tbl-wrap dpi-hr-block">'+
-        '<table class="tbl dpi-scales-tbl">'+
-          '<thead><tr>'+
-            '<th>Кластер</th><th>Шкала</th><th>Балл</th><th>Уровень</th>'+
-            '<th class="dpi-hr-only"></th><th class="dpi-hr-only">Описание</th>'+
-          '</tr></thead>'+
-          '<tbody>'+tableRows+'</tbody>'+
-        '</table>'+
+      '<div class="dpi-sect-card dpi-hr-block">'+
+        '<div class="dpi-sect-hdr">Описания шкал <span style="font-size:11px;font-weight:400;color:var(--ink3);margin-left:6px">от высокого к низкому</span></div>'+
+        '<div class="tbl-wrap">'+
+          '<table class="tbl dpi-scales-tbl">'+
+            '<thead><tr>'+
+              '<th>Кластер</th><th>Шкала</th><th>Балл</th><th>Уровень</th>'+
+              '<th class="dpi-hr-only"></th><th class="dpi-hr-only">Описание</th>'+
+            '</tr></thead>'+
+            '<tbody>'+tableRows+'</tbody>'+
+          '</table>'+
+        '</div>'+
       '</div>'+
 
     '</div>';
