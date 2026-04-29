@@ -231,9 +231,9 @@
 
   // ══ SEND INVITE MODAL ══════════════════════════════════
   function openDpiModal(){
-    var REF=g.REF||{};
-    var depts=Array.isArray(REF['Подразделения'])&&REF['Подразделения'].length?REF['Подразделения']:['IT','Финансы','Продажи','HR','Производство'];
-    var groups=Array.isArray(REF['Группы'])&&REF['Группы'].length?REF['Группы']:['ТОП','Офис','Рабочий','Линейный'];
+    var _ref=(typeof REF!=='undefined'?REF:null)||{};
+    var depts=Array.isArray(_ref['Подразделения'])&&_ref['Подразделения'].length?_ref['Подразделения']:['IT','Финансы','Продажи','HR','Производство'];
+    var groups=Array.isArray(_ref['Группы'])&&_ref['Группы'].length?_ref['Группы']:['ТОП','Офис','Рабочий','Линейный'];
     var today=new Date().toISOString().slice(0,10);
     var dOpts=depts.map(function(d){return'<option>'+escH(d)+'</option>';}).join('');
     var gOpts=groups.map(function(g){return'<option>'+escH(g)+'</option>';}).join('');
