@@ -376,12 +376,21 @@ async function init() {
 
   var res = await callApi('startDpiSurvey', { token: token });
   if (!res || !res.ok) {
-    container.innerHTML =
-      '<div class="dpi-pg-msg dpi-pg-msg--err">' +
-        '<div class="dpi-pg-ico">⚠</div>' +
-        '<h2>' + escH(res && res.error ? res.error : 'Ссылка недействительна') + '</h2>' +
-        '<p>Обратитесь к специалисту по подбору персонала.</p>' +
-      '</div>';
+    if (res && res.already_done) {
+      container.innerHTML =
+        '<div class="dpi-pg-msg dpi-pg-msg--ok">' +
+          '<div class="dpi-pg-ico">✓</div>' +
+          '<h2>Опрос уже завершён</h2>' +
+          '<p>Ваши ответы были успешно сохранены ранее. Спасибо за участие!</p>' +
+        '</div>';
+    } else {
+      container.innerHTML =
+        '<div class="dpi-pg-msg dpi-pg-msg--err">' +
+          '<div class="dpi-pg-ico">⚠</div>' +
+          '<h2>' + escH(res && res.error ? res.error : 'Ссылка недействительна') + '</h2>' +
+          '<p>Обратитесь к специалисту по подбору персонала.</p>' +
+        '</div>';
+    }
     return;
   }
 

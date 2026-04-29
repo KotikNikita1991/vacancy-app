@@ -921,7 +921,7 @@ function startValueSurvey(data) {
   if (!inv) return { ok: false, error: 'Ссылка недействительна' };
 
   if (String(inv.status) === 'completed') {
-    return { ok: false, error: 'Опрос уже отправлен' };
+    return { ok: false, error: 'Опрос уже завершён. Ваши ответы были успешно сохранены.', already_done: true };
   }
   if (isInviteExpired_(inv.expires_at)) {
     return { ok: false, error: 'Срок действия ссылки истёк' };
@@ -2018,7 +2018,7 @@ function startDpiSurvey(data) {
   if (!token) return { ok: false, error: 'Не передан token' };
   const inv = findDpiInviteByToken_(token);
   if (!inv) return { ok: false, error: 'Ссылка недействительна' };
-  if (String(inv.status) === 'completed') return { ok: false, error: 'Опрос уже отправлен' };
+  if (String(inv.status) === 'completed') return { ok: false, error: 'Опрос уже завершён. Ваши ответы были успешно сохранены.', already_done: true };
   if (isInviteExpired_(inv.expires_at)) return { ok: false, error: 'Срок действия ссылки истёк' };
   return {
     ok: true,

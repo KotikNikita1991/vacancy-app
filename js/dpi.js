@@ -4,7 +4,6 @@
 
   var DPI_INVITE_LIST = [];
   var DPI_RESULT_CONTEXT = {invite:null, result:null};
-  var DPI_CHART = null;
 
   // ══ HELPERS ═══════════════════════════════════════════
   function escH(s){if(s==null||s==='')return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -34,15 +33,6 @@
     return '<span class="val-status" style="background:'+t[2]+';color:'+t[1]+'">'+t[0]+'</span>';
   }
 
-  function ensureDpiChartJs(){
-    return new Promise(function(resolve,reject){
-      if(g.Chart)return resolve();
-      var s=document.createElement('script');
-      s.src='https://cdn.jsdelivr.net/npm/chart.js';
-      s.onload=resolve; s.onerror=function(){reject(new Error('Chart.js не загрузился'));};
-      document.head.appendChild(s);
-    });
-  }
 
   // ══ PUBLIC FORM ════════════════════════════════════════
   function checkPublicForm(){
@@ -61,9 +51,14 @@
     container.innerHTML='<div class="dpi-pg-loading"><span class="spin spd"></span> Загружаем опрос…</div>';
     var res=await callApi('startDpiSurvey',{token:token});
     if(!res||!res.ok){
-      container.innerHTML='<div class="dpi-pg-msg dpi-pg-msg--err"><div class="dpi-pg-ico">⚠</div>'+
-        '<h2>'+escH(res&&res.error?res.error:'Ссылка недействительна')+'</h2>'+
-        '<p>Обратитесь к специалисту по подбору персонала.</p></div>';
+      if(res&&res.already_done){
+        container.innerHTML='<div class="dpi-pg-msg dpi-pg-msg--ok"><div class="dpi-pg-ico">✓</div>'+
+          '<h2>Опрос уже завершён</h2><p>Ваши ответы были успешно сохранены ранее. Спасибо за участие!</p></div>';
+      } else {
+        container.innerHTML='<div class="dpi-pg-msg dpi-pg-msg--err"><div class="dpi-pg-ico">⚠</div>'+
+          '<h2>'+escH(res&&res.error?res.error:'Ссылка недействительна')+'</h2>'+
+          '<p>Обратитесь к специалисту по подбору персонала.</p></div>';
+      }
       return;
     }
     var invite=res.invite;
@@ -311,7 +306,55 @@
     var imLvl=D.getImLevel(im.sum||0);
     var imPct=Math.min(100,Math.round(((im.sum||10)-10)/30*100));
 
-    var scaleRows=D.SCALES.map(function(sc){
+    // ── Легенда уровней ────────────────────────────────────────
+    var legendHtml='<div class="dpi-viz-legend">'+
+      '<span class="dpi-viz-leg-item"><span class="dpi-viz-leg-dot" style="background:#2FAE7B"></span>Низкий (1.0–1.9)</span>'+
+      '<span class="dpi-viz-leg-item"><span class="dpi-viz-leg-dot" style="background:#B7791F"></span>Умеренный (2.0–2.6)</span>'+
+      '<span class="dpi-viz-leg-item"><span class="dpi-viz-leg-dot" style="background:#E07000"></span>Повышенный (2.7–3.2)</span>'+
+      '<span class="dpi-viz-leg-item"><span class="dpi-viz-leg-dot" style="background:#E35B6A"></span>Высокий (3.3–4.0)</span>'+
+    '</div>';
+
+    // ── Визуализация: кластеры → шкалы ────────────────────────
+    var vizHtml=D.CLUSTERS.map(function(cl){
+      var col=D.CLUSTER_COLORS[cl.code]||'#888';
+      var clSc=clusters[cl.code];
+      var clLvl=clSc!=null?D.getLevel(clSc):null;
+      var clLv=clLvl?D.LEVEL_LABELS[clLvl]:null;
+
+      var scRows=D.SCALES.filter(function(sc){return sc.cluster===cl.code;}).map(function(sc){
+        var score=scales[sc.code];
+        var lvl=score!=null?D.getLevel(score):null;
+        var lv=lvl?D.LEVEL_LABELS[lvl]:null;
+        var pct=score!=null?Math.round((score-1)/3*100):null;
+        var markerColor=lv?lv.color:'#9ca3af';
+        var icon=lvl==='high'?'<span class="dpi-viz-icon" style="color:#E35B6A" title="Высокий уровень">⬆</span>':
+                 lvl==='elevated'?'<span class="dpi-viz-icon" style="color:#E07000" title="Повышенный уровень">↑</span>':
+                 '<span class="dpi-viz-icon"></span>';
+        return '<div class="dpi-viz-row">'+
+          '<div class="dpi-viz-sc-name">'+escH(sc.name)+'</div>'+
+          '<div class="dpi-viz-track">'+
+            (pct!=null?
+              '<div class="dpi-viz-marker" style="left:'+pct+'%;background:'+markerColor+'">'+
+                '<span class="dpi-viz-tip" style="color:'+markerColor+'">'+pct+'</span>'+
+              '</div>':'')+
+          '</div>'+
+          '<div class="dpi-viz-score" style="color:'+markerColor+'">'+(score!=null?score.toFixed(2):'—')+'</div>'+
+          icon+
+        '</div>';
+      }).join('');
+
+      return '<div class="dpi-viz-cluster">'+
+        '<div class="dpi-viz-cl-hdr" style="background:'+col+'18;border-left:4px solid '+col+'">'+
+          '<span class="dpi-viz-cl-name" style="color:'+col+'">'+escH(cl.name)+'</span>'+
+          '<span class="dpi-viz-cl-score" style="color:'+col+'">'+(clSc!=null?clSc.toFixed(2):'—')+'</span>'+
+          (clLv?'<span class="dpi-lvl" style="background:'+clLv.bg+';color:'+clLv.color+'">'+clLv.label+'</span>':'')+
+        '</div>'+
+        scRows+
+      '</div>';
+    }).join('');
+
+    // ── Таблица с описаниями (HR) ──────────────────────────────
+    var tableRows=D.SCALES.map(function(sc){
       var score=scales[sc.code];
       var lvl=score!=null?D.getLevel(score):null;
       var lv=lvl?D.LEVEL_LABELS[lvl]:null;
@@ -319,21 +362,23 @@
       var cl=D.CLUSTERS.find(function(c){return c.scales.indexOf(sc.code)>=0;});
       var clColor=cl?D.CLUSTER_COLORS[cl.code]:'#888';
       return '<tr>'+
-        '<td><span style="font-size:10px;font-weight:700;color:'+clColor+'">'+sc.code+'</span></td>'+
+        '<td><span style="font-size:11px;font-weight:700;color:'+clColor+'">'+escH(cl?cl.shortName:'—')+'</span></td>'+
         '<td>'+escH(sc.name)+'</td>'+
         '<td style="font-weight:700;color:'+(lv?lv.color:'#888')+'">'+(score!=null?score.toFixed(2):'—')+'</td>'+
         '<td>'+(lv?'<span class="dpi-lvl" style="background:'+lv.bg+';color:'+lv.color+'">'+lv.label+'</span>':'—')+'</td>'+
-        '<td class="dpi-hr-only">'+
-          (desc.high?'<div class="dpi-desc-expand" data-sc="'+sc.code+'">Показать ▸</div>':'')+'</td>'+
-        '<td class="dpi-hr-only" id="dpi-dexp-'+sc.code+'" style="display:none">'+
-          (desc.high?'<div class="dpi-desc-sec"><b>При высокой выраженности:</b> '+escH(desc.high)+'</div>'+
-          '<div class="dpi-desc-sec"><b>Адаптивная сторона:</b> '+escH(desc.adaptive)+'</div>'+
-          '<div class="dpi-desc-sec"><b>Риски:</b> '+escH(desc.risks)+'</div>':'')+
+        '<td class="dpi-hr-only" style="white-space:nowrap">'+
+          (desc.high?'<button class="dpi-desc-expand" data-sc="'+escH(sc.code)+'">Показать ▸</button>':'')+'</td>'+
+        '<td class="dpi-hr-only" id="dpi-dexp-'+sc.code+'" style="display:none;min-width:240px">'+
+          (desc.high?
+            '<div class="dpi-desc-sec"><b>При высокой выраженности:</b> '+escH(desc.high)+'</div>'+
+            '<div class="dpi-desc-sec"><b>Адаптивная сторона:</b> '+escH(desc.adaptive)+'</div>'+
+            '<div class="dpi-desc-sec"><b>Риски:</b> '+escH(desc.risks)+'</div>':'')+
         '</td>'+
       '</tr>';
     }).join('');
 
     el.innerHTML='<div id="dpi-result-card" class="card">'+
+
       '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:20px">'+
         '<button type="button" class="btn-sm" data-act="dpi-list">← Назад</button>'+
         '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
@@ -342,15 +387,11 @@
         '</div>'+
       '</div>'+
 
-      // Header
       '<div class="dpi-res-hdr">'+
         '<div class="dpi-res-name">'+escH(invite.candidate_name||'—')+'</div>'+
-        '<div class="dpi-res-meta">'+
-          [invite.department,invite.employee_group,invite.sent_at].filter(Boolean).map(escH).join(' · ')+
-        '</div>'+
+        '<div class="dpi-res-meta">'+[invite.department,invite.employee_group,invite.sent_at].filter(Boolean).map(escH).join(' · ')+'</div>'+
       '</div>'+
 
-      // IM block
       '<div class="dpi-im-block" style="background:'+imLvl.bg+';border-left:4px solid '+imLvl.color+'">'+
         '<div class="dpi-im-row">'+
           '<span class="dpi-im-label">IM — Контроль достоверности</span>'+
@@ -360,42 +401,23 @@
         '<div class="dpi-im-lvl" style="color:'+imLvl.color+'">'+escH(imLvl.label)+'</div>'+
       '</div>'+
 
-      // Radar
-      '<div class="dpi-section-ttl">Профиль кластеров</div>'+
-      '<div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start;margin-bottom:24px">'+
-        '<div style="flex:0 0 360px;max-width:100%"><canvas id="dpi-radar" width="360" height="300"></canvas></div>'+
-        '<div style="flex:1;min-width:220px">'+
-          D.CLUSTERS.map(function(cl){
-            var sc=clusters[cl.code];
-            var lvl=sc!=null?D.getLevel(sc):null;
-            var lv=lvl?D.LEVEL_LABELS[lvl]:null;
-            var pct=sc!=null?Math.round((sc-1)/3*100):0;
-            var col=D.CLUSTER_COLORS[cl.code]||'#888';
-            return '<div class="dpi-cl-row">'+
-              '<div class="dpi-cl-nm" style="color:'+col+'">'+escH(cl.shortName)+'</div>'+
-              '<div class="dpi-cl-full">'+escH(cl.name)+'</div>'+
-              '<div class="dpi-cl-barwrap"><div class="dpi-cl-barfill" style="width:'+pct+'%;background:'+col+'"></div></div>'+
-              '<div style="display:flex;align-items:center;gap:6px">'+
-                '<span style="font-weight:700;color:'+col+'">'+(sc!=null?sc.toFixed(2):'—')+'</span>'+
-                (lv?'<span class="dpi-lvl" style="background:'+lv.bg+';color:'+lv.color+'">'+lv.label+'</span>':'')+
-              '</div>'+
-            '</div>';
-          }).join('')+
-        '</div>'+
-      '</div>'+
+      '<div class="dpi-section-ttl">Профиль деструкторов</div>'+
+      legendHtml+
+      vizHtml+
 
-      // Scales table
-      '<div class="dpi-section-ttl">Шкалы деструкторов</div>'+
-      '<div class="tbl-wrap">'+
+      '<div class="dpi-section-ttl dpi-hr-block" style="margin-top:24px">Описания шкал</div>'+
+      '<div class="tbl-wrap dpi-hr-block">'+
         '<table class="tbl dpi-scales-tbl">'+
-          '<thead><tr><th>Код</th><th>Шкала</th><th>Балл</th><th>Уровень</th>'+
-          '<th class="dpi-hr-only">Описание</th><th class="dpi-hr-only"></th></tr></thead>'+
-          '<tbody>'+scaleRows+'</tbody>'+
+          '<thead><tr>'+
+            '<th>Кластер</th><th>Шкала</th><th>Балл</th><th>Уровень</th>'+
+            '<th class="dpi-hr-only"></th><th class="dpi-hr-only">Описание</th>'+
+          '</tr></thead>'+
+          '<tbody>'+tableRows+'</tbody>'+
         '</table>'+
       '</div>'+
+
     '</div>';
 
-    // Description toggles
     el.querySelectorAll('.dpi-desc-expand').forEach(function(btn){
       btn.addEventListener('click',function(){
         var sc=btn.dataset.sc;
@@ -406,42 +428,6 @@
         btn.textContent=open?'Показать ▸':'Скрыть ▴';
       });
     });
-
-    renderDpiRadar(clusters);
-  }
-
-  function renderDpiRadar(clusters){
-    var D=g.DPI_DATA;
-    var canvas=document.getElementById('dpi-radar');
-    if(!canvas)return;
-    if(DPI_CHART){try{DPI_CHART.destroy();}catch(e){}DPI_CHART=null;}
-    ensureDpiChartJs().then(function(){
-      var labels=D.CLUSTERS.map(function(cl){return cl.shortName;});
-      var data=D.CLUSTERS.map(function(cl){return clusters[cl.code]!=null?clusters[cl.code]:1;});
-      var bgColors=D.CLUSTERS.map(function(cl){return D.CLUSTER_COLORS[cl.code]||'#888';});
-      DPI_CHART=new Chart(canvas.getContext('2d'),{
-        type:'radar',
-        data:{
-          labels:labels,
-          datasets:[{
-            label:'Деструкторы',data:data,
-            backgroundColor:'rgba(227,91,106,0.12)',
-            borderColor:'#E35B6A',borderWidth:2,
-            pointBackgroundColor:bgColors,pointRadius:5,pointHoverRadius:7,
-          }]
-        },
-        options:{
-          responsive:false,
-          scales:{r:{min:1,max:4,ticks:{stepSize:1,font:{size:10}},
-            pointLabels:{font:{size:12,weight:'600'}},
-            grid:{color:'rgba(0,0,0,0.07)'},angleLines:{color:'rgba(0,0,0,0.07)'},
-          }},
-          plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){
-            return ' '+ctx.label+': '+(ctx.raw!=null?Number(ctx.raw).toFixed(2):'—');
-          }}}},
-        }
-      });
-    }).catch(function(e){console.warn('DPI chart error:',e);});
   }
 
   // ══ PDF EXPORT ═════════════════════════════════════════
@@ -449,16 +435,13 @@
     opts=opts||{};
     var isParticipant=!!opts.participant;
     var invite=DPI_RESULT_CONTEXT.invite||{};
-    var chartSv=[];
-    if(DPI_CHART){chartSv.push(DPI_CHART);try{DPI_CHART.resize(520,380);}catch(e){}}
     var prevTitle=document.title;
-    document.title='DPI_'+escH(invite.candidate_name||'Отчёт').replace(/\s+/g,'_');
+    document.title='DPI_'+(invite.candidate_name||'Отчёт').replace(/\s+/g,'_');
     document.body.setAttribute('data-pdf-mode',isParticipant?'dpi-participant':'dpi-hr');
     var restore=function(){
       document.body.removeAttribute('data-pdf-mode');
       document.title=prevTitle;
       window.removeEventListener('afterprint',restore);
-      setTimeout(function(){chartSv.forEach(function(ch){try{ch.resize();}catch(e){}});},150);
     };
     window.addEventListener('afterprint',restore);
     window.print();

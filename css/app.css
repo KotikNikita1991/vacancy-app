@@ -480,17 +480,35 @@ td.td-recruiter:hover{background:var(--bg)}
 .dpi-im-barfill{height:100%;border-radius:4px;transition:width .4s}
 .dpi-im-lvl{font-size:12px;font-weight:600}
 .dpi-section-ttl{font-size:15px;font-weight:700;color:var(--ink);margin:0 0 12px;padding-top:4px}
-.dpi-cl-row{margin-bottom:12px}
-.dpi-cl-nm{font-size:13px;font-weight:700;margin-bottom:2px}
-.dpi-cl-full{font-size:11px;color:var(--ink3);margin-bottom:4px}
-.dpi-cl-barwrap{height:6px;border-radius:3px;background:var(--bg2,#e5e7eb);overflow:hidden;margin-bottom:4px}
-.dpi-cl-barfill{height:100%;border-radius:3px}
 .dpi-lvl{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px}
 .dpi-scales-tbl td{vertical-align:top;padding:8px 10px}
-.dpi-desc-expand{font-size:12px;color:var(--acc,#6366f1);cursor:pointer;white-space:nowrap}
+.dpi-scales-tbl th{font-size:11px}
+.dpi-desc-expand{font-size:12px;color:var(--acc,#7B5EA7);cursor:pointer;white-space:nowrap;background:none;border:none;padding:0;font-family:var(--font)}
 .dpi-desc-expand:hover{text-decoration:underline}
 .dpi-desc-sec{font-size:12px;color:var(--ink2);margin-bottom:6px;line-height:1.5}
 .dpi-desc-sec b{color:var(--ink)}
+
+/* ═══════════════════════════════════════════════════════════════
+   DPI — VISUALIZATION (bar chart grouped by cluster)
+   ═══════════════════════════════════════════════════════════════ */
+.dpi-viz-legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-bottom:18px}
+.dpi-viz-leg-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink2)}
+.dpi-viz-leg-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.dpi-viz-cluster{border-radius:10px;overflow:hidden;border:1px solid var(--bg2,#e5e7eb);margin-bottom:12px;break-inside:avoid;page-break-inside:avoid}
+.dpi-viz-cl-hdr{padding:9px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.dpi-viz-cl-name{font-size:11px;font-weight:800;flex:1;text-transform:uppercase;letter-spacing:.3px}
+.dpi-viz-cl-score{font-size:13px;font-weight:700}
+.dpi-viz-row{display:flex;align-items:center;gap:10px;padding:7px 14px;border-top:1px solid rgba(0,0,0,.05);background:var(--sur,#fff);min-height:36px;break-inside:avoid;page-break-inside:avoid}
+.dpi-viz-sc-name{font-size:12px;color:var(--ink);width:188px;flex-shrink:0;line-height:1.3}
+.dpi-viz-track{flex:1;position:relative;height:10px;border-radius:5px;overflow:visible;background:linear-gradient(to right,#e6f9f2 30%,#fff6dd 30%,#fff6dd 53%,#fff0e0 53%,#fff0e0 73%,#ffe9ec 73%);border:1px solid rgba(0,0,0,.08)}
+.dpi-viz-marker{position:absolute;top:50%;width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.28);transform:translate(-50%,-50%);z-index:2}
+.dpi-viz-tip{position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);font-size:9px;font-weight:800;white-space:nowrap;pointer-events:none;line-height:1}
+.dpi-viz-score{font-size:11px;font-weight:700;width:32px;text-align:right;flex-shrink:0}
+.dpi-viz-icon{width:14px;text-align:center;flex-shrink:0;font-size:12px;line-height:1}
+@media(max-width:560px){
+  .dpi-viz-sc-name{width:120px;font-size:11px}
+  .dpi-viz-tip{font-size:8px}
+}
 
 /* ═══════════════════════════════════════════════════════════════
    PRINT — window.print() вместо html2pdf
@@ -581,18 +599,22 @@ td.td-recruiter:hover{background:var(--bg)}
    dpi-hr      — полный отчёт для HR (описания шкал видны)
    dpi-participant — упрощённый (описания скрыты)
    ═══════════════════════════════════════════════════════════════ */
-/* В HR-режиме показываем описания */
+/* В HR-режиме: показываем описания */
 body[data-pdf-mode="dpi-hr"] .dpi-hr-only{display:table-cell!important}
+body[data-pdf-mode="dpi-hr"] div.dpi-hr-only{display:block!important}
+body[data-pdf-mode="dpi-hr"] .dpi-hr-block{display:block!important}
 body[data-pdf-mode="dpi-hr"] .dpi-desc-expand{display:none!important}
 body[data-pdf-mode="dpi-hr"] [id^="dpi-dexp-"]{display:table-cell!important}
-/* В participant-режиме скрываем описания */
+/* В participant-режиме: скрываем описания и таблицу */
 body[data-pdf-mode="dpi-participant"] .dpi-hr-only{display:none!important}
+body[data-pdf-mode="dpi-participant"] .dpi-hr-block{display:none!important}
 /* Общие правила для DPI при печати */
 body[data-pdf-mode^="dpi"] #sidebar,
 body[data-pdf-mode^="dpi"] #hdr,
 body[data-pdf-mode^="dpi"] #apibar{display:none!important}
-body[data-pdf-mode^="dpi"] #app{display:block!important;height:auto!important}
-body[data-pdf-mode^="dpi"] #main{display:block!important;height:auto!important;width:100%!important;margin:0!important;padding:0!important}
+body[data-pdf-mode^="dpi"] #app{display:block!important;height:auto!important;overflow:visible!important}
+body[data-pdf-mode^="dpi"] #main{display:block!important;height:auto!important;overflow:visible!important;width:100%!important;margin:0!important;padding:0!important}
 body[data-pdf-mode^="dpi"] #content{display:block!important;height:auto!important;overflow:visible!important;width:100%!important;padding:8px 0!important}
+body[data-pdf-mode^="dpi"] .tbl-wrap{overflow:visible!important}
 body[data-pdf-mode^="dpi"] .dpi-desc-expand{display:none!important}
-body[data-pdf-mode^="dpi"] #dpi-result-card{box-shadow:none!important}
+body[data-pdf-mode^="dpi"] #dpi-result-card{box-shadow:none!important;break-inside:auto!important;page-break-inside:auto!important}
