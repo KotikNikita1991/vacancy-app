@@ -252,7 +252,7 @@ function buildNav(){
 function navigate(page){
   PAGE=page;
   document.querySelectorAll('.ni').forEach(el=>el.classList.toggle('active',el.id===`ni-${page}`));
-  const ttls={dashboard:'Дашборд',analytics:'Аналитика',checklist:'Оценка кандидата',values:'Оценка ценностей',users:'Пользователи'};
+  const ttls={dashboard:'Дашборд',analytics:'Аналитика',checklist:'Оценка кандидата',values:'Оценка ценностей',dpi:'Деструкторы',users:'Пользователи'};
   document.getElementById('httl').textContent=ttls[page]||page;
   // Сбрасываем хлебные крошки на корневую страницу
   if(window.VAC_UI&&window.VAC_UI.crumbs){
@@ -295,6 +295,7 @@ async function renderPage(p){
   else if(p==='analytics')await renderAnalytics();
   else if(p==='checklist')await renderChecklist();
   else if(p==='values')await renderValues();
+  else if(p==='dpi')await renderDpi();
   else if(p==='users')await renderUsers();
   else renderSoon(p);
 }
@@ -2687,6 +2688,17 @@ function renderSoon(page){
     </div>`;
 }
 
+// ══ DPI PAGE ══════════════════════════════════════════════════
+async function renderDpi(){
+  const el=document.getElementById('content');
+  if(!el)return;
+  if(typeof DPI_MODULE!=='undefined'&&typeof DPI_MODULE.renderList==='function'){
+    await DPI_MODULE.renderList(el);
+  } else {
+    el.innerHTML='<div class="card"><div class="empty" style="padding:48px"><h3>Модуль не загружен</h3><p style="color:var(--ink3)">Перезагрузите страницу.</p></div></div>';
+  }
+}
+
 // ══ USERS PAGE ════════════════════════════════════════════════
 async function renderUsers(){
   const el=document.getElementById('content');
@@ -2966,6 +2978,27 @@ function initGlobalActs(){
       renderValues();
     } else if(act==='val-del'){
       deleteValueAssessment(el.dataset.vid);
+    // ── DPI actions ────────────────────────────────────────
+    } else if(act==='dpi-new'){
+      if(typeof DPI_MODULE!=='undefined') DPI_MODULE.openModal();
+      else toast('Модуль DPI не загружен','err');
+    } else if(act==='dpi-overlay'){
+      if(ev.target===el&&typeof DPI_MODULE!=='undefined') DPI_MODULE.closeModal();
+    } else if(act==='close-dpi-modal'){
+      if(typeof DPI_MODULE!=='undefined') DPI_MODULE.closeModal();
+    } else if(act==='dpi-send'){
+      if(typeof DPI_MODULE!=='undefined') DPI_MODULE.sendInvite();
+    } else if(act==='dpi-view'){
+      if(U?.role==='recruiter'){toast('Результат доступен Руководителю и Администратору','err');return;}
+      if(typeof DPI_MODULE!=='undefined') DPI_MODULE.viewResult(el.dataset.did);
+    } else if(act==='dpi-del'){
+      if(typeof DPI_MODULE!=='undefined') DPI_MODULE.deleteAssessment(el.dataset.did);
+    } else if(act==='dpi-list'){
+      renderDpi();
+    } else if(act==='dpi-export'){
+      if(typeof DPI_MODULE!=='undefined') DPI_MODULE.exportReport({});
+    } else if(act==='dpi-export-participant'){
+      if(typeof DPI_MODULE!=='undefined') DPI_MODULE.exportReport({participant:true});
     } else if(act==='user-toggle'){
       const uid = el.getAttribute('data-uid');
       const ua = el.getAttribute('data-uactive')==='1';
@@ -2990,6 +3023,7 @@ function initEscClose(){
     if(document.getElementById('vac-modal')) closeModal();
     if(document.getElementById('qst-modal')) closeQuickStatusModal();
     if(document.getElementById('val-modal')) closeValueModal();
+    if(document.getElementById('dpi-modal')&&typeof DPI_MODULE!=='undefined') DPI_MODULE.closeModal();
     if(document.getElementById('user-modal')) closeUserModal();
   });
 }

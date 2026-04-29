@@ -430,6 +430,69 @@ td.td-recruiter:hover{background:var(--bg)}
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   DPI — PUBLIC FORM
+   ═══════════════════════════════════════════════════════════════ */
+#dpi-form-pg{width:100%;padding:0 0 40px}
+.dpi-form-wrap{max-width:780px;width:100%;margin:0 auto;padding:24px 16px}
+.dpi-form-hdr{display:flex;align-items:flex-start;gap:16px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #e5e7eb}
+.dpi-form-logo-ico{width:48px;height:48px;border-radius:12px;background:#E35B6A;color:#fff;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.dpi-form-title{font-size:20px;font-weight:700;color:var(--ink,#1a1a2e);margin:0 0 4px}
+.dpi-form-sub{font-size:14px;color:var(--ink2,#4b5563)}
+.dpi-form-progress{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.dpi-progress-bar{flex:1;height:6px;border-radius:3px;background:#e5e7eb;overflow:hidden}
+.dpi-progress-fill{height:100%;border-radius:3px;background:#E35B6A;transition:width .3s}
+.dpi-progress-cnt{font-size:12px;font-weight:600;color:var(--ink2,#4b5563);white-space:nowrap}
+.dpi-scale-legend{font-size:11px;color:var(--ink3,#9ca3af);margin-bottom:20px;line-height:1.6}
+.dpi-qcard{display:flex;gap:12px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;margin-bottom:8px;transition:border-color .2s}
+.dpi-qcard--done{border-color:#2FAE7B;background:#f6fdf9}
+.dpi-qnum{width:28px;height:28px;border-radius:50%;background:#f3f4f6;color:var(--ink2,#4b5563);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.dpi-qbody{flex:1;min-width:0}
+.dpi-qtext{font-size:14px;color:var(--ink,#1a1a2e);margin-bottom:10px;line-height:1.5}
+.dpi-opts{display:flex;flex-wrap:wrap;gap:6px}
+.dpi-opt{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;border:1px solid #e5e7eb;background:#f9fafb;cursor:pointer;font-size:12px;transition:all .15s;user-select:none}
+.dpi-opt input[type="radio"]{display:none}
+.dpi-opt:hover{border-color:#E35B6A;background:#fff5f5}
+.dpi-opt--sel{border-color:#E35B6A;background:#ffe9ec;color:#E35B6A;font-weight:600}
+.dpi-opt-num{font-weight:700;font-size:13px}
+.dpi-opt-lbl{color:inherit}
+.dpi-form-footer{margin-top:24px;text-align:center}
+.dpi-sub-err{padding:10px 14px;border-radius:8px;background:#ffe9ec;color:#E35B6A;font-size:13px;margin-bottom:12px;border:1px solid #fca5a5}
+.dpi-submit-btn{background:#E35B6A;color:#fff;border:none;border-radius:10px;padding:12px 32px;font-size:15px;font-weight:700;cursor:pointer;transition:background .2s}
+.dpi-submit-btn:hover{background:#c44;} .dpi-submit-btn:disabled{opacity:.6;cursor:not-allowed}
+.dpi-pg-loading{display:flex;align-items:center;justify-content:center;min-height:40vh;font-size:16px;color:var(--ink2,#4b5563);gap:10px}
+.dpi-pg-msg{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;padding:40px 24px}
+.dpi-pg-msg h2{font-size:22px;font-weight:700;margin:12px 0 8px}
+.dpi-pg-msg p{color:var(--ink2,#4b5563);font-size:14px}
+.dpi-pg-msg--ok .dpi-pg-ico{font-size:48px;color:#2FAE7B}
+.dpi-pg-msg--err .dpi-pg-ico{font-size:48px;color:#E35B6A}
+
+/* ═══════════════════════════════════════════════════════════════
+   DPI — ADMIN RESULT VIEW
+   ═══════════════════════════════════════════════════════════════ */
+.dpi-res-hdr{margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--bg2,#e5e7eb)}
+.dpi-res-name{font-size:22px;font-weight:700;color:var(--ink)}
+.dpi-res-meta{font-size:13px;color:var(--ink3);margin-top:4px}
+.dpi-im-block{padding:14px 16px;border-radius:10px;margin-bottom:24px}
+.dpi-im-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.dpi-im-label{font-size:13px;font-weight:600;color:var(--ink2)}
+.dpi-im-score{font-size:18px;font-weight:800}
+.dpi-im-barwrap{height:8px;border-radius:4px;background:rgba(0,0,0,.1);overflow:hidden;margin-bottom:6px}
+.dpi-im-barfill{height:100%;border-radius:4px;transition:width .4s}
+.dpi-im-lvl{font-size:12px;font-weight:600}
+.dpi-section-ttl{font-size:15px;font-weight:700;color:var(--ink);margin:0 0 12px;padding-top:4px}
+.dpi-cl-row{margin-bottom:12px}
+.dpi-cl-nm{font-size:13px;font-weight:700;margin-bottom:2px}
+.dpi-cl-full{font-size:11px;color:var(--ink3);margin-bottom:4px}
+.dpi-cl-barwrap{height:6px;border-radius:3px;background:var(--bg2,#e5e7eb);overflow:hidden;margin-bottom:4px}
+.dpi-cl-barfill{height:100%;border-radius:3px}
+.dpi-lvl{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px}
+.dpi-scales-tbl td{vertical-align:top;padding:8px 10px}
+.dpi-desc-expand{font-size:12px;color:var(--acc,#6366f1);cursor:pointer;white-space:nowrap}
+.dpi-desc-expand:hover{text-decoration:underline}
+.dpi-desc-sec{font-size:12px;color:var(--ink2);margin-bottom:6px;line-height:1.5}
+.dpi-desc-sec b{color:var(--ink)}
+
+/* ═══════════════════════════════════════════════════════════════
    PRINT — window.print() вместо html2pdf
    Браузер реформатирует контент нативно: break-inside:avoid
    работает без гэпов (html2pdf резал bitmap — отсюда были пустоты).
@@ -439,7 +502,9 @@ td.td-recruiter:hover{background:var(--bg)}
 @media print{
   /* Скрываем интерфейс приложения */
   #sidebar,#hdr,#apibar,#toast,
-  [data-act="val-export"],[data-act="val-export-candidate"],[data-act="val-list"]{
+  [data-act="val-export"],[data-act="val-export-candidate"],[data-act="val-list"],
+  [data-act="dpi-export"],[data-act="dpi-export-participant"],[data-act="dpi-list"],
+  [data-act="dpi-new"],[data-act="dpi-view"],[data-act="dpi-del"]{
     display:none!important;
   }
   /* Страница A4 */
@@ -510,3 +575,24 @@ td.td-recruiter:hover{background:var(--bg)}
 /* Галочки ключевых ценностей и их легенда — скрыть для кандидата */
 [data-pdf-mode="candidate"] [data-vkeymark]{display:none!important}
 [data-pdf-mode="candidate"] [data-vkeylgd]{display:none!important}
+
+/* ═══════════════════════════════════════════════════════════════
+   DPI PDF-режимы
+   dpi-hr      — полный отчёт для HR (описания шкал видны)
+   dpi-participant — упрощённый (описания скрыты)
+   ═══════════════════════════════════════════════════════════════ */
+/* В HR-режиме показываем описания */
+body[data-pdf-mode="dpi-hr"] .dpi-hr-only{display:table-cell!important}
+body[data-pdf-mode="dpi-hr"] .dpi-desc-expand{display:none!important}
+body[data-pdf-mode="dpi-hr"] [id^="dpi-dexp-"]{display:table-cell!important}
+/* В participant-режиме скрываем описания */
+body[data-pdf-mode="dpi-participant"] .dpi-hr-only{display:none!important}
+/* Общие правила для DPI при печати */
+body[data-pdf-mode^="dpi"] #sidebar,
+body[data-pdf-mode^="dpi"] #hdr,
+body[data-pdf-mode^="dpi"] #apibar{display:none!important}
+body[data-pdf-mode^="dpi"] #app{display:block!important;height:auto!important}
+body[data-pdf-mode^="dpi"] #main{display:block!important;height:auto!important;width:100%!important;margin:0!important;padding:0!important}
+body[data-pdf-mode^="dpi"] #content{display:block!important;height:auto!important;overflow:visible!important;width:100%!important;padding:8px 0!important}
+body[data-pdf-mode^="dpi"] .dpi-desc-expand{display:none!important}
+body[data-pdf-mode^="dpi"] #dpi-result-card{box-shadow:none!important}
