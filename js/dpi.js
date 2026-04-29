@@ -28,9 +28,9 @@
   function clearDpiProgress(token){try{localStorage.removeItem('dpi_prog_'+token);}catch(e){}}
 
   function statusBadge(st){
-    var m={sent:['Ожидание','#B7791F','#fff6dd'],completed:['Завершён','#2FAE7B','#e6f9f2'],expired:['Истёк','#9CA3AF','#F3F4F6']};
-    var t=m[st]||['—','#9CA3AF','#F3F4F6'];
-    return '<span class="val-status" style="background:'+t[2]+';color:'+t[1]+'">'+t[0]+'</span>';
+    if(st==='completed')return'<span class="badge sc2">Завершён</span>';
+    if(st==='expired')return'<span class="badge sca">Истёк</span>';
+    return'<span class="badge sw">Ожидание</span>';
   }
 
 
@@ -182,40 +182,51 @@
   }
 
   function buildDpiListHtml(el){
-    var canDel=g.U&&g.U.role==='admin';
+    var canDel=g.U&&(g.U.role==='admin'||g.U.role==='manager');
     var rows=DPI_INVITE_LIST.map(function(it){
-      var del=canDel?'<button class="btn-icon" data-act="dpi-del" data-did="'+escH(it.id)+'" title="Удалить" style="color:#E35B6A;font-size:16px;line-height:1;padding:2px 6px">×</button>':'';
+      var del=canDel?'<button type="button" class="btn-danger" data-act="dpi-del" data-did="'+escH(it.id)+'">✕</button>':'';
       var view=it.has_result
-        ?'<button class="btn-sm" data-act="dpi-view" data-did="'+escH(it.id)+'">Результат</button>'
+        ?'<button type="button" class="btn-sm" data-act="dpi-view" data-did="'+escH(it.id)+'">Результат</button>'
         :'<span style="color:var(--ink3);font-size:12px">Нет данных</span>';
       return '<tr>'+
-        '<td>'+escH(it.candidate_name||'—')+'</td>'+
-        '<td>'+escH(it.department||'—')+'</td>'+
-        '<td>'+escH(it.employee_group||'—')+'</td>'+
+        '<td>'+
+          '<div style="font-weight:600;font-size:13px;color:var(--ink)">'+escH(it.candidate_name||'—')+'</div>'+
+        '</td>'+
+        '<td><div style="font-size:12px;color:var(--ink2)">'+escH(it.department||'—')+'</div></td>'+
+        '<td><div style="font-size:12px;color:var(--ink2)">'+escH(it.employee_group||'—')+'</div></td>'+
+        '<td><div style="font-size:12px;color:var(--ink2)">'+escH(it.recruiter_name||'—')+'</div></td>'+
         '<td>'+statusBadge(it.status)+'</td>'+
-        '<td>'+escH(it.sent_at||'—')+'</td>'+
-        '<td><div style="display:flex;gap:6px;align-items:center">'+view+del+'</div></td>'+
+        '<td><div style="font-size:12px;color:var(--ink3)">'+escH(it.sent_at||'—')+'</div></td>'+
+        '<td style="white-space:nowrap"><div style="display:flex;gap:6px;align-items:center">'+view+del+'</div></td>'+
       '</tr>';
     }).join('');
 
-    el.innerHTML='<div class="card">'+
-      '<div class="card-hdr" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
+    el.innerHTML=
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">'+
         '<div>'+
-          '<div class="card-title">Деструкторы — DPI-R</div>'+
-          '<div style="font-size:13px;color:var(--ink3);margin-top:4px">Оценка личностных деструкторов руководителей и специалистов (20 шкал · 6 кластеров · 110 утверждений)</div>'+
+          '<h2 style="font-size:18px;font-weight:700">Деструкторы — DPI-R</h2>'+
+          '<p style="font-size:13px;color:var(--ink3);margin-top:2px">Оценка личностных деструкторов руководителей и специалистов (20 шкал · 6 кластеров · 110 утверждений)</p>'+
         '</div>'+
         '<button type="button" class="btn-primary" data-act="dpi-new">'+
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'+
-          ' Новая оценка'+
+          ' Новая оценка деструкторов'+
         '</button>'+
       '</div>'+
       (DPI_INVITE_LIST.length===0
-        ?'<div class="empty" style="padding:48px 0"><p style="color:var(--ink3)">Нет оценок. Нажмите «Новая оценка», чтобы отправить приглашение.</p></div>'
-        :'<div class="tbl-wrap"><table class="tbl"><thead><tr>'+
-          '<th>Сотрудник</th><th>Подразделение</th><th>Группа</th><th>Статус</th><th>Дата</th><th>Действия</th>'+
-          '</tr></thead><tbody>'+rows+'</tbody></table></div>'
-      )+
-    '</div>';
+        ?'<div class="card"><div class="empty" style="padding:60px">'+
+            '<div class="empty-ico" style="background:var(--rbg)">'+
+              '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'+
+            '</div>'+
+            '<h3>Нет оценок деструкторов</h3>'+
+            '<p>Отправьте приглашение сотруднику — результат появится здесь.</p>'+
+          '</div></div>'
+        :'<div class="card"><div class="tbl-wrap"><table>'+
+            '<thead><tr>'+
+              '<th>Сотрудник</th><th>Подразделение</th><th>Группа</th><th>Рекрутер</th><th>Статус</th><th>Дата отправки</th><th>Действия</th>'+
+            '</tr></thead>'+
+            '<tbody>'+rows+'</tbody>'+
+          '</table></div></div>'
+      );
   }
 
   // ══ SEND INVITE MODAL ══════════════════════════════════

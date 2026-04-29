@@ -4,6 +4,7 @@
 // а window.VACS / window.U / window.VAC_SELECTED оказываются undefined — из-за
 // чего ломаются чекбоксы, inline-edit и дубликат вакансии.
 var U=null, VACS=[], ASSESSMENTS=[], PAGE='dashboard', COLSB=false;
+var REF={};
 var PERIOD=defPeriod(), FQ='';
 // Пустой массив = «все» (мультивыбор фильтров)
 var FStat=[], FGrp=[], FRec=[];
