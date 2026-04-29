@@ -404,7 +404,7 @@
       var cl=D.CLUSTERS.find(function(c){return c.scales.indexOf(sc.code)>=0;});
       var clColor=cl?D.CLUSTER_COLORS[cl.code]:'#888';
       return '<tr>'+
-        '<td><span style="font-size:11px;font-weight:700;color:'+clColor+'">'+escH(cl?cl.shortName:'—')+'</span></td>'+
+        '<td style="white-space:nowrap"><span style="font-size:11px;font-weight:700;color:'+clColor+'">'+escH(cl?cl.name:'—')+'</span></td>'+
         '<td>'+escH(sc.name)+'</td>'+
         '<td style="font-weight:700;color:'+(lv?lv.color:'#888')+'">'+(score!=null?score.toFixed(2):'—')+'</td>'+
         '<td>'+(lv?'<span class="dpi-lvl" style="background:'+lv.bg+';color:'+lv.color+'">'+lv.label+'</span>':'—')+'</td>'+
@@ -447,7 +447,7 @@
         '<div class="tbl-wrap">'+
           '<table class="tbl dpi-scales-tbl">'+
             '<thead><tr>'+
-              '<th>Кластер</th><th>Шкала</th><th>Балл</th><th>Уровень</th>'+
+              '<th>Профиль</th><th>Шкала</th><th>Балл</th><th>Уровень</th>'+
               '<th class="dpi-hr-only"></th><th class="dpi-hr-only">Описание</th>'+
             '</tr></thead>'+
             '<tbody>'+tableRows+'</tbody>'+
