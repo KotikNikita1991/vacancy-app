@@ -24,8 +24,8 @@ const SH = {
 };
 
 // URL страницы с формой DPI (куда приходит сотрудник по ссылке из письма).
-// Если форма встроена в index.html вашего приложения — укажите его адрес.
-const DPI_FORM_BASE_URL = APP_BASE_URL;
+// Размещена на том же GitHub Pages, что и форма ценностей.
+const DPI_FORM_BASE_URL = 'https://kotiknikita1991.github.io/Opros_forma/dpi-form.html';
 
 // Для тестов можно "*", в проде лучше ограничить
 const CORS_ALLOW_ORIGIN = '*';

@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Опросник деструкторов — DPI-R</title>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Onest',system-ui,sans-serif;background:#f4f5f7;color:#1a1a2e;min-height:100vh}
+  button{font-family:inherit;cursor:pointer;border:none;background:none}
+  #dpi-form-pg{min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:0 0 40px}
+  .dpi-form-wrap{max-width:780px;width:100%;margin:0 auto;padding:24px 16px}
+  .dpi-form-hdr{display:flex;align-items:flex-start;gap:16px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #e5e7eb}
+  .dpi-form-logo-ico{width:48px;height:48px;border-radius:12px;background:#E35B6A;color:#fff;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .dpi-form-title{font-size:20px;font-weight:700;color:#1a1a2e;margin:0 0 4px}
+  .dpi-form-sub{font-size:14px;color:#4b5563;line-height:1.5}
+  .dpi-form-progress{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .dpi-progress-bar{flex:1;height:6px;border-radius:3px;background:#e5e7eb;overflow:hidden}
+  .dpi-progress-fill{height:100%;border-radius:3px;background:#E35B6A;transition:width .3s}
+  .dpi-progress-cnt{font-size:12px;font-weight:600;color:#4b5563;white-space:nowrap}
+  .dpi-scale-legend{font-size:11px;color:#9ca3af;margin-bottom:20px;line-height:1.8}
+  .dpi-qcard{display:flex;gap:12px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;margin-bottom:8px;transition:border-color .2s}
+  .dpi-qcard--done{border-color:#2FAE7B;background:#f6fdf9}
+  .dpi-qnum{width:28px;height:28px;border-radius:50%;background:#f3f4f6;color:#4b5563;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+  .dpi-qbody{flex:1;min-width:0}
+  .dpi-qtext{font-size:14px;color:#1a1a2e;margin-bottom:10px;line-height:1.5}
+  .dpi-opts{display:flex;flex-wrap:wrap;gap:6px}
+  .dpi-opt{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;border:1px solid #e5e7eb;background:#f9fafb;cursor:pointer;font-size:12px;transition:all .15s;user-select:none}
+  .dpi-opt input[type="radio"]{display:none}
+  .dpi-opt:hover{border-color:#E35B6A;background:#fff5f5}
+  .dpi-opt--sel{border-color:#E35B6A;background:#ffe9ec;color:#E35B6A;font-weight:600}
+  .dpi-opt-num{font-weight:700;font-size:13px}
+  .dpi-form-footer{margin-top:24px;text-align:center}
+  .dpi-sub-err{padding:10px 14px;border-radius:8px;background:#ffe9ec;color:#E35B6A;font-size:13px;margin-bottom:12px;border:1px solid #fca5a5;text-align:left}
+  .dpi-submit-btn{background:#E35B6A;color:#fff;border:none;border-radius:10px;padding:13px 36px;font-size:15px;font-weight:700;cursor:pointer;transition:background .2s;font-family:inherit}
+  .dpi-submit-btn:hover{background:#c44}
+  .dpi-submit-btn:disabled{opacity:.6;cursor:not-allowed}
+  .dpi-pg-loading{display:flex;align-items:center;justify-content:center;min-height:60vh;font-size:16px;color:#4b5563;gap:12px}
+  .dpi-pg-msg{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;padding:40px 24px}
+  .dpi-pg-msg h2{font-size:22px;font-weight:700;margin:12px 0 8px;color:#1a1a2e}
+  .dpi-pg-msg p{color:#4b5563;font-size:14px;line-height:1.6}
+  .dpi-pg-ico{font-size:52px;line-height:1}
+  .dpi-pg-msg--ok .dpi-pg-ico{color:#2FAE7B}
+  .dpi-pg-msg--err .dpi-pg-ico{color:#E35B6A}
+  .spin{display:inline-block;width:22px;height:22px;border:2.5px solid rgba(227,91,106,.2);border-top-color:#E35B6A;border-radius:50%;animation:sp .7s linear infinite;vertical-align:middle;flex-shrink:0}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  @media(max-width:520px){
+    .dpi-form-hdr{flex-direction:column;gap:10px}
+    .dpi-opts{flex-direction:column}
+    .dpi-opt{justify-content:flex-start}
+  }
+</style>
+</head>
+<body>
+<div id="dpi-form-pg">
+  <div class="dpi-pg-loading"><span class="spin"></span> Загружаем опрос…</div>
+</div>
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  DPI-R Public Form — автономная страница для участника
+//  Разместить рядом с index.html в репозитории Opros_forma
+// ═══════════════════════════════════════════════════════════════
+
+// ── API ─────────────────────────────────────────────────────────
+// URL веб-приложения Google Apps Script (обновите при смене деплоя)
+var API_URL = 'https://script.google.com/macros/s/AKfycbwhx_VrOP6BCsoxeDyfxzGyDLP0vlDSXsb2pQYMaP0vWvzcD0ZO9dB4P89rWBdV5_VhXw/exec';
+var API_TIMEOUT_MS = 120000;
+
+async function callApi(action, data) {
+  var ctrl = new AbortController();
+  var t = setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, API_TIMEOUT_MS);
+  try {
+    var r = await fetch(API_URL, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(Object.assign({ action: action }, data || {})),
+      signal: ctrl.signal
+    });
+    clearTimeout(t);
+    if (!r.ok) return { ok: false, error: 'HTTP ' + r.status };
+    var text = await r.text();
+    try { return JSON.parse(text); }
+    catch(e) { return { ok: false, error: text.slice(0, 200) }; }
+  } catch(e) {
+    clearTimeout(t);
+    return { ok: false, error: e && e.name === 'AbortError' ? 'Таймаут запроса — попробуйте снова' : String(e && (e.message || e) || e) };
+  }
+}
+
+// ── HELPERS ──────────────────────────────────────────────────────
+function escH(s) {
+  if (s == null || s === '') return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function seededShuffle(arr, seed) {
+  var a = arr.slice(), s = seed | 1;
+  for (var i = a.length - 1; i > 0; i--) {
+    s = ((Math.imul ? Math.imul(1664525, s) : (1664525 * s)) + 1013904223) | 0;
+    var j = Math.abs(s) % (i + 1), tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+  }
+  return a;
+}
+
+function tokenSeed(token) {
+  var h = 0;
+  for (var i = 0; i < (token || '').length; i++)
+    h = (((Math.imul ? Math.imul(31, h) : (31 * h)) | 0) + token.charCodeAt(i)) | 0;
+  return Math.abs(h) || 1;
+}
+
+function loadProgress(token) {
+  try { var r = localStorage.getItem('dpi_prog_' + token); return r ? JSON.parse(r) : null; }
+  catch(e) { return null; }
+}
+function saveProgress(token, answers) {
+  try { localStorage.setItem('dpi_prog_' + token, JSON.stringify({ answers: answers, ts: Date.now() })); }
+  catch(e) {}
+}
+function clearProgress(token) {
+  try { localStorage.removeItem('dpi_prog_' + token); }
+  catch(e) {}
+}
+
+// ── DPI DATA ─────────────────────────────────────────────────────
+var DPI_QUESTIONS = [
+  {n:1,  text:'Я трачу дополнительное время на перепроверку работы, даже когда сроки поджимают'},
+  {n:2,  text:'Мне сложно принять результат, который «достаточно хорош», если он не соответствует моим внутренним стандартам'},
+  {n:3,  text:'Я замечаю недочёты в работе коллег, которые они сами обычно не видят'},
+  {n:4,  text:'Коллеги могут сказать, что мои стандарты качества нереалистично высоки'},
+  {n:5,  text:'Я готов(а) переделать работу с нуля, если она не соответствует моим требованиям'},
+  {n:6,  text:'Мне важно придерживаться установленных процедур, даже когда ситуация требует гибкости'},
+  {n:7,  text:'Работа в условиях неопределённости или неполных инструкций вызывает у меня дискомфорт'},
+  {n:8,  text:'Если нет чётких инструкций, я предпочитаю подождать, пока они не появятся'},
+  {n:9,  text:'Другие иногда говорят, что я слишком строго придерживаюсь регламентов'},
+  {n:10, text:'Я испытываю беспокойство, когда привычный порядок вещей нарушается'},
+  {n:11, text:'В рабочих ситуациях мне проще опираться на факты и данные, чем учитывать чувства людей'},
+  {n:12, text:'Я сознательно сохраняю профессиональную дистанцию с коллегами'},
+  {n:13, text:'Мне легко принимать жёсткие, непопулярные решения, не вовлекаясь эмоционально'},
+  {n:14, text:'Коллеги воспринимают меня как человека, которого трудно «раскусить»'},
+  {n:15, text:'Я редко делюсь своими переживаниями на работе, даже когда это было бы уместно'},
+  {n:16, text:'Когда что-то идёт не так, я нахожу объективные причины, объясняющие ситуацию'},
+  {n:17, text:'Мне трудно согласиться с критикой, если я уверен(а), что действовал(а) верно'},
+  {n:18, text:'Я нередко объясняю свои неудачи внешними обстоятельствами, которые было трудно контролировать'},
+  {n:19, text:'После провала проекта я склонен(на) анализировать, что помешало, а не что я сделал(а) не так'},
+  {n:20, text:'Мне сложно признавать ошибки публично, даже когда внутренне я с критикой согласен(на)'},
+  {n:21, text:'В стрессовых ситуациях я предпочитаю работать в одиночестве, избегая общения'},
+  {n:22, text:'Мне некомфортно быть в центре внимания или выступать на публику'},
+  {n:23, text:'При конфликтах я предпочитаю отойти в сторону, чем вступать в открытое противостояние'},
+  {n:24, text:'Под давлением я становлюсь более замкнутым(ой) и недоступным(ой) для коллег'},
+  {n:25, text:'Я нахожу способы избегать ситуаций, требующих активного публичного взаимодействия'},
+  {n:26, text:'Я склонен(на) подолгу анализировать, что мог(ла) сделать лучше после завершения проекта'},
+  {n:27, text:'Мне трудно принять похвалу, не задумываясь одновременно о своих недостатках'},
+  {n:28, text:'После выполнения задания я чаще сосредотачиваюсь на том, что не получилось, а не на том, что удалось'},
+  {n:29, text:'Мой внутренний критик значительно строже, чем оценки людей, которые меня знают'},
+  {n:30, text:'Я нередко сомневаюсь в правильности своих решений даже спустя время после их принятия'},
+  {n:31, text:'Я заранее обдумываю все возможные проблемы, которые могут возникнуть в ходе проекта'},
+  {n:32, text:'В ситуациях неопределённости мне трудно сосредоточиться на текущей работе'},
+  {n:33, text:'Коллеги замечают, что я склонен(на) преувеличивать потенциальные риски'},
+  {n:34, text:'Я трачу значительное время, мысленно проигрывая наихудшие сценарии развития событий'},
+  {n:35, text:'Неожиданные изменения в планах вызывают у меня заметное беспокойство и дискомфорт'},
+  {n:36, text:'Меня вполне устраивает нынешнее положение дел — я не стремлюсь делать карьеру любой ценой'},
+  {n:37, text:'Я предпочитаю хорошо выполнять привычную работу, а не браться за новые масштабные задачи'},
+  {n:38, text:'Высокие амбиции кажутся мне скорее источником стресса, чем мотивации'},
+  {n:39, text:'Коллеги могут охарактеризовать меня как человека, который избегает лишней ответственности'},
+  {n:40, text:'Важнее стабильно выполнять свои обязанности, чем постоянно стремиться к большему'},
+  {n:41, text:'Мне трудно возражать руководству или старшим коллегам, даже если я с ними не согласен(на)'},
+  {n:42, text:'Чтобы не создавать конфликт, я обычно принимаю точку зрения большинства'},
+  {n:43, text:'Я нередко откладываю выражение своей позиции, ожидая, пока не выскажутся другие'},
+  {n:44, text:'Мне важно, чтобы все в команде были довольны — поэтому я избегаю споров'},
+  {n:45, text:'Я поддерживаю групповые решения, даже если лично с ними не согласен(на)'},
+  {n:46, text:'Я выполняю задачи с достаточным качеством, не стремясь сделать больше, чем требуется'},
+  {n:47, text:'Мне сложно поддерживать мотивацию на задачах, которые кажутся мне не особенно значимыми'},
+  {n:48, text:'Я склонен(на) откладывать начало работы, пока она не становится неотложной'},
+  {n:49, text:'Коллеги могут заметить, что я не всегда выкладываюсь на полную'},
+  {n:50, text:'Если существует более лёгкий способ решить задачу, я предпочту его более трудоёмкому'},
+  {n:51, text:'Я умею преподнести себя и свои идеи так, чтобы произвести нужное впечатление'},
+  {n:52, text:'Мне нравится, когда моя работа и достижения замечают и оценивают'},
+  {n:53, text:'В присутствии значимых людей я склонен(на) вести себя более выразительно'},
+  {n:54, text:'Мне важно контролировать, как я выгляжу в глазах ключевых людей в организации'},
+  {n:55, text:'Я умею привлечь внимание аудитории и удержать его на себе'},
+  {n:56, text:'Мне нравится принимать вызовы и идти на риск — это делает работу интереснее'},
+  {n:57, text:'Я склонен(на) действовать, не дожидаясь полной картины ситуации'},
+  {n:58, text:'Правила я воспринимаю скорее как ориентиры, чем как жёсткие нормы'},
+  {n:59, text:'Я порой принимаю решения быстрее, чем этого требует ситуация'},
+  {n:60, text:'Мне интересно изучать, как далеко можно зайти в рамках установленных ограничений'},
+  {n:61, text:'Мои идеи часто кажутся другим неожиданными или нестандартными'},
+  {n:62, text:'Я нередко предлагаю решения, выходящие далеко за рамки привычного подхода'},
+  {n:63, text:'Коллегам иногда сложно следить за ходом моих рассуждений'},
+  {n:64, text:'Мне трудно долго концентрироваться на одной идее — в голове постоянно возникают новые'},
+  {n:65, text:'Меня привлекают необычные, даже спорные концепции и подходы'},
+  {n:66, text:'Я уверен(а), что обладаю способностями выше среднего в своей профессиональной области'},
+  {n:67, text:'Мне кажется, что мне не всегда дают задачи, соответствующие моему реальному уровню'},
+  {n:68, text:'Я ожидаю, что мои идеи и мнения будут восприняты всерьёз с первого раза'},
+  {n:69, text:'Я легко представляю себя в роли топ-менеджера или ключевого лидера организации'},
+  {n:70, text:'Порой мне кажется, что я лучше подхожу для роли, которую занимает мой непосредственный руководитель'},
+  {n:71, text:'Мне важно добиваться лучших результатов среди своих коллег'},
+  {n:72, text:'Я регулярно сравниваю свои показатели с результатами других людей'},
+  {n:73, text:'Проигрывать или уступать другим мне очень некомфортно'},
+  {n:74, text:'Мне трудно искренне и открыто радоваться профессиональным успехам коллег'},
+  {n:75, text:'Соревнование с другими мотивирует меня значительно сильнее, чем командная работа'},
+  {n:76, text:'Я могу брать на себя обязательства, не будучи полностью уверен(а) в возможности их выполнить'},
+  {n:77, text:'Я нахожу способы действовать по-своему, формально соблюдая установленные правила'},
+  {n:78, text:'Мне интересно изучать, насколько гибко интерпретируются правила в конкретной организации'},
+  {n:79, text:'Коллеги могут охарактеризовать меня как человека, который в итоге делает по-своему'},
+  {n:80, text:'Мне сложно последовательно выполнять рутинные обязательства без внешнего контроля'},
+  {n:81, text:'Я внимательно отслеживаю, кто и что говорит обо мне в рабочей среде'},
+  {n:82, text:'Когда кто-то делает мне неожиданный комплимент или услугу, я задумываюсь об их скрытых мотивах'},
+  {n:83, text:'Я помню несправедливости и обиды значительно дольше, чем большинство людей'},
+  {n:84, text:'Мне требуется немало времени, чтобы начать по-настоящему доверять новым коллегам'},
+  {n:85, text:'Я предпочитаю не раскрывать лишней информации, пока не уверен(а) в намерениях человека'},
+  {n:86, text:'Когда кто-то оспаривает мои слова или идеи, я реагирую довольно резко и напористо'},
+  {n:87, text:'В дискуссиях я бываю очень прямым(ой), даже если это задевает чувства других'},
+  {n:88, text:'Я не скрываю раздражение, когда коллеги работают ниже моих ожиданий'},
+  {n:89, text:'Коллеги знают, что меня лучше не злить'},
+  {n:90, text:'Под давлением я могу сказать что-то резкое, о чём потом сожалею'},
+  {n:91, text:'Мне сложно «отпустить» задачу, не убедившись лично, что она выполнена так, как нужно'},
+  {n:92, text:'Я предпочту сделать работу сам(а), чем тратить время на объяснение того, как её выполнить'},
+  {n:93, text:'Я нередко вмешиваюсь в работу тех, кому делегировал(а) задачу'},
+  {n:94, text:'Мне трудно делегировать важные задачи — я беспокоюсь, что результат окажется недостаточно хорошим'},
+  {n:95, text:'Коллеги иногда говорят, что я слишком жёстко контролирую процесс выполнения заданий'},
+  {n:96, text:'Мои настроение и уровень энергии могут заметно меняться в течение одного рабочего дня'},
+  {n:97, text:'В стрессовых ситуациях эмоции иногда берут верх над рациональным мышлением'},
+  {n:98, text:'Я реагирую на плохие новости или критику более эмоционально, чем намеревался(ась)'},
+  {n:99, text:'Людям, работающим со мной, бывает трудно предсказать, в каком я сегодня настроении'},
+  {n:100,text:'Когда что-то идёт не по плану, я могу утратить самообладание быстрее, чем хотелось бы'},
+];
+
+var DPI_IM_QUESTIONS = [
+  {n:101,text:'Я всегда полностью честен(на) с коллегами, даже если правда неудобна для меня'},
+  {n:102,text:'Мне никогда не приходило в голову хотеть, чтобы кто-то из коллег потерпел неудачу'},
+  {n:103,text:'Я всегда внимательно слушаю собеседника, не отвлекаясь на свои мысли'},
+  {n:104,text:'У меня никогда не возникало зависти или ревности к чужим успехам'},
+  {n:105,text:'Мои рабочие мотивы всегда абсолютно прозрачны для окружающих'},
+  {n:106,text:'Я всегда сразу признаю свои ошибки, никогда не пытаясь их скрыть или оправдать'},
+  {n:107,text:'Мне никогда не приходило в голову преувеличить свои заслуги или вклад в общий результат'},
+  {n:108,text:'Я никогда не говорил(а) о коллеге негативно за его спиной'},
+  {n:109,text:'Мне всегда удаётся сохранять полное спокойствие, что бы ни происходило на работе'},
+  {n:110,text:'Я никогда не откладывал(а) важные дела на потом'},
+];
+
+// ── FORM RENDERING ────────────────────────────────────────────────
+var OPTS = ['Совершенно не подходит','Скорее не подходит','Скорее подходит','Полностью подходит'];
+
+function renderDpiForm(container, token, invite, questions, answers) {
+  var total = questions.length;
+  var answered = Object.keys(answers).length;
+  var pct = Math.round(answered / total * 100);
+
+  var qHtml = questions.map(function(q, idx) {
+    var ans = Number(answers[q.n]) || 0;
+    var radios = OPTS.map(function(lbl, li) {
+      var v = li + 1;
+      return '<label class="dpi-opt' + (ans === v ? ' dpi-opt--sel' : '') + '">' +
+        '<input type="radio" name="dq_' + q.n + '" value="' + v + '"' + (ans === v ? ' checked' : '') + ' data-qn="' + q.n + '">' +
+        '<span class="dpi-opt-num">' + v + '</span>' +
+        '<span class="dpi-opt-lbl">' + escH(lbl) + '</span>' +
+      '</label>';
+    }).join('');
+    return '<div class="dpi-qcard' + (ans ? ' dpi-qcard--done' : '') + '" id="dqc_' + q.n + '">' +
+      '<div class="dpi-qnum">' + (idx + 1) + '</div>' +
+      '<div class="dpi-qbody">' +
+        '<div class="dpi-qtext">' + escH(q.text) + '</div>' +
+        '<div class="dpi-opts">' + radios + '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  container.innerHTML =
+    '<div class="dpi-form-wrap">' +
+      '<div class="dpi-form-hdr">' +
+        '<div class="dpi-form-logo-ico">ДПИ</div>' +
+        '<div>' +
+          '<h1 class="dpi-form-title">Опросник деструкторов (DPI-R)</h1>' +
+          '<p class="dpi-form-sub">Здравствуйте, <b>' + escH(invite.candidate_name || 'участник') + '</b>! ' +
+          'Ответьте честно на все ' + total + ' утверждений, опираясь на поведение на работе.</p>' +
+        '</div>' +
+      '</div>' +
+      '<div class="dpi-form-progress">' +
+        '<div class="dpi-progress-bar"><div class="dpi-progress-fill" id="dpi-pfill" style="width:' + pct + '%"></div></div>' +
+        '<span class="dpi-progress-cnt" id="dpi-pcnt">' + answered + ' / ' + total + '</span>' +
+      '</div>' +
+      '<div class="dpi-scale-legend">' +
+        OPTS.map(function(l, i) { return '<span><b>' + (i + 1) + '</b> — ' + escH(l) + '</span>'; }).join('&nbsp; ·&nbsp; ') +
+      '</div>' +
+      '<div id="dpi-qlist">' + qHtml + '</div>' +
+      '<div class="dpi-form-footer">' +
+        '<div id="dpi-sub-err" class="dpi-sub-err" style="display:none"></div>' +
+        '<button type="button" class="dpi-submit-btn" id="dpi-submit-btn">Отправить ответы →</button>' +
+      '</div>' +
+    '</div>';
+
+  document.getElementById('dpi-qlist').addEventListener('change', function(ev) {
+    var inp = ev.target;
+    if (inp.type !== 'radio') return;
+    var qn = Number(inp.dataset.qn), v = Number(inp.value);
+    answers[qn] = v;
+    saveProgress(token, answers);
+    var card = document.getElementById('dqc_' + qn);
+    if (card) {
+      card.classList.add('dpi-qcard--done');
+      card.querySelectorAll('.dpi-opt').forEach(function(lbl) {
+        lbl.classList.toggle('dpi-opt--sel', Number(lbl.querySelector('input').value) === v);
+      });
+    }
+    var ac = Object.keys(answers).length;
+    var pf = document.getElementById('dpi-pfill');
+    var pc = document.getElementById('dpi-pcnt');
+    if (pf) pf.style.width = Math.round(ac / total * 100) + '%';
+    if (pc) pc.textContent = ac + ' / ' + total;
+  });
+
+  document.getElementById('dpi-submit-btn').addEventListener('click', function() {
+    submitForm(token, answers, questions, container);
+  });
+}
+
+async function submitForm(token, answers, questions, container) {
+  var total = questions.length;
+  var answered = Object.keys(answers).length;
+  var errEl = document.getElementById('dpi-sub-err');
+  if (answered < total) {
+    if (errEl) {
+      errEl.textContent = 'Пожалуйста, ответьте на все утверждения. Осталось: ' + (total - answered);
+      errEl.style.display = '';
+    }
+    for (var i = 0; i < questions.length; i++) {
+      if (!answers[questions[i].n]) {
+        var el = document.getElementById('dqc_' + questions[i].n);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        break;
+      }
+    }
+    return;
+  }
+  var btn = document.getElementById('dpi-submit-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Отправляем…'; }
+  var res = await callApi('submitDpiSurvey', { token: token, answers: answers });
+  if (res && res.ok) {
+    clearProgress(token);
+    container.innerHTML =
+      '<div class="dpi-pg-msg dpi-pg-msg--ok">' +
+        '<div class="dpi-pg-ico">✓</div>' +
+        '<h2>Опрос завершён!</h2>' +
+        '<p>Ваши ответы успешно сохранены. Спасибо за участие!</p>' +
+      '</div>';
+  } else {
+    if (btn) { btn.disabled = false; btn.innerHTML = 'Отправить ответы →'; }
+    if (errEl) {
+      errEl.textContent = (res && res.error) || 'Не удалось отправить. Попробуйте снова.';
+      errEl.style.display = '';
+    }
+  }
+}
+
+// ── INIT ─────────────────────────────────────────────────────────
+async function init() {
+  var container = document.getElementById('dpi-form-pg');
+  var qs;
+  try { qs = new URLSearchParams(location.search); } catch(e) { qs = { get: function(){ return null; } }; }
+  var token = qs.get('dpi_token');
+
+  if (!token) {
+    container.innerHTML =
+      '<div class="dpi-pg-msg dpi-pg-msg--err">' +
+        '<div class="dpi-pg-ico">⚠</div>' +
+        '<h2>Ссылка недействительна</h2>' +
+        '<p>Токен не найден. Пожалуйста, перейдите по ссылке из письма.<br>Если проблема повторяется, обратитесь к специалисту по подбору персонала.</p>' +
+      '</div>';
+    return;
+  }
+
+  container.innerHTML = '<div class="dpi-pg-loading"><span class="spin"></span> Загружаем опрос…</div>';
+
+  var res = await callApi('startDpiSurvey', { token: token });
+  if (!res || !res.ok) {
+    container.innerHTML =
+      '<div class="dpi-pg-msg dpi-pg-msg--err">' +
+        '<div class="dpi-pg-ico">⚠</div>' +
+        '<h2>' + escH(res && res.error ? res.error : 'Ссылка недействительна') + '</h2>' +
+        '<p>Обратитесь к специалисту по подбору персонала.</p>' +
+      '</div>';
+    return;
+  }
+
+  var invite = res.invite;
+  var allQ = DPI_QUESTIONS.concat(DPI_IM_QUESTIONS.map(function(q) { return { n: q.n, text: q.text }; }));
+  var questions = seededShuffle(allQ, tokenSeed(token));
+  var saved = loadProgress(token);
+  var answers = saved ? saved.answers : {};
+  renderDpiForm(container, token, invite, questions, answers);
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

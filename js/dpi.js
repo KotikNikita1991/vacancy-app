@@ -232,19 +232,31 @@
     var dOpts=depts.map(function(d){return'<option>'+escH(d)+'</option>';}).join('');
     var gOpts=groups.map(function(g){return'<option>'+escH(g)+'</option>';}).join('');
     var html='<div class="modal-overlay" id="dpi-modal" data-act="dpi-overlay">'+
-      '<div class="modal-box" style="max-width:460px">'+
-        '<div class="modal-title">Новая оценка деструкторов</div>'+
-        '<label class="llbl">ФИО сотрудника *</label>'+
-        '<input id="dpi-nm" class="linp" placeholder="Иванов Иван Иванович" autocomplete="off">'+
-        '<label class="llbl">Подразделение *</label>'+
-        '<select id="dpi-dp" class="linp"><option value="">— выберите —</option>'+dOpts+'</select>'+
-        '<label class="llbl">Группа *</label>'+
-        '<select id="dpi-gr" class="linp"><option value="">— выберите —</option>'+gOpts+'</select>'+
-        '<label class="llbl">E-mail *</label>'+
-        '<input id="dpi-em" class="linp" type="email" placeholder="ivanov@company.ru" autocomplete="off">'+
-        '<label class="llbl">Дата направления *</label>'+
-        '<input id="dpi-dt" class="linp" type="date" value="'+today+'">'+
-        '<div class="modal-foot">'+
+      '<div class="modal" style="max-width:480px">'+
+        '<div class="modal-hdr"><span class="modal-ttl">Новая оценка деструкторов</span></div>'+
+        '<div class="modal-body" style="display:flex;flex-direction:column;gap:14px">'+
+          '<div class="fg">'+
+            '<label class="flbl">ФИО сотрудника <span class="req">*</span></label>'+
+            '<input id="dpi-nm" class="finp" placeholder="Иванов Иван Иванович" autocomplete="off">'+
+          '</div>'+
+          '<div class="fg">'+
+            '<label class="flbl">Подразделение <span class="req">*</span></label>'+
+            '<select id="dpi-dp" class="finp"><option value="">— выберите —</option>'+dOpts+'</select>'+
+          '</div>'+
+          '<div class="fg">'+
+            '<label class="flbl">Группа <span class="req">*</span></label>'+
+            '<select id="dpi-gr" class="finp"><option value="">— выберите —</option>'+gOpts+'</select>'+
+          '</div>'+
+          '<div class="fg">'+
+            '<label class="flbl">E-mail <span class="req">*</span></label>'+
+            '<input id="dpi-em" class="finp" type="email" placeholder="ivanov@company.ru" autocomplete="off">'+
+          '</div>'+
+          '<div class="fg">'+
+            '<label class="flbl">Дата направления <span class="req">*</span></label>'+
+            '<input id="dpi-dt" class="finp" type="date" value="'+today+'">'+
+          '</div>'+
+        '</div>'+
+        '<div class="modal-footer">'+
           '<button type="button" class="btn-cancel" data-act="close-dpi-modal">Отмена</button>'+
           '<button type="button" class="btn-save" id="btn-dpi-send" data-act="dpi-send">Отправить ссылку</button>'+
         '</div>'+
