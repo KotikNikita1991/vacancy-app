@@ -165,7 +165,8 @@ function ensureValueSheets_(ss) {
     ensureHeaders_(s3, [
       'id','invite_id','token','candidate_name','vacancy_name','recruiter_name','created_at',
       'mean57','scores_json','top_values_json','bar_chart_json','circle_chart_json','interpretation',
-      'profile_json','im_sum','im_level','im_chart_json'
+      'profile_json','im_sum','im_level','im_chart_json',
+      'department','employee_group','recruiter_id'
     ]);
   }
 }
@@ -887,28 +888,55 @@ function updateValueInviteFields(data) {
   if (!id) return { ok: false, error: 'Нет id' };
   const fields = data.fields || {};
   const ALLOWED = ['department','employee_group'];
+
+  // ── 1. Ищем в VALUE_INVITES (стандартный путь) ──────────────
   const sheet = getSheet(SH.VALUE_INVITES);
   const rows = sheet.getDataRange().getValues();
-  if (rows.length < 2) return { ok: false, error: 'Запись не найдена' };
-  const map = headerMap_(sheet);
-  // Ищем строку по id (1-я колонка)
-  let rowIdx = -1;
-  for (let i = 1; i < rows.length; i++) {
-    if (String(rows[i][0]) === id) { rowIdx = i; break; }
+  if (rows.length >= 2) {
+    const map = headerMap_(sheet);
+    let rowIdx = -1;
+    for (let i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]) === id) { rowIdx = i; break; }
+    }
+    if (rowIdx >= 0) {
+      const updatedFields = {};
+      ALLOWED.forEach(function(k){
+        if (!Object.prototype.hasOwnProperty.call(fields, k)) return;
+        if (!map.hasOwnProperty(k)) return;
+        const newVal = fields[k] == null ? '' : String(fields[k]);
+        sheet.getRange(rowIdx + 1, map[k] + 1).setValue(newVal);
+        updatedFields[k] = newVal;
+      });
+      if (map.hasOwnProperty('updated_at')) {
+        sheet.getRange(rowIdx + 1, map['updated_at'] + 1).setValue(new Date());
+      }
+      try { SpreadsheetApp.flush(); } catch (e) {}
+      return { ok: true, updated: updatedFields };
+    }
   }
-  if (rowIdx < 0) return { ok: false, error: 'Запись не найдена' };
+
+  // ── 2. «Сиротская» запись: есть только в VALUE_RESULTS ──────
+  // Гарантируем наличие колонок department / employee_group
+  const resSheet = getSheet(SH.VALUE_RESULTS);
+  ensureHeaders_(resSheet, ['department', 'employee_group']);
+  const resRows = resSheet.getDataRange().getValues();
+  if (resRows.length < 2) return { ok: false, error: 'Запись не найдена' };
+  const resMap = headerMap_(resSheet);
+  // Ищем по invite_id (id записи-приглашения, который знает фронтенд)
+  const inviteIdCol = resMap.hasOwnProperty('invite_id') ? resMap['invite_id'] : 1;
+  let resRowIdx = -1;
+  for (let i = 1; i < resRows.length; i++) {
+    if (String(resRows[i][inviteIdCol]) === id) { resRowIdx = i; break; }
+  }
+  if (resRowIdx < 0) return { ok: false, error: 'Запись не найдена' };
   const updatedFields = {};
   ALLOWED.forEach(function(k){
     if (!Object.prototype.hasOwnProperty.call(fields, k)) return;
-    if (!map.hasOwnProperty(k)) return;
+    if (!resMap.hasOwnProperty(k)) return;
     const newVal = fields[k] == null ? '' : String(fields[k]);
-    sheet.getRange(rowIdx + 1, map[k] + 1).setValue(newVal);
+    resSheet.getRange(resRowIdx + 1, resMap[k] + 1).setValue(newVal);
     updatedFields[k] = newVal;
   });
-  // Обновим updated_at, если такая колонка есть
-  if (map.hasOwnProperty('updated_at')) {
-    sheet.getRange(rowIdx + 1, map['updated_at'] + 1).setValue(new Date());
-  }
   try { SpreadsheetApp.flush(); } catch (e) {}
   return { ok: true, updated: updatedFields };
 }
@@ -1589,7 +1617,10 @@ function buildValueResultMap_() {
       profile_json: getCellByHeader_(r, hm, 'profile_json', ''),
       im_sum: getCellByHeader_(r, hm, 'im_sum', ''),
       im_level: getCellByHeader_(r, hm, 'im_level', ''),
-      im_chart_json: getCellByHeader_(r, hm, 'im_chart_json', '')
+      im_chart_json: getCellByHeader_(r, hm, 'im_chart_json', ''),
+      department: String(getCellByHeader_(r, hm, 'department', '') || ''),
+      employee_group: String(getCellByHeader_(r, hm, 'employee_group', '') || ''),
+      recruiter_id: String(getCellByHeader_(r, hm, 'recruiter_id', '') || '')
     };
   }
   return map;
