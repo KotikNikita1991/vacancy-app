@@ -21,7 +21,12 @@ const SH = {
   PLANS:           'Планы',
   DPI_INVITES:     'ДПИ_Приглашения',
   DPI_RESULTS:     'ДПИ_Результаты',
+  PIF_INVITES:     'ПиФ_Приглашения',
+  PIF_RESULTS:     'ПиФ_Результаты',
 };
+
+// URL страницы с формой PiF (куда приходит сотрудник по ссылке из письма).
+const PIF_FORM_BASE_URL = 'https://kotiknikita1991.github.io/Opros_forma/pif-form.html';
 
 // URL страницы с формой DPI (куда приходит сотрудник по ссылке из письма).
 // Размещена на том же GitHub Pages, что и форма ценностей.
@@ -92,6 +97,7 @@ function initDatabase() {
   ensureValueSheets_(ss);
   ensurePlansSheet_(ss);
   ensureDpiSheets_(ss);
+  ensurePifSheets_(ss);
 
   return '✅ База инициализирована';
 }
@@ -262,6 +268,15 @@ function route(action, data) {
       deleteDpiAssessment:         () => deleteDpiAssessment(data),
       startDpiSurvey:              () => startDpiSurvey(data),
       submitDpiSurvey:             () => submitDpiSurvey(data),
+
+      // Модуль — Оценка потенциала (PiF-Q)
+      createPifInvite:             () => createPifInvite(data),
+      getPifAssessments:           () => getPifAssessments(data),
+      getPifAssessmentResult:      () => getPifAssessmentResult(data),
+      deletePifAssessment:         () => deletePifAssessment(data),
+      updatePifFields:             () => updatePifFields(data),
+      startPifSurvey:              () => startPifSurvey(data),
+      submitPifSurvey:             () => submitPifSurvey(data),
     };
 
     if (!action || !handlers[action]) {
@@ -2474,4 +2489,415 @@ function avg_(arr) {
 function round_(n, d) {
   const p = Math.pow(10, d || 2);
   return Math.round(Number(n || 0) * p) / p;
+}
+
+// ───────────────────────────────────────────────────────────────────
+// МОДУЛЬ: ОЦЕНКА ПОТЕНЦИАЛА (PiF-Q)
+// ───────────────────────────────────────────────────────────────────
+
+function ensurePifSheets_(ss) {
+  const sp = ss || SpreadsheetApp.openById(SPREADSHEET_ID);
+
+  let s1 = sp.getSheetByName(SH.PIF_INVITES);
+  if (!s1) s1 = sp.insertSheet(SH.PIF_INVITES);
+  if (s1.getLastRow() === 0) {
+    s1.appendRow([
+      'id','token','status','sent_at','expires_at','submitted_at',
+      'candidate_name','candidate_email',
+      'department','employee_group',
+      'recruiter_id','recruiter_name','created_at','updated_at'
+    ]);
+    s1.getRange('1:1').setFontWeight('bold').setBackground('#E0F7FA');
+    s1.setFrozenRows(1);
+  } else {
+    ensureHeaders_(s1, [
+      'id','token','status','sent_at','expires_at','submitted_at',
+      'candidate_name','candidate_email',
+      'department','employee_group',
+      'recruiter_id','recruiter_name','created_at','updated_at'
+    ]);
+  }
+
+  let s2 = sp.getSheetByName(SH.PIF_RESULTS);
+  if (!s2) s2 = sp.insertSheet(SH.PIF_RESULTS);
+  if (s2.getLastRow() === 0) {
+    s2.appendRow([
+      'id','invite_id','token','candidate_name','department','employee_group',
+      'recruiter_name','submitted_at','created_at',
+      'scales_json','total','answers_json'
+    ]);
+    s2.getRange('1:1').setFontWeight('bold').setBackground('#E0F7FA');
+    s2.setFrozenRows(1);
+  } else {
+    ensureHeaders_(s2, [
+      'id','invite_id','token','candidate_name','department','employee_group',
+      'recruiter_name','submitted_at','created_at',
+      'scales_json','total','answers_json'
+    ]);
+  }
+}
+
+function createPifInvite(data) {
+  const required = ['candidate_name','sent_date','email','department','employee_group','recruiter_id','recruiter_name'];
+  for (let i = 0; i < required.length; i++) {
+    if (!data[required[i]]) return { ok: false, error: 'Не заполнено поле: ' + required[i] };
+  }
+  const emailNorm = String(data.email).trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailNorm)) {
+    return { ok: false, error: 'Некорректный e-mail: ' + data.email };
+  }
+  const id = generateId();
+  const token = buildSecureToken_();
+  const sentAt = new Date(data.sent_date);
+  if (isNaN(sentAt.getTime())) return { ok: false, error: 'Некорректная дата направления' };
+  const expiresAt = new Date(sentAt.getTime() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
+  const now = new Date();
+
+  const sheet = getSheet(SH.PIF_INVITES);
+  appendRowByHeaders_(sheet, {
+    id, token, status: 'sent',
+    sent_at: sentAt, expires_at: expiresAt, submitted_at: '',
+    candidate_name: data.candidate_name,
+    candidate_email: emailNorm,
+    department: data.department || '',
+    employee_group: data.employee_group || '',
+    recruiter_id: data.recruiter_id,
+    recruiter_name: data.recruiter_name,
+    created_at: now, updated_at: now
+  });
+
+  const surveyLink = PIF_FORM_BASE_URL + '?pif_token=' + encodeURIComponent(token);
+
+  const subject = 'Опросник оценки потенциала (PiF-Q)';
+  const body =
+    'Здравствуйте, ' + data.candidate_name + '!\n\n' +
+    'Вас приглашают пройти опросник оценки управленческого потенциала PiF-Q.\n' +
+    'Ссылка для прохождения: ' + surveyLink + '\n\n' +
+    'Срок действия ссылки: ' + INVITE_TTL_DAYS + ' дней.\n' +
+    'Опрос содержит 77 утверждений, примерное время — 15–20 минут.\n' +
+    'Нет правильных или неправильных ответов — важна только ваша честная реакция.\n' +
+    'После отправки ответы изменить нельзя.\n\n' +
+    'С уважением,\nКоманда подбора персонала';
+
+  try {
+    GmailApp.sendEmail(emailNorm, subject, body);
+  } catch (mailErr) {
+    try { deleteRowByValue_(sheet, 1, id); try { SpreadsheetApp.flush(); } catch(_) {} } catch(_) {}
+    return { ok: false, error: 'Письмо не отправлено: ' + (mailErr && mailErr.message ? mailErr.message : String(mailErr)) };
+  }
+
+  return { ok: true, invite_id: id, token, survey_link: surveyLink, expires_at: toYMD(expiresAt) };
+}
+
+function getPifAssessments(data) {
+  const role = String(data.role || '');
+  const recruiterId = String(data.recruiter_id || '');
+
+  const sheet = getSheet(SH.PIF_INVITES);
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length < 2) return { ok: true, items: [] };
+  const hm = headerMap_(sheet);
+  const resultsMap = buildPifResultMap_();
+
+  const items = rows.slice(1).filter(r => r[0]).map(r => {
+    const id = String(getCellByHeader_(r, hm, 'id', r[0]));
+    const status = String(getCellByHeader_(r, hm, 'status', r[2] || ''));
+    const expired = isInviteExpired_(getCellByHeader_(r, hm, 'expires_at', r[4]));
+    const result = resultsMap[id] || null;
+    const finalStatus = (status === 'completed' || !!result) ? 'completed' : (expired ? 'expired' : status);
+    return {
+      id,
+      token: getCellByHeader_(r, hm, 'token', r[1]),
+      status: finalStatus,
+      sent_at: toYMD(getCellByHeader_(r, hm, 'sent_at', r[3])),
+      expires_at: toYMD(getCellByHeader_(r, hm, 'expires_at', r[4])),
+      submitted_at: toYMD(getCellByHeader_(r, hm, 'submitted_at', r[5])),
+      candidate_name: getCellByHeader_(r, hm, 'candidate_name', r[6]),
+      candidate_email: getCellByHeader_(r, hm, 'candidate_email', r[7]),
+      department: getCellByHeader_(r, hm, 'department', ''),
+      employee_group: getCellByHeader_(r, hm, 'employee_group', ''),
+      recruiter_id: getCellByHeader_(r, hm, 'recruiter_id', ''),
+      recruiter_name: getCellByHeader_(r, hm, 'recruiter_name', ''),
+      has_result: !!result,
+    };
+  });
+
+  const filtered = items.filter(item => {
+    if (role === 'recruiter' && recruiterId) return String(item.recruiter_id) === recruiterId;
+    return true;
+  });
+  filtered.sort((a, b) => (a.sent_at < b.sent_at ? 1 : -1));
+  return { ok: true, items: filtered };
+}
+
+function getPifAssessmentResult(data) {
+  const id = String(data.id || '');
+  const role = String(data.role || '');
+  if (role !== 'admin' && role !== 'manager') {
+    return { ok: false, error: 'Недостаточно прав для просмотра детального результата' };
+  }
+  if (!id) return { ok: false, error: 'Нет id' };
+
+  const inv = findPifInviteById_(id);
+  const result = findPifResultByInviteId_(id);
+
+  if (!inv && !result) return { ok: false, error: 'Запись не найдена' };
+  if (!result) return { ok: false, error: 'Результат пока не сформирован' };
+
+  const invData = inv || {};
+  return {
+    ok: true,
+    invite: {
+      id,
+      status: invData.status || 'completed',
+      sent_at: toYMD(invData.sent_at || ''),
+      candidate_name: result.candidate_name || invData.candidate_name || '—',
+      candidate_email: invData.candidate_email || '',
+      department: result.department || invData.department || '',
+      employee_group: result.employee_group || invData.employee_group || '',
+      recruiter_name: result.recruiter_name || invData.recruiter_name || '',
+    },
+    result: {
+      scales: safeJson(result.scales_json || '{}'),
+      total: Number(result.total || 0),
+    }
+  };
+}
+
+function deletePifAssessment(data) {
+  const id = String(data.id || '');
+  const role = String(data.caller_role || '');
+  if (!id) return { ok: false, error: 'Нет id' };
+  if (role !== 'admin') return { ok: false, error: 'Недостаточно прав' };
+  deleteRowByValue_(getSheet(SH.PIF_INVITES), 1, id);
+  deleteRowByValue_(getSheet(SH.PIF_RESULTS), 2, id);
+  return { ok: true, message: 'Оценка потенциала удалена' };
+}
+
+function updatePifFields(data) {
+  const id = String(data.id || '');
+  if (!id) return { ok: false, error: 'Нет id' };
+  const fields = data.fields || {};
+  const ALLOWED = ['department', 'employee_group'];
+
+  const sheet = getSheet(SH.PIF_INVITES);
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length >= 2) {
+    const map = headerMap_(sheet);
+    let rowIdx = -1;
+    for (let i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]) === id) { rowIdx = i; break; }
+    }
+    if (rowIdx >= 0) {
+      const updatedFields = {};
+      ALLOWED.forEach(f => {
+        if (!fields.hasOwnProperty(f)) return;
+        const colIdx = map.hasOwnProperty(f) ? map[f] : -1;
+        if (colIdx < 0) return;
+        sheet.getRange(rowIdx + 1, colIdx + 1).setValue(fields[f]);
+        updatedFields[f] = fields[f];
+      });
+      try { SpreadsheetApp.flush(); } catch(_) {}
+      return { ok: true, updated: updatedFields };
+    }
+  }
+  return { ok: false, error: 'Запись не найдена' };
+}
+
+function startPifSurvey(data) {
+  const token = String(data.token || '').trim();
+  if (!token) return { ok: false, error: 'Не передан token' };
+  const inv = findPifInviteByToken_(token);
+  if (!inv) return { ok: false, error: 'Ссылка недействительна' };
+  if (String(inv.status) === 'completed') return { ok: false, error: 'Опрос уже завершён. Ваши ответы были успешно сохранены.', already_done: true };
+  if (isInviteExpired_(inv.expires_at)) return { ok: false, error: 'Срок действия ссылки истёк' };
+  return {
+    ok: true,
+    invite: {
+      candidate_name: inv.candidate_name,
+      department: inv.department || '',
+      employee_group: inv.employee_group || '',
+      expires_at: toYMD(inv.expires_at),
+    }
+  };
+}
+
+function submitPifSurvey(data) {
+  const token = String(data.token || '').trim();
+  const rawAnswers = data.answers;
+  if (!token) return { ok: false, error: 'Не передан token' };
+  if (!rawAnswers || typeof rawAnswers !== 'object') return { ok: false, error: 'Не переданы ответы' };
+
+  const inv = findPifInviteByToken_(token);
+  if (!inv) return { ok: false, error: 'Ссылка недействительна' };
+  if (String(inv.status) === 'completed') return { ok: false, error: 'Опрос уже отправлен' };
+  if (isInviteExpired_(inv.expires_at)) return { ok: false, error: 'Срок действия ссылки истёк' };
+
+  const parsed = parsePifAnswers_(rawAnswers);
+  if (!parsed.ok) return { ok: false, error: parsed.error };
+
+  const calc = calculatePif_(parsed.answers);
+  const submittedAt = new Date();
+  const resultId = generateId();
+
+  appendRowByHeaders_(getSheet(SH.PIF_RESULTS), {
+    id: resultId,
+    invite_id: inv.id,
+    token,
+    candidate_name: inv.candidate_name,
+    department: inv.department || '',
+    employee_group: inv.employee_group || '',
+    recruiter_name: inv.recruiter_name || '',
+    submitted_at: submittedAt,
+    created_at: submittedAt,
+    scales_json: JSON.stringify(calc.scales),
+    total: calc.total,
+    answers_json: JSON.stringify(rawAnswers),
+  });
+
+  setPifInviteCompleted_(inv.id, submittedAt);
+
+  return { ok: true, message: 'Опрос успешно отправлен' };
+}
+
+// ── PiF scoring ──────────────────────────────────────────────────────
+
+const PIF_SCALES_DEF = [
+  {code:'A1',   qs:[1,2,3,4,5],           isMain:true},
+  {code:'A2',   qs:[6,7,8,9,10],          isMain:true},
+  {code:'И1',   qs:[11,12,13,14,15],      isMain:true},
+  {code:'И2',   qs:[16,17,18,19,20],      isMain:true},
+  {code:'И3',   qs:[21,22,23,24,25],      isMain:true},
+  {code:'К1',   qs:[26,27,28,29,30],      isMain:true},
+  {code:'К2',   qs:[31,32,33,34,35],      isMain:true},
+  {code:'Д1',   qs:[36,37,38,39,40],      isMain:true},
+  {code:'Д2',   qs:[41,42,43,44,45],      isMain:true},
+  {code:'Д3',   qs:[46,47,48,49,50],      isMain:true},
+  {code:'Доп1', qs:[51,52,53],            isMain:false},
+  {code:'Доп2', qs:[54,55,56],            isMain:false},
+  {code:'Доп3', qs:[57,58,59],            isMain:false},
+  {code:'Доп4', qs:[60,61,62],            isMain:false},
+  {code:'Доп5', qs:[63,64,65],            isMain:false},
+  {code:'Доп6', qs:[66,67,68],            isMain:false},
+  {code:'Доп7', qs:[69,70,71],            isMain:false},
+  {code:'Доп8', qs:[72,73,74],            isMain:false},
+  {code:'Доп9', qs:[75,76,77],            isMain:false},
+];
+
+function parsePifAnswers_(raw) {
+  const answers = {};
+  for (let i = 1; i <= 77; i++) {
+    const v = Number(raw[i] || raw[String(i)]);
+    if (![1, 2, 3, 4].includes(v)) {
+      return { ok: false, error: 'Ответ на вопрос ' + i + ' должен быть 1–4. Получено: ' + v };
+    }
+    answers[i] = v;
+  }
+  return { ok: true, answers };
+}
+
+function calculatePif_(answers) {
+  const scales = {};
+  const mainScores = [];
+
+  PIF_SCALES_DEF.forEach(sd => {
+    const vals = sd.qs.map(q => Number(answers[q]));
+    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const rounded = Math.round(mean * 1000) / 1000;
+    scales[sd.code] = rounded;
+    if (sd.isMain) mainScores.push(rounded);
+  });
+
+  const total = Math.round(mainScores.reduce((a, b) => a + b, 0) / mainScores.length * 1000) / 1000;
+  return { scales, total };
+}
+
+// ── PiF helpers ──────────────────────────────────────────────────────
+
+function buildPifResultMap_() {
+  const sheet = getSheet(SH.PIF_RESULTS);
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length < 2) return {};
+  const hm = headerMap_(sheet);
+  const map = {};
+  rows.slice(1).forEach(r => {
+    const invId = String(getCellByHeader_(r, hm, 'invite_id', r[1] || ''));
+    if (!invId) return;
+    map[invId] = {
+      id: getCellByHeader_(r, hm, 'id', r[0]),
+      invite_id: invId,
+      candidate_name: getCellByHeader_(r, hm, 'candidate_name', r[3]),
+      department: getCellByHeader_(r, hm, 'department', ''),
+      employee_group: getCellByHeader_(r, hm, 'employee_group', ''),
+      recruiter_name: getCellByHeader_(r, hm, 'recruiter_name', ''),
+      submitted_at: getCellByHeader_(r, hm, 'submitted_at', ''),
+      scales_json: getCellByHeader_(r, hm, 'scales_json', '{}'),
+      total: getCellByHeader_(r, hm, 'total', 0),
+    };
+  });
+  return map;
+}
+
+function findPifInviteById_(id) {
+  const sheet = getSheet(SH.PIF_INVITES);
+  const rows = sheet.getDataRange().getValues();
+  const hm = headerMap_(sheet);
+  const row = rows.slice(1).find(r => String(getCellByHeader_(r, hm, 'id', r[0])) === id);
+  if (!row) return null;
+  return {
+    id: String(getCellByHeader_(row, hm, 'id', row[0])),
+    token: getCellByHeader_(row, hm, 'token', row[1]),
+    status: getCellByHeader_(row, hm, 'status', row[2]),
+    sent_at: getCellByHeader_(row, hm, 'sent_at', row[3]),
+    expires_at: getCellByHeader_(row, hm, 'expires_at', row[4]),
+    candidate_name: getCellByHeader_(row, hm, 'candidate_name', row[6]),
+    candidate_email: getCellByHeader_(row, hm, 'candidate_email', row[7]),
+    department: getCellByHeader_(row, hm, 'department', ''),
+    employee_group: getCellByHeader_(row, hm, 'employee_group', ''),
+    recruiter_id: getCellByHeader_(row, hm, 'recruiter_id', ''),
+    recruiter_name: getCellByHeader_(row, hm, 'recruiter_name', ''),
+  };
+}
+
+function findPifInviteByToken_(token) {
+  const sheet = getSheet(SH.PIF_INVITES);
+  const rows = sheet.getDataRange().getValues();
+  const hm = headerMap_(sheet);
+  const row = rows.slice(1).find(r => String(getCellByHeader_(r, hm, 'token', r[1])) === token);
+  if (!row) return null;
+  return {
+    id: String(getCellByHeader_(row, hm, 'id', row[0])),
+    token,
+    status: getCellByHeader_(row, hm, 'status', row[2]),
+    expires_at: getCellByHeader_(row, hm, 'expires_at', row[4]),
+    candidate_name: getCellByHeader_(row, hm, 'candidate_name', row[6]),
+    candidate_email: getCellByHeader_(row, hm, 'candidate_email', row[7]),
+    department: getCellByHeader_(row, hm, 'department', ''),
+    employee_group: getCellByHeader_(row, hm, 'employee_group', ''),
+    recruiter_id: getCellByHeader_(row, hm, 'recruiter_id', ''),
+    recruiter_name: getCellByHeader_(row, hm, 'recruiter_name', ''),
+  };
+}
+
+function findPifResultByInviteId_(inviteId) {
+  const map = buildPifResultMap_();
+  return map[inviteId] || null;
+}
+
+function setPifInviteCompleted_(id, submittedAt) {
+  const sheet = getSheet(SH.PIF_INVITES);
+  const rows = sheet.getDataRange().getValues();
+  const hm = headerMap_(sheet);
+  for (let i = 1; i < rows.length; i++) {
+    if (String(getCellByHeader_(rows[i], hm, 'id', rows[i][0])) === id) {
+      const statusCol = hm.hasOwnProperty('status') ? hm['status'] + 1 : 3;
+      const submittedCol = hm.hasOwnProperty('submitted_at') ? hm['submitted_at'] + 1 : 6;
+      const updatedCol = hm.hasOwnProperty('updated_at') ? hm['updated_at'] + 1 : 14;
+      sheet.getRange(i + 1, statusCol).setValue('completed');
+      sheet.getRange(i + 1, submittedCol).setValue(submittedAt);
+      sheet.getRange(i + 1, updatedCol).setValue(submittedAt);
+      try { SpreadsheetApp.flush(); } catch(_) {}
+      return;
+    }
+  }
 }

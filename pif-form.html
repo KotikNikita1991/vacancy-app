@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Оценка потенциала — PiF-Q</title>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Onest',system-ui,sans-serif;background:#f4f5f7;color:#1a1a2e;min-height:100vh}
+  button{font-family:inherit;cursor:pointer;border:none;background:none}
+  #pif-form-pg{min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:0 0 40px}
+  .pif-form-wrap{max-width:780px;width:100%;margin:0 auto;padding:24px 16px}
+  .pif-form-hdr{display:flex;align-items:flex-start;gap:16px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #e5e7eb}
+  .pif-form-logo-ico{width:48px;height:48px;border-radius:12px;background:#0E7490;color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .pif-form-title{font-size:20px;font-weight:700;color:#1a1a2e;margin:0 0 4px}
+  .pif-form-sub{font-size:14px;color:#4b5563;line-height:1.5}
+  .pif-form-progress{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .pif-progress-bar{flex:1;height:6px;border-radius:3px;background:#e5e7eb;overflow:hidden}
+  .pif-progress-fill{height:100%;border-radius:3px;background:#0E7490;transition:width .3s}
+  .pif-progress-cnt{font-size:12px;font-weight:600;color:#4b5563;white-space:nowrap}
+  .pif-scale-legend{font-size:11px;color:#9ca3af;margin-bottom:20px;line-height:1.8}
+  .pif-qcard{display:flex;gap:12px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;margin-bottom:8px;transition:border-color .2s}
+  .pif-qcard--done{border-color:#0E7490;background:#f0fdff}
+  .pif-qnum{width:28px;height:28px;border-radius:50%;background:#f3f4f6;color:#4b5563;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+  .pif-qbody{flex:1;min-width:0}
+  .pif-qtext{font-size:14px;color:#1a1a2e;margin-bottom:10px;line-height:1.5}
+  .pif-opts{display:flex;flex-wrap:wrap;gap:6px}
+  .pif-opt{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;border:1px solid #e5e7eb;background:#f9fafb;cursor:pointer;font-size:12px;transition:all .15s;user-select:none}
+  .pif-opt input[type="radio"]{display:none}
+  .pif-opt:hover{border-color:#0E7490;background:#f0fdff}
+  .pif-opt--sel{border-color:#0E7490;background:#CFFAFE;color:#0E7490;font-weight:600}
+  .pif-opt-num{font-weight:700;font-size:13px}
+  .pif-form-footer{margin-top:24px;text-align:center}
+  .pif-sub-err{padding:10px 14px;border-radius:8px;background:#FEE2E2;color:#DC2626;font-size:13px;margin-bottom:12px;border:1px solid #FECACA;text-align:left}
+  .pif-submit-btn{background:#0E7490;color:#fff;border:none;border-radius:10px;padding:13px 36px;font-size:15px;font-weight:700;cursor:pointer;transition:background .2s;font-family:inherit}
+  .pif-submit-btn:hover{background:#0c6478}
+  .pif-submit-btn:disabled{opacity:.6;cursor:not-allowed}
+  .pif-pg-loading{display:flex;align-items:center;justify-content:center;min-height:60vh;font-size:16px;color:#4b5563;gap:12px}
+  .pif-pg-msg{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;padding:40px 24px}
+  .pif-pg-msg h2{font-size:22px;font-weight:700;margin:12px 0 8px;color:#1a1a2e}
+  .pif-pg-msg p{color:#4b5563;font-size:14px;line-height:1.6;max-width:440px}
+  .pif-pg-ico{font-size:52px;line-height:1}
+  .pif-pg-msg--ok .pif-pg-ico{color:#059669}
+  .pif-pg-msg--err .pif-pg-ico{color:#DC2626}
+  .spin{display:inline-block;width:22px;height:22px;border:2.5px solid rgba(14,116,144,.2);border-top-color:#0E7490;border-radius:50%;animation:sp .7s linear infinite;vertical-align:middle;flex-shrink:0}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  @media(max-width:520px){
+    .pif-form-hdr{flex-direction:column;gap:10px}
+    .pif-opts{flex-direction:column}
+    .pif-opt{justify-content:flex-start}
+  }
+</style>
+</head>
+<body>
+<div id="pif-form-pg">
+  <div class="pif-pg-loading"><span class="spin"></span> Загружаем опрос…</div>
+</div>
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  PiF-Q Public Form — автономная страница для участника
+//  Разместить рядом с index.html в репозитории Opros_forma
+// ═══════════════════════════════════════════════════════════════
+
+var API_URL = 'https://script.google.com/macros/s/AKfycbzMBSfyu7D--wq_bziyg_3To-HUzE5jOBiMCB8omxZY0dvPJQXXJo6J_jmlk1ymirDH/exec';
+var API_TIMEOUT_MS = 120000;
+
+async function callApi(action, data) {
+  var ctrl = new AbortController();
+  var t = setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, API_TIMEOUT_MS);
+  try {
+    var r = await fetch(API_URL, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(Object.assign({ action: action }, data || {})),
+      signal: ctrl.signal
+    });
+    clearTimeout(t);
+    var txt = await r.text();
+    try { return JSON.parse(txt); } catch(_) { return { ok: false, error: 'Некорректный ответ сервера' }; }
+  } catch(e) {
+    clearTimeout(t);
+    return { ok: false, error: e && e.name === 'AbortError' ? 'Превышено время ожидания. Проверьте интернет.' : (e && e.message || 'Ошибка соединения') };
+  }
+}
+
+// ── Shuffle с детерминированным seed (по токену) ──────────────
+function seededShuffle(arr, seed) {
+  var a = arr.slice(), s = seed | 1;
+  for (var i = a.length - 1; i > 0; i--) {
+    s = ((Math.imul ? Math.imul(1664525, s) : (1664525 * s)) + 1013904223) | 0;
+    var j = Math.abs(s) % (i + 1), tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+  }
+  return a;
+}
+function tokenSeed(token) {
+  var h = 0;
+  for (var i = 0; i < (token || '').length; i++)
+    h = (((Math.imul ? Math.imul(31, h) : (31 * h)) | 0) + token.charCodeAt(i)) | 0;
+  return Math.abs(h) || 1;
+}
+
+// ── LocalStorage progress ─────────────────────────────────────
+function loadProgress(token) { try { var r = localStorage.getItem('pif_prog_' + token); return r ? JSON.parse(r) : null; } catch(e) { return null; } }
+function saveProgress(token, answers) { try { localStorage.setItem('pif_prog_' + token, JSON.stringify({ answers: answers, ts: Date.now() })); } catch(e) {} }
+function clearProgress(token) { try { localStorage.removeItem('pif_prog_' + token); } catch(e) {} }
+
+function escH(s) { return s == null ? '' : String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── 77 вопросов ───────────────────────────────────────────────
+var PIF_QUESTIONS = [
+  {n:1,  text:'В условиях острого дефицита времени я сохраняю ясность мышления и принимаю решения без потери качества'},
+  {n:2,  text:'Я быстро ориентируюсь в больших объёмах разнородных данных и нахожу нужную информацию'},
+  {n:3,  text:'Мне легко удерживать несколько информационных потоков одновременно, не теряя нити рассуждений'},
+  {n:4,  text:'Коллеги замечают, что я быстро схватываю суть новых задач и данных, не требуя длительных пояснений'},
+  {n:5,  text:'Я обрабатываю стандартную рабочую информацию быстрее большинства людей, с которыми работаю'},
+  {n:6,  text:'Прежде чем согласиться с выводом, я проверяю, на каких допущениях он основан и насколько они обоснованы'},
+  {n:7,  text:'Мне удаётся замечать логические противоречия в аргументах, которые на первый взгляд выглядят убедительно'},
+  {n:8,  text:'При анализе сложной ситуации я всегда рассматриваю несколько альтернативных объяснений, прежде чем остановиться на одном'},
+  {n:9,  text:'Я умею отделить существенное от второстепенного даже в противоречивой или неполной информации'},
+  {n:10, text:'Я задаюсь вопросом «почему именно так?» и нахожу глубинные причины, а не ограничиваюсь очевидными объяснениями'},
+  {n:11, text:'Я активно ищу возможности получить новые профессиональные знания и навыки'},
+  {n:12, text:'Я берусь за задачи, которые требуют освоения незнакомого мне материала, даже если это некомфортно'},
+  {n:13, text:'Критика и отрицательная обратная связь воспринимаются мной как ценный ресурс для роста, а не как угроза'},
+  {n:14, text:'Меня больше привлекают задачи, в которых я ещё не эксперт, чем те, что я уже умею делать хорошо'},
+  {n:15, text:'Я регулярно инвестирую личное время в профессиональное развитие вне зависимости от внешних требований'},
+  {n:16, text:'В ситуации изменений я готов(а) полностью пересмотреть привычный подход, если это повысит результат'},
+  {n:17, text:'Столкнувшись с опровергающими данными, я меняю свою позицию, а не ищу способ её защитить'},
+  {n:18, text:'Мне интересно изучать практики, принципиально отличающиеся от тех, с которыми я работаю'},
+  {n:19, text:'Я готов(а) принять решение, которое идёт вразрез с традицией, если вижу в нём логику'},
+  {n:20, text:'Мне легко допустить, что я могу ошибаться, и активно искать точки зрения, которые оспаривают мои взгляды'},
+  {n:21, text:'Я продуктивно работаю в ситуациях, где нет единственно верного ответа или чёткого алгоритма'},
+  {n:22, text:'Неопределённость я воспринимаю как рабочее условие, а не как источник дискомфорта или тревоги'},
+  {n:23, text:'Я принимаю взвешенные решения, опираясь на неполную информацию, не дожидаясь полной ясности'},
+  {n:24, text:'В быстро меняющейся среде я сохраняю фокус на цели и не теряю продуктивность'},
+  {n:25, text:'Я способен(на) одновременно удерживать несколько противоречивых версий происходящего, пока картина не прояснится'},
+  {n:26, text:'Мне нравится брать ответственность за результаты других людей, а не только за свои собственные'},
+  {n:27, text:'Я готов(а) принимать непопулярные решения ради достижения командных целей, даже если они вызовут недовольство'},
+  {n:28, text:'Роль руководителя привлекает меня именно своей сложностью и возможностью влиять на результат системно'},
+  {n:29, text:'Я стремлюсь к управленческим позициям, понимая и принимая их специфические издержки (конфликты, нагрузка, критика)'},
+  {n:30, text:'Для меня важно видеть профессиональный рост и развитие людей, которых я веду'},
+  {n:31, text:'Я легко считываю истинные мотивы и эмоции людей, даже когда они прямо их не выражают'},
+  {n:32, text:'Мне удаётся изменять поведение других без формальных рычагов давления — через убеждение и выстраивание доверия'},
+  {n:33, text:'В конфликтных ситуациях я нахожу подход к каждой стороне и помогаю прийти к взаимоприемлемому решению'},
+  {n:34, text:'Я хорошо чувствую неформальную динамику в группе: кто на кого влияет, кто реально принимает решения'},
+  {n:35, text:'Мне удаётся вовлекать в совместную работу людей, которые изначально не проявляли к ней интереса'},
+  {n:36, text:'Если первая попытка не дала результата, я продолжаю искать альтернативные пути решения задачи'},
+  {n:37, text:'Серьёзные препятствия скорее усиливают мою мотивацию, чем заставляют отступить'},
+  {n:38, text:'Я готов(а) тратить значительно больше усилий и времени, чем планировалось, ради достижения важной цели'},
+  {n:39, text:'Трудности и неудачи не сбивают меня с курса при движении к долгосрочной цели'},
+  {n:40, text:'Я завершаю начатое, даже когда путь оказывается гораздо длиннее и сложнее, чем предполагалось'},
+  {n:41, text:'Я намеренно ставлю перед собой цели, которые требуют максимального напряжения сил'},
+  {n:42, text:'Мне недостаточно просто выполнить задачу — я стремлюсь сделать это на высшем уровне'},
+  {n:43, text:'Я регулярно пересматриваю свои цели в сторону повышения, если вижу, что могу достичь большего'},
+  {n:44, text:'Меня привлекают вызовы высокого масштаба, которые другие считают чрезмерно рискованными'},
+  {n:45, text:'Я самостоятельно ищу задачи, раздвигающие границы моих возможностей, не дожидаясь, пока их поставят извне'},
+  {n:46, text:'Я регулярно предлагаю идеи по улучшению рабочих процессов, не дожидаясь просьбы от руководства'},
+  {n:47, text:'Когда я вижу проблему, я не жду, пока её заметят другие, — беру инициативу в свои руки'},
+  {n:48, text:'Я берусь за ответственные участки работы, не ожидая явного указания или разрешения'},
+  {n:49, text:'Я самостоятельно формирую задачи собственного развития и отслеживаю их выполнение'},
+  {n:50, text:'Коллеги воспринимают меня как человека, который всегда находит, что и как можно улучшить'},
+  {n:51, text:'После кардинальных изменений в организации я быстро перестраиваюсь и возвращаюсь к эффективной работе'},
+  {n:52, text:'Новые организационные правила и процессы я принимаю без длительного внутреннего сопротивления'},
+  {n:53, text:'Я успешно адаптируюсь к принципиально другому стилю руководства или корпоративной культуре'},
+  {n:54, text:'Под давлением сроков или высокой ответственности я сохраняю качество работы, близкое к обычному'},
+  {n:55, text:'В стрессовых ситуациях я продолжаю принимать взвешенные решения, не теряя трезвости суждений'},
+  {n:56, text:'Длительный период высокой нагрузки не подрывает существенно мою мотивацию и работоспособность'},
+  {n:57, text:'Мне нравится искать принципиально нестандартные решения задач, которые обычно решают привычным способом'},
+  {n:58, text:'Я генерирую идеи и концепции, выходящие за рамки того, что уже пробовали коллеги'},
+  {n:59, text:'Рутинные задачи мотивируют меня значительно меньше, чем возможность придумать что-то новое с нуля'},
+  {n:60, text:'Мне проще достичь качественного результата в команде, чем работая в одиночку над той же задачей'},
+  {n:61, text:'Я активно привлекаю коллег к решению сложных задач, даже когда формально могу справиться сам(а)'},
+  {n:62, text:'В групповых проектах я вкладываюсь не только в конечный результат, но и в качество взаимодействия внутри команды'},
+  {n:63, text:'Я целенаправленно расширяю свою профессиональную сеть контактов за пределами привычного круга'},
+  {n:64, text:'Знакомство с новыми людьми на профессиональных мероприятиях воспринимается мной как возможность, а не обременение'},
+  {n:65, text:'Я поддерживаю активные отношения с широким кругом коллег и партнёров вне своей компании'},
+  {n:66, text:'Для меня принципиально важно, чтобы все участники обсуждения были довольны принятым решением'},
+  {n:67, text:'Мне трудно принимать решения, которые могут обидеть или расстроить кого-то из коллег'},
+  {n:68, text:'Сохранение хорошей атмосферы в команде для меня важнее, чем достижение оптимального результата'},
+  {n:69, text:'Я верю, что мои профессиональные перспективы будут благоприятными, даже если сейчас ситуация сложная'},
+  {n:70, text:'После серьёзных неудач я сохраняю уверенность в своём профессиональном будущем'},
+  {n:71, text:'Возникающие трудности я воспринимаю как временные обстоятельства, а не как постоянные препятствия'},
+  {n:72, text:'Для меня важно доводить каждую задачу до максимального качества, даже если это требует значительного дополнительного времени'},
+  {n:73, text:'Я обращаю внимание на детали в своей работе, которые большинство коллег не заметят и не оценят'},
+  {n:74, text:'Мне трудно завершить работу и передать её дальше, если я вижу в ней ещё не исправленные недочёты'},
+  {n:75, text:'Для меня принципиально важно действовать строго в рамках установленных процедур и регламентов'},
+  {n:76, text:'Если правило существует, я следую ему вне зависимости от конкретных обстоятельств ситуации'},
+  {n:77, text:'Работа без чётких инструкций и регламентов вызывает у меня заметный дискомфорт'},
+];
+
+var OPTS_LABELS = ['Совершенно не подходит', 'Скорее не подходит', 'Скорее подходит', 'Полностью подходит'];
+
+// ── Main init ─────────────────────────────────────────────────
+(async function init() {
+  var pg = document.getElementById('pif-form-pg');
+  var qs; try { qs = new URLSearchParams(location.search); } catch(e) { showErr(pg, 'Ошибка инициализации'); return; }
+  var token = qs.get('pif_token');
+  if (!token) { showMsg(pg, 'err', '⚠', 'Ссылка недействительна', 'Отсутствует токен опроса. Проверьте ссылку из письма.'); return; }
+
+  var res = await callApi('startPifSurvey', { token: token });
+  if (!res || !res.ok) {
+    if (res && res.already_done) {
+      showMsg(pg, 'ok', '✓', 'Опрос уже завершён', 'Вы уже прошли этот опрос. Спасибо за участие!');
+    } else {
+      showMsg(pg, 'err', '⚠', 'Ссылка недействительна', res && res.error ? escH(res.error) : 'Проверьте правильность ссылки.');
+    }
+    return;
+  }
+
+  var inv = res.invite || {};
+  var seed = tokenSeed(token);
+  var saved = loadProgress(token);
+  var answers = (saved && saved.answers) ? saved.answers : {};
+  var shuffled = seededShuffle(PIF_QUESTIONS, seed);
+
+  renderForm(pg, token, inv, shuffled, answers);
+})();
+
+function renderForm(pg, token, inv, questions, answers) {
+  var total = questions.length;
+  var answered = Object.keys(answers).length;
+  var pct = Math.round(answered / total * 100);
+
+  var qCards = questions.map(function(q, idx) {
+    var cur = answers[q.n] || 0;
+    var opts = OPTS_LABELS.map(function(lbl, vi) {
+      var v = vi + 1;
+      var sel = cur === v ? ' pif-opt--sel' : '';
+      return '<label class="pif-opt' + sel + '">' +
+        '<input type="radio" name="q' + q.n + '" value="' + v + '"' + (cur === v ? ' checked' : '') + '>' +
+        '<span class="pif-opt-num">' + v + '</span>' +
+        '<span>' + escH(lbl) + '</span>' +
+        '</label>';
+    }).join('');
+    var done = cur > 0 ? ' pif-qcard--done' : '';
+    return '<div class="pif-qcard' + done + '" id="pq' + q.n + '">' +
+      '<div class="pif-qnum">' + (idx + 1) + '</div>' +
+      '<div class="pif-qbody">' +
+        '<div class="pif-qtext">' + escH(q.text) + '</div>' +
+        '<div class="pif-opts">' + opts + '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  pg.innerHTML =
+    '<div class="pif-form-wrap">' +
+      '<div class="pif-form-hdr">' +
+        '<div class="pif-form-logo-ico">PiF</div>' +
+        '<div>' +
+          '<div class="pif-form-title">Оценка потенциала — PiF-Q</div>' +
+          '<div class="pif-form-sub">' + escH(inv.candidate_name || '') + (inv.department ? ' · ' + escH(inv.department) : '') + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="pif-form-progress">' +
+        '<div class="pif-progress-bar"><div class="pif-progress-fill" id="pif-pfill" style="width:' + pct + '%"></div></div>' +
+        '<div class="pif-progress-cnt" id="pif-pcnt">' + answered + ' / ' + total + '</div>' +
+      '</div>' +
+      '<div class="pif-scale-legend">Шкала: <b>1</b> = Совершенно не подходит &nbsp;&nbsp; <b>2</b> = Скорее не подходит &nbsp;&nbsp; <b>3</b> = Скорее подходит &nbsp;&nbsp; <b>4</b> = Полностью подходит</div>' +
+      qCards +
+      '<div class="pif-form-footer">' +
+        '<div id="pif-sub-err" class="pif-sub-err" style="display:none"></div>' +
+        '<button type="button" class="pif-submit-btn" id="pif-submit-btn">Отправить результаты</button>' +
+      '</div>' +
+    '</div>';
+
+  // Radio change
+  pg.addEventListener('change', function(e) {
+    var inp = e.target;
+    if (!inp || inp.type !== 'radio') return;
+    var qn = parseInt(inp.name.replace('q', ''), 10);
+    var v = parseInt(inp.value, 10);
+    answers[qn] = v;
+    saveProgress(token, answers);
+
+    var card = document.getElementById('pq' + qn);
+    if (card) card.classList.add('pif-qcard--done');
+
+    var optContainer = inp.closest('.pif-opts');
+    if (optContainer) {
+      optContainer.querySelectorAll('.pif-opt').forEach(function(lb) {
+        lb.classList.toggle('pif-opt--sel', lb.querySelector('input') === inp);
+      });
+    }
+
+    var ans2 = Object.keys(answers).length;
+    var pct2 = Math.round(ans2 / total * 100);
+    var fill = document.getElementById('pif-pfill');
+    var cnt = document.getElementById('pif-pcnt');
+    if (fill) fill.style.width = pct2 + '%';
+    if (cnt) cnt.textContent = ans2 + ' / ' + total;
+  });
+
+  // Submit
+  var btn = document.getElementById('pif-submit-btn');
+  if (btn) btn.addEventListener('click', function() {
+    submitForm(token, answers, total, btn, pg);
+  });
+}
+
+async function submitForm(token, answers, total, btn, pg) {
+  var errEl = document.getElementById('pif-sub-err');
+  var answered = Object.keys(answers).length;
+  if (answered < total) {
+    if (errEl) { errEl.style.display = ''; errEl.textContent = 'Пожалуйста, ответьте на все ' + total + ' утверждений. Осталось: ' + (total - answered) + '.'; }
+    return;
+  }
+  if (errEl) errEl.style.display = 'none';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Отправляем…'; }
+
+  var res = await callApi('submitPifSurvey', { token: token, answers: answers });
+  if (res && res.ok) {
+    clearProgress(token);
+    showMsg(pg, 'ok', '✓', 'Готово! Спасибо за участие.', 'Ваши ответы успешно сохранены.<br>Специалист по подбору свяжется с вами при необходимости.');
+  } else {
+    if (btn) { btn.disabled = false; btn.textContent = 'Отправить результаты'; }
+    if (errEl) { errEl.style.display = ''; errEl.textContent = (res && res.error) || 'Не удалось отправить ответы. Попробуйте ещё раз.'; }
+  }
+}
+
+function showMsg(pg, type, ico, title, body) {
+  pg.innerHTML = '<div class="pif-pg-msg pif-pg-msg--' + type + '">' +
+    '<div class="pif-pg-ico">' + ico + '</div>' +
+    '<h2>' + escH(title) + '</h2>' +
+    '<p>' + body + '</p>' +
+  '</div>';
+}
+</script>
+</body>
+</html>

@@ -108,7 +108,6 @@
 
   function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
   function band(sc){if(sc<=2.5)return'lo';if(sc<=3.9)return'mo';if(sc<=5.0)return'hi';return'vh';}
-  function bandLabel(b){return{lo:'Низкий (1–2.5)',mo:'Умеренный (2.6–3.9)',hi:'Высокий (4–5)',vh:'Очень высокий (5.1–6)'}[b]||'';}
   function status(sc,cfg){if(sc>=cfg.mn&&sc<=cfg.mx)return'in';return sc<cfg.mn?'below':'above';}
   function isBadDir(sc,cfg){return cfg.p==='UNWANTED'?sc>cfg.mx:sc<cfg.mn;}
 

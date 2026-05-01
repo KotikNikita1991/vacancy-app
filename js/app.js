@@ -252,7 +252,7 @@ function buildNav(){
 function navigate(page){
   PAGE=page;
   document.querySelectorAll('.ni').forEach(el=>el.classList.toggle('active',el.id===`ni-${page}`));
-  const ttls={dashboard:'Дашборд',analytics:'Аналитика',checklist:'Оценка кандидата',values:'Оценка ценностей',dpi:'Деструкторы',users:'Пользователи'};
+  const ttls={dashboard:'Дашборд',analytics:'Аналитика',checklist:'Оценка кандидата',values:'Оценка ценностей',dpi:'Деструкторы',pif:'Потенциал (PiF-Q)',users:'Пользователи'};
   document.getElementById('httl').textContent=ttls[page]||page;
   // Сбрасываем хлебные крошки на корневую страницу
   if(window.VAC_UI&&window.VAC_UI.crumbs){
@@ -296,6 +296,7 @@ async function renderPage(p){
   else if(p==='checklist')await renderChecklist();
   else if(p==='values')await renderValues();
   else if(p==='dpi')await renderDpi();
+  else if(p==='pif')await renderPif();
   else if(p==='users')await renderUsers();
   else renderSoon(p);
 }
@@ -1271,10 +1272,11 @@ async function renderAnalytics(){
             label:`${d.toLocaleString('ru',{month:'short'})} ${d.getFullYear()}`
           });
         }
-        // Для каждого рекрутера × месяц считаем пересечение
+        // Для каждого рекрутера × месяц считаем пересечение.
+        // Используем base (с учётом текущих фильтров) — не allV.
         const grid={};
         recList.forEach(rc=>{grid[rc.id]={};});
-        allV.forEach(v=>{
+        base.forEach(v=>{
           const k=v.current_recruiter_id||v.recruiter_id;
           if(!grid[k])return;
           const opened=v.date_opened||'';
@@ -1315,9 +1317,9 @@ async function renderAnalytics(){
           const avHtml=av?`<span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;font-size:9px;font-weight:700;color:#fff;background:${av.color?av.color(rc.name):'var(--acc)'};flex-shrink:0">${av.initials?av.initials(rc.name,1):rc.name.charAt(0)}</span> `:'';
           return`<tr><td style="${tdNameStyle}">${avHtml}${rc.name}</td>${cells}</tr>`;
         }).join('');
-        return`<div class="card" style="margin-bottom:16px;overflow-x:auto">
+        return`<div class="card" style="margin-bottom:16px">
           <div class="ch"><span class="ct">Тепловая карта нагрузки рекрутеров</span><span style="font-size:11px;color:var(--ink3);margin-left:8px">вакансии в работе по месяцам</span></div>
-          <div style="overflow-x:auto">
+          <div style="overflow-x:auto;margin:0 -16px;padding:0 16px">
             <table style="border-collapse:collapse;min-width:100%">
               <thead><tr><th style="${thStyle};text-align:left;border-right:1px solid var(--bg2)">Рекрутер</th>${headerCells}</tr></thead>
               <tbody>${rows}</tbody>
@@ -2699,6 +2701,17 @@ async function renderDpi(){
   }
 }
 
+// ══ PIF PAGE ══════════════════════════════════════════════════
+async function renderPif(){
+  const el=document.getElementById('content');
+  if(!el)return;
+  if(typeof PIF_MODULE!=='undefined'&&typeof PIF_MODULE.renderList==='function'){
+    await PIF_MODULE.renderList(el);
+  } else {
+    el.innerHTML='<div class="card"><div class="empty" style="padding:48px"><h3>Модуль не загружен</h3><p style="color:var(--ink3)">Перезагрузите страницу.</p></div></div>';
+  }
+}
+
 // ══ USERS PAGE ════════════════════════════════════════════════
 async function renderUsers(){
   const el=document.getElementById('content');
@@ -2999,6 +3012,27 @@ function initGlobalActs(){
       if(typeof DPI_MODULE!=='undefined') DPI_MODULE.exportReport({});
     } else if(act==='dpi-export-participant'){
       if(typeof DPI_MODULE!=='undefined') DPI_MODULE.exportReport({participant:true});
+    // ── PiF actions ────────────────────────────────────────
+    } else if(act==='pif-new'){
+      if(typeof PIF_MODULE!=='undefined') PIF_MODULE.openModal();
+      else toast('Модуль PiF не загружен','err');
+    } else if(act==='pif-overlay'){
+      if(ev.target===el&&typeof PIF_MODULE!=='undefined') PIF_MODULE.closeModal();
+    } else if(act==='close-pif-modal'){
+      if(typeof PIF_MODULE!=='undefined') PIF_MODULE.closeModal();
+    } else if(act==='pif-send'){
+      if(typeof PIF_MODULE!=='undefined') PIF_MODULE.sendInvite();
+    } else if(act==='pif-view'){
+      if(U?.role==='recruiter'){toast('Результат доступен Руководителю и Администратору','err');return;}
+      if(typeof PIF_MODULE!=='undefined') PIF_MODULE.viewResult(el.dataset.pid);
+    } else if(act==='pif-del'){
+      if(typeof PIF_MODULE!=='undefined') PIF_MODULE.deleteAssessment(el.dataset.pid);
+    } else if(act==='pif-list'){
+      renderPif();
+    } else if(act==='pif-export'){
+      if(typeof PIF_MODULE!=='undefined') PIF_MODULE.exportReport({});
+    } else if(act==='pif-export-candidate'){
+      if(typeof PIF_MODULE!=='undefined') PIF_MODULE.exportReport({candidate:true});
     } else if(act==='user-toggle'){
       const uid = el.getAttribute('data-uid');
       const ua = el.getAttribute('data-uactive')==='1';
