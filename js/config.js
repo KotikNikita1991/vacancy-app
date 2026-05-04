@@ -1,7 +1,7 @@
 (function(g){
   var C = {
     // Актуальный деплой веб-приложения (при смене — обновите и задеплойте фронт).
-    DEFAULT_API_URL: 'https://script.google.com/macros/s/AKfycbzU6HL8rPlQuBqoqAR6p_Yl6lCpNQTFAHI0l0pFIIKUH6P_kcPdpcg_DsxCvE-ZjLZ23w/exec',
+    DEFAULT_API_URL: 'https://script.google.com/macros/s/AKfycbzcN4SA9Sz3SOof4Th8FYcKARr92mt4NLt0LrpLx-jqxZa-ULbUHFkpg1hAgpqvk5v_BA/exec',
     // Только рабочий деплой. Не добавляйте сюда «запасные» URL без проверки — иначе клиент
     // будет долго перебирать мёртвые адреса (404 / connection reset).
     API_URL_FALLBACKS: [],
