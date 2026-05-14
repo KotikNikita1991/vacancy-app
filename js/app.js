@@ -3172,10 +3172,14 @@ function initGlobalActs(){
       clStep1Next();
     } else if(act==='cl-back-s1'){
       CL_STATE.step=1; renderCLStep1();
-      } else if(act==='cl-to-s3')clToStep3();
-      else if(act==='cl-back-s2'){CL_STATE.step=2;renderCLStep2();}
-      else if(act==='cl-to-s4')clToStep4();
-      else if(act==='cl-back-s3'){CL_STATE.step=3;renderCLStep3();}
+    } else if(act==='cl-to-s3'){
+      clToStep3();
+    } else if(act==='cl-back-s2'){
+      CL_STATE.step=2; renderCLStep2();
+    } else if(act==='cl-to-s4'){
+      clToStep4();
+    } else if(act==='cl-back-s3'){
+      CL_STATE.step=3; renderCLStep3();
     } else if(act==='cl-submit'){
       clSubmit();
     } else if(act==='cl-del'){
