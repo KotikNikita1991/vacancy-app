@@ -1454,12 +1454,21 @@ async function renderChecklist(){
   renderAssessmentList(el);
 }
 
+let CL_TEMPLATE_OPEN=false;
+
 function toggleCLGuide(){
   CL_GUIDE_OPEN=!CL_GUIDE_OPEN;
   const body=document.getElementById('cl-guide-body');
   const arr=document.getElementById('cl-guide-arr');
   if(body){body.style.display=CL_GUIDE_OPEN?'block':'none';}
   if(arr){arr.style.transform=CL_GUIDE_OPEN?'rotate(90deg)':'rotate(0deg)';}
+}
+function toggleCLTemplate(){
+  CL_TEMPLATE_OPEN=!CL_TEMPLATE_OPEN;
+  const body=document.getElementById('cl-tmpl-body');
+  const arr=document.getElementById('cl-tmpl-arr');
+  if(body){body.style.display=CL_TEMPLATE_OPEN?'block':'none';}
+  if(arr){arr.style.transform=CL_TEMPLATE_OPEN?'rotate(90deg)':'rotate(0deg)';}
 }
 
 function renderAssessmentList(el){
@@ -1491,9 +1500,21 @@ function renderAssessmentList(el){
         </div>
         <div style="padding:16px 20px">
           <div style="font-weight:700;font-size:13px;color:var(--acc);margin-bottom:8px">🎯 Техники интервью</div>
+          <div style="margin-bottom:12px">
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+              <span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;flex-shrink:0">STAR</span>
+              <span style="font-size:11px;color:var(--ink3)">структурированный поведенческий вопрос</span>
+            </div>
+            ${[['С — Ситуация','Опишите контекст: место, обстановка, участники'],['З — Задача','Какова была ваша задача или цель?'],['Д — Действие','Что конкретно вы сделали? Ваша личная роль?'],['Р — Результат','Каков измеримый итог? Цифры, сроки, факты']]
+              .map(([k,v])=>`<div style="display:flex;gap:6px;font-size:11px;padding:2px 0"><span style="font-weight:700;color:#1d4ed8;flex-shrink:0;min-width:90px">${k}</span><span style="color:var(--ink2)">${v}</span></div>`).join('')}
+          </div>
           <div style="margin-bottom:10px">
-            <div style="display:flex;gap:6px;margin-bottom:4px"><span style="background:#dbeafe;color:#1d4ed8;padding:1px 7px;border-radius:4px;font-size:11px;font-weight:700">STAR</span><span style="font-size:12px;color:var(--ink2)">Situation → Task → Action → Result</span></div>
-            <div style="display:flex;gap:6px"><span style="background:#d1fae5;color:#065f46;padding:1px 7px;border-radius:4px;font-size:11px;font-weight:700">PARLA</span><span style="font-size:12px;color:var(--ink2)">Problem → Action → Result → Learned → Applied</span></div>
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+              <span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;flex-shrink:0">PARLA</span>
+              <span style="font-size:11px;color:var(--ink3)">анализ ошибок и развития</span>
+            </div>
+            ${[['П — Проблема','С какой трудностью или задачей столкнулись?'],['Д — Действие','Что предприняли для её решения?'],['Р — Результат','К чему это привело? Итог в конкретных фактах'],['У — Урок','Что поняли / чему научились из этого опыта?'],['П — Применение','Как используете этот урок сейчас?']]
+              .map(([k,v])=>`<div style="display:flex;gap:6px;font-size:11px;padding:2px 0"><span style="font-weight:700;color:#065f46;flex-shrink:0;min-width:90px">${k}</span><span style="color:var(--ink2)">${v}</span></div>`).join('')}
           </div>
           <div style="font-weight:700;font-size:13px;color:var(--acc);margin-bottom:6px">🔍 Углубляющие вопросы</div>
           <div style="margin-bottom:10px">
@@ -1520,6 +1541,41 @@ function renderAssessmentList(el){
       </button>
     </div>
     ${guideHtml}
+    <div class="card" style="margin-bottom:16px;border-color:var(--acc)30">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;cursor:pointer" onclick="toggleCLTemplate()">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:32px;height:32px;border-radius:8px;background:var(--accbg);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--acc)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:14px">Шаблон интервью</div>
+            <div style="font-size:12px;color:var(--ink3)">Базовые вопросы по каждому блоку структуры</div>
+          </div>
+        </div>
+        <svg id="cl-tmpl-arr" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink3)" stroke-width="2" stroke-linecap="round" style="transition:.2s;transform:${CL_TEMPLATE_OPEN?'rotate(90deg)':'rotate(0deg)'}"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div id="cl-tmpl-body" style="display:${CL_TEMPLATE_OPEN?'block':'none'};border-top:1px solid var(--bg2)">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:0">
+          ${[
+            ['Установление контакта','5 мин','#059669',['«Как добрались / как сегодня настроение?»','«Расскажите о себе в двух словах — чем занимаетесь сейчас?»','«Бывали у нас раньше / знакомы с нашей компанией?»']],
+            ['Организационная часть','2 мин','#2563eb',['«Встреча займёт около 60 минут, в конце — время для ваших вопросов»','«Я буду делать пометки — это нормально»','«Расскажите о примерах из прошлого опыта — мне важны факты, не теория»']],
+            ['Карьерный путь','15 мин','#7b5ea7',['«Расскажите о своём карьерном пути — откуда начинали?»','«Что было самым значимым на каждом этапе?»','«Почему выбрали именно это направление?»','«Какое достижение считаете главным за последние 2 года?»']],
+            ['Мотивация и ожидания','10 мин','#d97706',['«Почему рассматриваете новые возможности именно сейчас?»','«Назовите 3–5 ключевых критериев выбора нового места»','«Что привлекло именно в нашей вакансии?»','«Каковы ваши цели на ближайшие 2–3 года?»']],
+            ['Компетенции (STAR)','20 мин','#dc2626',['«Расскажите о достижении, которым особенно гордитесь. Ваша роль?»','«Опишите ситуацию, когда план не сработал — что сделали?»','«Был опыт решений при нехватке информации? Как действовали?»','«Расскажите о конфликте с коллегой или руководством — как разрешили?»','«Пример, когда нужно было убедить команду или руководство»']],
+            ['Метапрограммный профиль','10 мин','#0891b2',['«Какие задачи нравились больше всего на прошлом месте?»','«Расскажите о неудаче — в чём была причина?»','«Как понимаете, что сделали работу хорошо — до обратной связи от руководителя?»','«Сравните два последних места работы: что общего, что отличалось?»','«Опишите свой идеальный рабочий день»','«Почему выбрали именно эту профессию?»']],
+            ['Вопросы кандидата','5 мин','#374151',['«Какие вопросы есть о вакансии, команде или компании?»','Слушаем внимательно — вопросы раскрывают приоритеты кандидата']],
+            ['Следующие шаги','5 мин','#374151',['«Решение — до [дата], с вами свяжется [имя] через [канал]»','«Есть ли что-то важное, что не успели сказать?»','«Спасибо за время — было приятно познакомиться»']],
+          ].map(([title,time,color,qs])=>`
+          <div style="padding:14px 18px;border-right:1px solid var(--bg2);border-bottom:1px solid var(--bg2)">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+              <span style="background:${color}15;color:${color};padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;white-space:nowrap">${time}</span>
+              <span style="font-weight:700;font-size:13px">${title}</span>
+            </div>
+            ${qs.map(q=>`<div style="font-size:12px;color:var(--ink2);padding:3px 0;line-height:1.4">${q.startsWith('«')?'→ ':''}<em>${q.startsWith('«')?q:''}</em>${!q.startsWith('«')?q:''}</div>`).join('')}
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>
     ${ASSESSMENTS.length===0
       ?`<div class="card"><div class="empty" style="padding:60px">
           <div class="empty-ico" style="background:var(--accbg)"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--acc)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${IC.cl}</svg></div>
@@ -1711,9 +1767,13 @@ function renderCLTabMeta(){
 }
 
 function renderCLTabComp(){
+  const scaleLegend=`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px;padding:10px 14px;background:var(--bg);border-radius:8px;border:1px solid var(--bg2)">
+    <span style="font-size:11px;color:var(--ink3);font-weight:600;margin-right:2px">Шкала:</span>
+    ${[1,2,3,4,5].map(v=>`<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;background:${CL_SCORE_COLORS[v]}18;color:${CL_SCORE_COLORS[v]}">${v} — ${CL_SCORE_LABELS[v]}</span>`).join('')}
+  </div>`;
   const byGroup={};
   CL_COMPETENCIES.forEach(c=>{if(!byGroup[c.group])byGroup[c.group]=[];byGroup[c.group].push(c);});
-  return Object.entries(byGroup).map(([g,comps])=>`
+  return scaleLegend + Object.entries(byGroup).map(([g,comps])=>`
     <div class="card" style="margin-bottom:10px">
       <div class="ch"><span class="ct">${comps[0].groupLabel}</span></div>
       <div style="padding:0 18px 8px">
@@ -2349,8 +2409,7 @@ async function exportValueReport(inv, r, opts){
   // Скроллируем в начало — иначе браузер может печатать с текущей позиции
   el.scrollTo(0,0);
   window.scrollTo(0,0);
-  toast('Откроется диалог печати → выберите «Сохранить как PDF»');
-  await new Promise(res=>setTimeout(res,400));
+  await new Promise(res=>setTimeout(res,200));
   window.print();
 }
 function renderValueBarChart(){
