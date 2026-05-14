@@ -1427,7 +1427,7 @@ async function setPlan(recId,month,val){
 }
 
 // ══ CHECKLIST ════════════════════════════════════════
-let CL_STATE={vacancyId:'',vacancyName:'',candidateName:'',interviewDate:'',answers:{},notes:'',step:1};
+let CL_STATE={vacancyId:'',vacancyName:'',candidateName:'',interviewDate:'',answers:{},competencies:{},strengths:'',risks:'',openQuestions:'',recommendation:'',recNote:'',notes:'',step:1};
 
 async function deleteAssessment(id){
   if(!canDelete()||!id)return;
@@ -1591,7 +1591,7 @@ function renderCLStep2(){
       <button type="button" class="btn-cancel" data-act="cl-back-s1">← Назад</button>
       <div style="display:flex;align-items:center;gap:12px">
         <span id="cl-asub" style="font-size:12px;color:var(--ink3)"></span>
-        <button type="button" class="btn-save" id="cl-sub-btn" data-act="cl-submit">Завершить →</button>
+        <button type="button" class="btn-save" id="cl-sub-btn" data-act="cl-to-s3">Далее: Компетенции →</button>
       </div>
     </div>`;
   Object.entries(CL_STATE.answers).forEach(([bid,oid])=>hlOpt(bid,oid,true));
@@ -1631,31 +1631,194 @@ function calcCL(){
   return{score,pct:0,rec:'',cls:'sc2'};
 }
 
-async function clSubmit(){
+function clToStep3(){
   CL_STATE.notes=document.getElementById('cl-notes')?.value||'';
   const answered=Object.keys(CL_STATE.answers).length;
   if(answered<CL_BLOCKS.length&&!confirm(`Не заполнено ${CL_BLOCKS.length-answered} блоков. Продолжить?`))return;
+  CL_STATE.step=3;renderCLStep3();
+}
+
+async function clSubmit(){
+  // Save notes/conclusion from step 4
+  CL_STATE.strengths=document.getElementById('cl-strengths')?.value||'';
+  CL_STATE.risks=document.getElementById('cl-risks')?.value||'';
+  CL_STATE.openQuestions=document.getElementById('cl-openq')?.value||'';
+  CL_STATE.recNote=document.getElementById('cl-recnote')?.value||'';
+  if(!CL_STATE.recommendation){toast('Выбери рекомендацию','err');return;}
   const btn=document.getElementById('cl-sub-btn');
   if(btn){btn.disabled=true;btn.innerHTML='<span class="spin"></span>';}
-  const{score,pct,rec}=calcCL();
   const scoresJson={};
   CL_BLOCKS.forEach(b=>{if(CL_STATE.answers[b.id])scoresJson[b.id]=CL_STATE.answers[b.id];});
-  const assessment={vacancy_id:CL_STATE.vacancyId,vacancy_name:CL_STATE.vacancyName,recruiter_id:U.id,recruiter_name:U.name,candidate_name:CL_STATE.candidateName,interview_date:CL_STATE.interviewDate,scores:scoresJson,total_score:0,max_score:CL_MAX,pct_score:0,recommendation:'',summary:'',notes:CL_STATE.notes};
+  scoresJson._c=CL_STATE.competencies;
+  const summary=[
+    CL_STATE.strengths?'СИЛЬНЫЕ СТОРОНЫ:\n'+CL_STATE.strengths:'',
+    CL_STATE.risks?'ЗОНЫ РИСКА:\n'+CL_STATE.risks:'',
+    CL_STATE.openQuestions?'ОТКРЫТЫЕ ВОПРОСЫ:\n'+CL_STATE.openQuestions:'',
+  ].filter(Boolean).join('\n\n');
+  const assessment={vacancy_id:CL_STATE.vacancyId,vacancy_name:CL_STATE.vacancyName,recruiter_id:U.id,recruiter_name:U.name,candidate_name:CL_STATE.candidateName,interview_date:CL_STATE.interviewDate,scores:scoresJson,total_score:0,max_score:CL_MAX,pct_score:0,recommendation:CL_STATE.recommendation,summary,notes:CL_STATE.recNote};
   const res=await api('addAssessment',{assessment});
   if(!res)ASSESSMENTS.unshift({id:'demo-'+Date.now(),created_at:fru(today()),...assessment,interview_date:fru(CL_STATE.interviewDate)});
+  else if(res.ok)ASSESSMENTS.unshift({id:res.id||('s-'+Date.now()),created_at:fru(today()),...assessment,interview_date:fru(CL_STATE.interviewDate)});
   toast('Оценка сохранена ✓');
-  CL_STATE.step=3;
+  CL_STATE.step=5;
   renderCLResult(assessment);
+}
+
+function renderCLStep3(){
+  const el=document.getElementById('content');
+  const groupedComps={C:CL_COMPETENCIES.filter(c=>c.group==='C'),M:CL_COMPETENCIES.filter(c=>c.group==='M')};
+  function compCards(comps){
+    return comps.map(c=>{
+      const cd=CL_STATE.competencies[c.id]||{};
+      return`<div class="card" style="margin-bottom:10px" id="comp-card-${c.id}">
+        <div style="padding:14px 18px 0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <span style="font-size:10px;font-weight:700;color:var(--acc);background:var(--accbg);padding:2px 8px;border-radius:12px">${c.id}</span>
+            <span style="font-size:13px;font-weight:700">${c.label}</span>
+          </div>
+          <p style="font-size:11px;color:var(--ink3);margin-bottom:10px">${c.hint}</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+            ${[1,2,3,4,5].map(v=>`
+            <label style="display:inline-flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer">
+              <input type="radio" name="comp-${c.id}" value="${v}" style="display:none" onchange="clCompSel('${c.id}',${v})"${cd.score===v?' checked':''}>
+              <div id="comp-pill-${c.id}-${v}" style="width:42px;height:42px;border-radius:10px;border:2px solid ${cd.score===v?CL_SCORE_COLORS[v]:'#e5e7eb'};background:${cd.score===v?CL_SCORE_COLORS[v]+'20':'#f9fafb'};display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:${cd.score===v?CL_SCORE_COLORS[v]:'#9ca3af'};transition:all .15s;cursor:pointer"
+                onclick="clCompSel('${c.id}',${v})">${v}</div>
+              <span style="font-size:9px;color:var(--ink3);text-align:center;max-width:42px;line-height:1.2">${CL_SCORE_LABELS[v]}</span>
+            </label>`).join('')}
+          </div>
+        </div>
+        <div style="padding:0 18px 14px">
+          <input type="text" id="comp-note-${c.id}" class="finp" style="font-size:12px"
+            placeholder="Пример из ответов (необязательно)" value="${escapeHtml(cd.note||'')}">
+        </div>
+      </div>`;
+    }).join('');
+  }
+  el.innerHTML=`
+    ${clBC(3)}
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
+      <span style="font-weight:700;font-size:15px">${CL_STATE.candidateName}</span>
+      <span style="color:var(--ink3);font-size:13px">→ ${CL_STATE.vacancyName}</span>
+    </div>
+    <div style="background:var(--bg2);border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:12px;color:var(--ink2)">
+      💡 Шкала: <b>1</b> — не выявлено &nbsp;·&nbsp; <b>2</b> — ниже ожиданий &nbsp;·&nbsp; <b>3</b> — соответствует &nbsp;·&nbsp; <b>4</b> — выше ожиданий &nbsp;·&nbsp; <b>5</b> — превосходит
+    </div>
+    <h3 style="font-size:13px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Базовые компетенции</h3>
+    ${compCards(groupedComps.C)}
+    <h3 style="font-size:13px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px;margin:18px 0 10px">Управленческие компетенции</h3>
+    ${compCards(groupedComps.M)}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:40px;margin-top:16px">
+      <button type="button" class="btn-cancel" data-act="cl-back-s2">← Назад</button>
+      <button type="button" class="btn-save" data-act="cl-to-s4">Далее: Заключение →</button>
+    </div>`;
+}
+
+function clCompSel(cid,score){
+  // Save note from previous if exists
+  const noteEl=document.getElementById('comp-note-'+cid);
+  const note=noteEl?noteEl.value:'';
+  if(!CL_STATE.competencies[cid])CL_STATE.competencies[cid]={};
+  CL_STATE.competencies[cid].score=score;
+  CL_STATE.competencies[cid].note=note;
+  // Update pills UI
+  for(let v=1;v<=5;v++){
+    const pill=document.getElementById(`comp-pill-${cid}-${v}`);
+    if(!pill)continue;
+    const sel=v===score;
+    pill.style.border=`2px solid ${sel?CL_SCORE_COLORS[v]:'#e5e7eb'}`;
+    pill.style.background=sel?CL_SCORE_COLORS[v]+'20':'#f9fafb';
+    pill.style.color=sel?CL_SCORE_COLORS[v]:'#9ca3af';
+  }
+  // Check radio
+  const radio=document.querySelector(`input[name="comp-${cid}"][value="${score}"]`);
+  if(radio)radio.checked=true;
+}
+
+function clToStep4(){
+  // Save all competency notes
+  CL_COMPETENCIES.forEach(c=>{
+    const noteEl=document.getElementById('comp-note-'+c.id);
+    if(noteEl){
+      if(!CL_STATE.competencies[c.id])CL_STATE.competencies[c.id]={score:0,note:''};
+      CL_STATE.competencies[c.id].note=noteEl.value;
+    }
+  });
+  CL_STATE.step=4;renderCLStep4();
+}
+
+function renderCLStep4(){
+  const el=document.getElementById('content');
+  el.innerHTML=`
+    ${clBC(4)}
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
+      <span style="font-weight:700;font-size:15px">${CL_STATE.candidateName}</span>
+      <span style="color:var(--ink3);font-size:13px">→ ${CL_STATE.vacancyName}</span>
+    </div>
+
+    <div class="card" style="padding:20px 24px;margin-bottom:12px">
+      <h3 style="font-size:14px;font-weight:700;margin-bottom:12px">📝 Итоговое заключение</h3>
+      <div class="form-grid">
+        <div class="fg full">
+          <label class="flbl">✅ Сильные стороны</label>
+          <textarea id="cl-strengths" class="finp" rows="3" placeholder="Ключевые преимущества кандидата, подтверждённые в интервью">${escapeHtml(CL_STATE.strengths)}</textarea>
+        </div>
+        <div class="fg full">
+          <label class="flbl">⚠️ Зоны риска / слабые стороны</label>
+          <textarea id="cl-risks" class="finp" rows="3" placeholder="На что обратить внимание или проверить дополнительно">${escapeHtml(CL_STATE.risks)}</textarea>
+        </div>
+        <div class="fg full">
+          <label class="flbl">🔎 Открытые вопросы (углубить на следующих этапах)</label>
+          <textarea id="cl-openq" class="finp" rows="2" placeholder="Что осталось невыясненным или требует проверки">${escapeHtml(CL_STATE.openQuestions)}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:20px 24px;margin-bottom:12px">
+      <h3 style="font-size:14px;font-weight:700;margin-bottom:14px">🏆 Рекомендация по найму</h3>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+        ${CL_RECS.map(r=>`
+        <label style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:10px;border:2px solid ${CL_STATE.recommendation===r.id?r.color:'#e5e7eb'};background:${CL_STATE.recommendation===r.id?r.bg:'#fff'};cursor:pointer;transition:all .15s" id="rec-lbl-${r.id}">
+          <input type="radio" name="cl-rec" value="${r.id}" style="display:none" onchange="clRecSel('${r.id}')"${CL_STATE.recommendation===r.id?' checked':''}>
+          <span style="font-size:22px">${r.icon}</span>
+          <div>
+            <div style="font-weight:700;font-size:13px;color:${r.color}">${r.badge}</div>
+            <div style="font-size:12px;color:#4b5563">${r.label}</div>
+          </div>
+        </label>`).join('')}
+      </div>
+      <div class="fg full">
+        <label class="flbl">Обоснование решения (1–2 предложения)</label>
+        <textarea id="cl-recnote" class="finp" rows="3" placeholder="Кратко объясните свою рекомендацию">${escapeHtml(CL_STATE.recNote)}</textarea>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:40px">
+      <button type="button" class="btn-cancel" data-act="cl-back-s3">← Назад</button>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button type="button" class="btn-save" id="cl-sub-btn" data-act="cl-submit">Сохранить оценку →</button>
+      </div>
+    </div>`;
+}
+
+function clRecSel(rid){
+  CL_STATE.recommendation=rid;
+  CL_RECS.forEach(r=>{
+    const lbl=document.getElementById('rec-lbl-'+r.id);
+    if(!lbl)return;
+    const sel=r.id===rid;
+    lbl.style.border=`2px solid ${sel?r.color:'#e5e7eb'}`;
+    lbl.style.background=sel?r.bg:'#fff';
+    const radio=lbl.querySelector('input[type="radio"]');
+    if(radio)radio.checked=sel;
+  });
 }
 
 function renderCLResult(assessment){
   const el=document.getElementById('content');
-  const{pct,rec,cls}=calcCL();
   const cmap={green:'var(--green)',amber:'var(--amber)',red:'var(--red)',blue:'var(--blue)'};
   const bgmap={green:'var(--gbg)',amber:'var(--abg)',red:'var(--rbg)',blue:'var(--bbg)'};
-  const rcC='var(--acc)';
-  const rcBg='var(--accbg)';
-  const rcIcon='M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2';
+  const rec=CL_RECS.find(r=>r.id===CL_STATE.recommendation);
+
   const blocksHtml=CL_BLOCKS.map(b=>{
     const oid=CL_STATE.answers[b.id];
     const opt=oid?b.options.find(o=>o.id===oid):null;
@@ -1664,33 +1827,72 @@ function renderCLResult(assessment){
       ${opt?`<span style="font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;background:${bgmap[opt.color]};color:${cmap[opt.color]};white-space:nowrap">${opt.label}</span>`:'<span style="font-size:11px;color:var(--ink3)">—</span>'}
     </div>`;
   }).join('');
-  el.innerHTML=`
-    ${clBC(3)}
-    <div style="max-width:640px">
-      <div class="card" style="padding:24px 28px;margin-bottom:14px;border-color:${rcC}40">
-        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-          <div style="width:52px;height:52px;border-radius:13px;background:${rcBg};display:flex;align-items:center;justify-content:center;flex-shrink:0">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${rcC}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${rcIcon}"/></svg>
-          </div>
-          <div style="flex:1">
-            <div style="font-size:11px;color:var(--ink3)">${CL_STATE.vacancyName}</div>
-            <div style="font-size:19px;font-weight:800">${CL_STATE.candidateName}</div>
-          </div>
-          <div style="text-align:right">
-            <div style="font-size:13px;color:var(--ink3)">${Object.keys(CL_STATE.answers).length}/${CL_BLOCKS.length} блоков</div>
-          </div>
-        </div>
 
+  const compGrouped={C:[],M:[]};
+  CL_COMPETENCIES.forEach(c=>{if(compGrouped[c.group])compGrouped[c.group].push(c);});
+  function compGroupHtml(comps,groupLabel){
+    if(!comps.length)return'';
+    const rows=comps.map(c=>{
+      const cd=CL_STATE.competencies[c.id]||{};
+      const s=cd.score||0;
+      const color=CL_SCORE_COLORS[s]||'var(--ink3)';
+      const label=CL_SCORE_LABELS[s]||'—';
+      return`<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--bg);gap:10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:600;color:var(--ink2)">${c.id} — ${c.label}</div>
+          ${cd.note?`<div style="font-size:11px;color:var(--ink3);margin-top:2px;font-style:italic">${escapeHtml(cd.note)}</div>`:''}
+        </div>
+        <span style="font-size:11px;font-weight:700;color:${color};background:${color}18;padding:3px 10px;border-radius:20px;white-space:nowrap;flex-shrink:0">${s?s+' · '+label:'—'}</span>
+      </div>`;
+    }).join('');
+    return`<div style="margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;padding:0 4px">${groupLabel}</div>${rows}</div>`;
+  }
+
+  el.innerHTML=`
+    ${clBC(5)}
+    <div style="max-width:680px">
+      <div class="card" style="padding:20px 24px;margin-bottom:14px${rec?`;border-color:${rec.color}40`:''};display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;color:var(--ink3);margin-bottom:2px">${CL_STATE.vacancyName}${CL_STATE.interviewDate?' · '+CL_STATE.interviewDate:''}</div>
+          <div style="font-size:19px;font-weight:800;line-height:1.2">${CL_STATE.candidateName}</div>
+        </div>
+        ${rec?`<div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;background:${rec.bg};flex-shrink:0">
+          <span style="font-size:20px">${rec.icon}</span>
+          <div><div style="font-size:11px;font-weight:700;color:${rec.color}">${rec.badge}</div>
+          <div style="font-size:12px;color:${rec.color};opacity:.85">${rec.label}</div></div>
+        </div>`:''}
       </div>
+
+      ${(compGrouped.C.some(c=>CL_STATE.competencies[c.id])||compGrouped.M.some(c=>CL_STATE.competencies[c.id]))?`
       <div class="card" style="margin-bottom:14px">
-        <div class="ch"><span class="ct">Поведенческий профиль</span></div>
+        <div class="ch"><span class="ct">Оценка компетенций</span></div>
+        <div style="padding:4px 18px 8px">
+          ${compGroupHtml(compGrouped.C,'Базовые компетенции')}
+          ${compGroupHtml(compGrouped.M,'Управленческие')}
+        </div>
+      </div>`:''}
+
+      <div class="card" style="margin-bottom:14px">
+        <div class="ch"><span class="ct">Метапрограммный профиль</span></div>
         <div style="padding:4px 18px 8px">${blocksHtml}</div>
       </div>
-      ${CL_STATE.notes?`<div class="card" style="margin-bottom:14px;background:var(--accbg);border-color:#d4c2eb">
-        <div class="ch" style="border-color:#d4c2eb"><span class="ct" style="color:var(--acc)">Ключевые риски</span></div>
-        <div style="padding:10px 18px 14px;font-size:13px;color:var(--ink2);line-height:1.7">${CL_STATE.notes}</div>
+
+      ${CL_STATE.strengths||CL_STATE.risks||CL_STATE.openQuestions?`
+      <div class="card" style="margin-bottom:14px">
+        <div class="ch"><span class="ct">Итоговое заключение</span></div>
+        <div style="padding:10px 18px 14px">
+          ${CL_STATE.strengths?`<div style="margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">✅ Сильные стороны</div><div style="font-size:13px;color:var(--ink2);line-height:1.7">${escapeHtml(CL_STATE.strengths)}</div></div>`:''}
+          ${CL_STATE.risks?`<div style="margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">⚠️ Зоны риска</div><div style="font-size:13px;color:var(--ink2);line-height:1.7">${escapeHtml(CL_STATE.risks)}</div></div>`:''}
+          ${CL_STATE.openQuestions?`<div><div style="font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">🔎 Открытые вопросы</div><div style="font-size:13px;color:var(--ink2);line-height:1.7">${escapeHtml(CL_STATE.openQuestions)}</div></div>`:''}
+        </div>
       </div>`:''}
-      <div style="display:flex;gap:10px;justify-content:flex-end">
+
+      ${CL_STATE.recNote?`<div class="card" style="margin-bottom:14px;background:var(--accbg);border-color:#d4c2eb">
+        <div class="ch" style="border-color:#d4c2eb"><span class="ct" style="color:var(--acc)">Обоснование решения</span></div>
+        <div style="padding:10px 18px 14px;font-size:13px;color:var(--ink2);line-height:1.7">${escapeHtml(CL_STATE.recNote)}</div>
+      </div>`:''}
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-bottom:40px">
         <button type="button" class="btn-cancel" data-act="cl-list">← К списку</button>
         <button type="button" class="btn-primary" data-act="cl-new">+ Новая оценка</button>
       </div>
@@ -1699,12 +1901,23 @@ function renderCLResult(assessment){
 
 function viewAssessment(id){
   const a=ASSESSMENTS.find(x=>x.id===id);if(!a)return;
-  CL_STATE={vacancyId:a.vacancy_id,vacancyName:a.vacancy_name,candidateName:a.candidate_name,interviewDate:a.interview_date,answers:a.scores||{},notes:a.notes||'',step:3};
+  const rawScores=a.scores||{};
+  const compData=rawScores._c||{};
+  const metaAnswers=Object.fromEntries(Object.entries(rawScores).filter(([k])=>k!=='_c'));
+  const sum=a.summary||'';
+  const parseSection=(label)=>{const m=sum.match(new RegExp(label+':\\n([\\s\\S]*?)(?=\\n\\n[A-ZА-ЯЁ]+:|$)'));return m?m[1].trim():'';};
+  CL_STATE={
+    vacancyId:a.vacancy_id,vacancyName:a.vacancy_name,candidateName:a.candidate_name,
+    interviewDate:a.interview_date,answers:metaAnswers,competencies:compData,
+    strengths:parseSection('СИЛЬНЫЕ СТОРОНЫ'),risks:parseSection('ЗОНЫ РИСКА'),
+    openQuestions:parseSection('ОТКРЫТЫЕ ВОПРОСЫ'),
+    recommendation:a.recommendation||'',recNote:a.notes||'',notes:a.notes||'',step:5
+  };
   renderCLResult(a);
 }
 
 function clBC(step){
-  const steps=[{n:1,l:'Кандидат'},{n:2,l:'Чек-лист'},{n:3,l:'Итог'}];
+  const steps=[{n:1,l:'Кандидат'},{n:2,l:'Метапрограммы'},{n:3,l:'Компетенции'},{n:4,l:'Заключение'},{n:5,l:'Итог'}];
   return`<div style="display:flex;align-items:center;gap:6px;margin-bottom:16px">
     <button type="button" style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--ink3)" data-act="cl-list">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>Оценки</button>
@@ -2959,6 +3172,10 @@ function initGlobalActs(){
       clStep1Next();
     } else if(act==='cl-back-s1'){
       CL_STATE.step=1; renderCLStep1();
+      } else if(act==='cl-to-s3')clToStep3();
+      else if(act==='cl-back-s2'){CL_STATE.step=2;renderCLStep2();}
+      else if(act==='cl-to-s4')clToStep4();
+      else if(act==='cl-back-s3'){CL_STATE.step=3;renderCLStep3();}
     } else if(act==='cl-submit'){
       clSubmit();
     } else if(act==='cl-del'){
