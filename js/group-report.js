@@ -82,7 +82,7 @@
       el.innerHTML =
         '<div class="card" style="padding:24px;text-align:center;color:var(--ink3)">' +
         '<div style="font-size:15px;font-weight:600;margin-bottom:6px">Нет завершённых оценок</div>' +
-        '<div style="font-size:12px">Групповой отчёт формируется на основе пройденных оценок ценностей (PVQ‑RR).</div>' +
+        '<div style="font-size:12px">Групповой отчёт формируется на основе пройденных оценок ценностей.</div>' +
         '<button type="button" class="btn-cancel" style="margin-top:14px" data-act="val-list">← К списку</button>' +
         '</div>';
       return;

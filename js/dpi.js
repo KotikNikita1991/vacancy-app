@@ -100,7 +100,7 @@
       '<div class="dpi-form-hdr">'+
         '<div class="dpi-form-logo-ico">ДПИ</div>'+
         '<div>'+
-          '<h1 class="dpi-form-title">Опросник деструкторов (DPI-R)</h1>'+
+          '<h1 class="dpi-form-title">Опросник деструкторов</h1>'+
           '<p class="dpi-form-sub">Здравствуйте, <b>'+escH(invite.candidate_name||'участник')+'</b>! '+
           'Ответьте честно на все '+total+' утверждений, опираясь на поведение на работе.</p>'+
         '</div>'+
@@ -183,10 +183,13 @@
 
   function buildDpiListHtml(el){
     var canDel=g.U&&(g.U.role==='admin'||g.U.role==='manager');
+    var canView=g.U&&(g.U.role==='admin'||g.U.role==='manager');
     var rows=DPI_INVITE_LIST.map(function(it){
       var del=canDel?'<button type="button" class="btn-danger" data-act="dpi-del" data-did="'+escH(it.id)+'">✕</button>':'';
       var view=it.has_result
-        ?'<button type="button" class="btn-sm" data-act="dpi-view" data-did="'+escH(it.id)+'">Результат</button>'
+        ?(canView
+            ?'<button type="button" class="btn-sm" data-act="dpi-view" data-did="'+escH(it.id)+'">Результат</button>'
+            :'<span style="color:var(--ink3);font-size:12px">—</span>')
         :'<span style="color:var(--ink3);font-size:12px">Нет данных</span>';
       return '<tr>'+
         '<td>'+
@@ -204,7 +207,7 @@
     el.innerHTML=
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">'+
         '<div>'+
-          '<h2 style="font-size:18px;font-weight:700">Деструкторы — DPI-R</h2>'+
+          '<h2 style="font-size:18px;font-weight:700">Деструкторы</h2>'+
           '<p style="font-size:13px;color:var(--ink3);margin-top:2px">Оценка личностных деструкторов руководителей и специалистов (20 шкал · 6 кластеров · 110 утверждений)</p>'+
         '</div>'+
         '<button type="button" class="btn-primary" data-act="dpi-new">'+

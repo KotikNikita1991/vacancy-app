@@ -289,7 +289,7 @@
     wrap.style.cssText='padding:14px 16px;margin-bottom:10px;border:1px solid #e2e8f0;background:#ffffff';
     var hdr=document.createElement('div');
     hdr.style.cssText='font-weight:700;font-size:15px;color:#1a202c;margin-bottom:12px;display:flex;align-items:center;gap:10px';
-    hdr.innerHTML='Интерпретация ценностного профиля <span style="font-size:11px;font-weight:400;color:#a0aec0">по PVQ-RR (Шварц, 19 ценностей)</span>';
+    hdr.innerHTML='Интерпретация ценностного профиля <span style="font-size:11px;font-weight:400;color:#a0aec0">по модели Шварца (19 ценностей)</span>';
     wrap.appendChild(hdr);
     wrap.insertAdjacentHTML('beforeend',html);
     // Вставляем ПОСЛЕ IM-блока — он должен быть выше интерпретации

@@ -30,11 +30,13 @@ const ASSESS_STATUSES = ['В работе', 'Приостановлена'];
 const ROLES={
   recruiter:{l:'Рекрутер',    c:'#2E7D52',bg:'#E8F5EE'},
   manager:  {l:'Руководитель',c:'#1A5FA0',bg:'#E5EFF9'},
+  rop:      {l:'РОП',         c:'#0E7C7B',bg:'#DCF1F0'},
   admin:    {l:'Администратор',c:'#7B5EA7',bg:'#F0EBF8'},
 };
 const NCFG={
   recruiter:[{id:'dashboard',lbl:'Дашборд',ic:'home'},{id:'analytics',lbl:'Аналитика',ic:'ch'},{id:'checklist',lbl:'Оценка кандидата',ic:'cl'},{id:'values',lbl:'Оценка ценностей',ic:'val'},{id:'dpi',lbl:'Деструкторы',ic:'dpi'},{id:'pif',lbl:'Потенциал',ic:'pif'}],
   manager:  [{id:'dashboard',lbl:'Дашборд',ic:'home'},{id:'analytics',lbl:'Аналитика',ic:'ch'},{id:'checklist',lbl:'Оценка кандидата',ic:'cl'},{id:'values',lbl:'Оценка ценностей',ic:'val'},{id:'dpi',lbl:'Деструкторы',ic:'dpi'},{id:'pif',lbl:'Потенциал',ic:'pif'}],
+  rop:      [{id:'dashboard',lbl:'Дашборд',ic:'home'},{id:'analytics',lbl:'Аналитика',ic:'ch'},{id:'checklist',lbl:'Оценка кандидата',ic:'cl'},{id:'values',lbl:'Оценка ценностей',ic:'val'},{id:'dpi',lbl:'Деструкторы',ic:'dpi'},{id:'pif',lbl:'Потенциал',ic:'pif'}],
   admin:    [{id:'dashboard',lbl:'Дашборд',ic:'home'},{id:'analytics',lbl:'Аналитика',ic:'ch'},{id:'checklist',lbl:'Оценка кандидата',ic:'cl'},{id:'values',lbl:'Оценка ценностей',ic:'val'},{id:'dpi',lbl:'Деструкторы',ic:'dpi'},{id:'pif',lbl:'Потенциал',ic:'pif'},{id:'users',lbl:'Пользователи',ic:'us'}],
 };
 const IC={

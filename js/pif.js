@@ -99,7 +99,7 @@
         '<div class="pif-form-hdr">'+
           '<div class="pif-form-logo-ico">PiF</div>'+
           '<div>'+
-            '<div class="pif-form-title">Оценка потенциала — PiF-Q</div>'+
+            '<div class="pif-form-title">Оценка потенциала</div>'+
             '<div class="pif-form-sub">'+escH(inv.candidate_name||'')+(inv.department?(' · '+escH(inv.department)):'')+'</div>'+
           '</div>'+
         '</div>'+
@@ -171,10 +171,13 @@
 
   function buildPifListHtml(el){
     var canDel=g.U&&(g.U.role==='admin'||g.U.role==='manager');
+    var canView=g.U&&(g.U.role==='admin'||g.U.role==='manager');
     var rows=PIF_INVITE_LIST.map(function(it){
       var del=canDel?'<button type="button" class="btn-danger" data-act="pif-del" data-pid="'+escH(it.id)+'">✕</button>':'';
       var view=it.has_result
-        ?'<button type="button" class="btn-sm" data-act="pif-view" data-pid="'+escH(it.id)+'">Результат</button>'
+        ?(canView
+            ?'<button type="button" class="btn-sm" data-act="pif-view" data-pid="'+escH(it.id)+'">Результат</button>'
+            :'<span style="color:var(--ink3);font-size:12px">—</span>')
         :'<span style="color:var(--ink3);font-size:12px">Нет данных</span>';
       return '<tr>'+
         '<td><div style="font-weight:600;font-size:13px;color:var(--ink)">'+escH(it.candidate_name||'—')+'</div></td>'+
@@ -190,7 +193,7 @@
     el.innerHTML=
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">'+
         '<div>'+
-          '<h2 style="font-size:18px;font-weight:700">Оценка потенциала — PiF-Q</h2>'+
+          '<h2 style="font-size:18px;font-weight:700">Оценка потенциала</h2>'+
           '<p style="font-size:13px;color:var(--ink3);margin-top:2px">10 основных шкал · 9 дополнительных · 77 утверждений · 4 блока</p>'+
         '</div>'+
         '<button type="button" class="btn-primary" data-act="pif-new">'+
@@ -225,7 +228,7 @@
     var gOpts=groups.map(function(gr){return'<option>'+escH(gr)+'</option>';}).join('');
     var html='<div class="modal-overlay" id="pif-modal" data-act="pif-overlay">'+
       '<div class="modal" style="max-width:480px">'+
-        '<div class="modal-hdr"><span class="modal-ttl">Новая оценка потенциала (PiF-Q)</span></div>'+
+        '<div class="modal-hdr"><span class="modal-ttl">Новая оценка потенциала</span></div>'+
         '<div class="modal-body" style="display:flex;flex-direction:column;gap:14px">'+
           '<div class="fg"><label class="flbl">ФИО сотрудника <span class="req">*</span></label>'+
           '<input id="pif-nm" class="finp" placeholder="Иванов Иван Иванович" autocomplete="off"></div>'+
@@ -314,7 +317,7 @@
     var scoreCard='<div class="pif-score-card" style="border-color:'+totalLvl.color+'40;background:'+totalLvl.bg+'">'+
       '<div class="pif-score-top">'+
         '<div>'+
-          '<div class="pif-score-lbl">Итоговый балл PiF-Q</div>'+
+          '<div class="pif-score-lbl">Итоговый балл</div>'+
           '<div class="pif-score-sub">Среднее 10 основных шкал · шкала 1.0–4.0</div>'+
         '</div>'+
         '<div class="pif-score-val" style="color:'+totalLvl.color+'">'+total.toFixed(2)+'</div>'+
@@ -451,7 +454,7 @@
         mainViz+
         '<div class="pif-sect-card pif-sect-addl">'+
           '<div class="pif-sect-hdr" style="--pif-acc:#6B7280">Дополнительные шкалы</div>'+
-          '<div style="font-size:12px;color:var(--ink3);margin-bottom:10px;font-style:italic">Не входят в итоговый балл PiF-Q. Дают дополнительную информацию о стиле работы.</div>'+
+          '<div style="font-size:12px;color:var(--ink3);margin-bottom:10px;font-style:italic">Не входят в итоговый балл. Дают дополнительную информацию о стиле работы.</div>'+
           addlRows+
         '</div>'+
         '<div class="pif-sect-card pif-sect-destr">'+

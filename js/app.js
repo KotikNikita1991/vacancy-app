@@ -252,7 +252,7 @@ function buildNav(){
 function navigate(page){
   PAGE=page;
   document.querySelectorAll('.ni').forEach(el=>el.classList.toggle('active',el.id===`ni-${page}`));
-  const ttls={dashboard:'Дашборд',analytics:'Аналитика',checklist:'Оценка кандидата',values:'Оценка ценностей',dpi:'Деструкторы',pif:'Потенциал (PiF-Q)',users:'Пользователи'};
+  const ttls={dashboard:'Дашборд',analytics:'Аналитика',checklist:'Оценка кандидата',values:'Оценка ценностей',dpi:'Деструкторы',pif:'Потенциал',users:'Пользователи'};
   document.getElementById('httl').textContent=ttls[page]||page;
   // Сбрасываем хлебные крошки на корневую страницу
   if(window.VAC_UI&&window.VAC_UI.crumbs){
@@ -302,10 +302,13 @@ async function renderPage(p){
 }
 
 // ══ PERMISSIONS ══════════════════════════════════════
-function canEdit()         {return U.role==='manager'||U.role==='admin'}
+function canEdit()         {return U.role==='manager'||U.role==='admin'||U.role==='rop'}
 function canCreate()       {return true}
 function canDelete()       {return U.role==='admin'}
-function canSetPlan()      {return U.role==='manager'||U.role==='admin'}
+function canSetPlan()      {return U.role==='manager'||U.role==='admin'||U.role==='rop'}
+// Кто может видеть детальную расшифровку тестов (ценности/деструкторы/потенциал).
+// РОП и рекрутёр — НЕ могут (видят только список отправленных тестов).
+function canSeeResults()   {return U.role==='manager'||U.role==='admin'}
 // Все роли могут менять статус своих вакансий и передавать их другому рекрутеру
 function canChangeStatus() {return true}
 function canTransfer()     {return true}
@@ -2135,14 +2138,14 @@ function renderValuesList(el){
   el.innerHTML=`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
       <div>
-        <h2 style="font-size:18px;font-weight:700">Оценка ценностей (PVQ-RR)</h2>
-        <p style="font-size:13px;color:var(--ink3);margin-top:2px">67 вопросов (57 PVQ‑RR + 10 контрольных), одноразовая ссылка на 7 дней, диаграмма + круг ценностей</p>
+        <h2 style="font-size:18px;font-weight:700">Оценка ценностей</h2>
+        <p style="font-size:13px;color:var(--ink3);margin-top:2px">67 вопросов (57 основных + 10 контрольных), одноразовая ссылка на 7 дней, диаграмма + круг ценностей</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <button type="button" class="btn-sm" data-act="val-group-report" title="Сформировать групповой профиль по выбранным сотрудникам">
+        ${canSeeResults()?`<button type="button" class="btn-sm" data-act="val-group-report" title="Сформировать групповой профиль по выбранным сотрудникам">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
           Собрать групповой отчёт
-        </button>
+        </button>`:''}
         <button type="button" class="btn-primary" data-act="val-new">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Новая оценка ценностей
@@ -2164,9 +2167,9 @@ function renderValuesList(el){
             <td><div style="font-size:12px;color:var(--ink2)">${escapeHtml(v.recruiter_name||'')}</div></td>
             <td><div style="font-size:12px;color:var(--ink3)">${escapeHtml(v.sent_at||'')}</div></td>
             <td>${statusBadge(v.status)}</td>
-            <td>${profileBadge(v)}</td>
+            <td>${canSeeResults()?profileBadge(v):'<span style="font-size:11px;color:var(--ink3)">—</span>'}</td>
             <td style="white-space:nowrap"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-              <button type="button" class="btn-sm" data-act="val-view" data-vid="${escapeHtml(v.id)}"${(v.has_result||v.status==='completed') && U.role!=='recruiter'?'':' disabled'}>Результат</button>
+              <button type="button" class="btn-sm" data-act="val-view" data-vid="${escapeHtml(v.id)}"${(v.has_result||v.status==='completed') && canSeeResults()?'':' disabled'}>Результат</button>
               ${canDelete()?`<button type="button" class="btn-danger" data-act="val-del" data-vid="${escapeHtml(v.id)}">✕</button>`:''}
             </div></td>
           </tr>
@@ -2769,7 +2772,7 @@ function ensurePdfMake(){
 }
 
 async function viewValueResult(id){
-  if(U?.role==='recruiter'){
+  if(!canSeeResults()){
     toast('Детальный результат доступен только Администратору и Руководителю','err');
     return;
   }
@@ -2849,7 +2852,7 @@ async function viewValueResult(id){
         <div style="flex:1;min-width:240px;padding-right:20px;border-right:1px solid var(--bg2)">
           <div class="ct" style="margin-bottom:6px">Контроль социальной желательности (IM)</div>
           <div style="font-size:12px;color:var(--ink3);line-height:1.6">
-            Этот показатель не влияет на PVQ‑RR и служит контролем «приукрашивания» ответов.
+            Этот показатель не влияет на итоговый профиль и служит контролем «приукрашивания» ответов.
           </div>
           <div style="display:flex;gap:14px;align-items:center;margin-top:10px;flex-wrap:wrap">
             <div style="flex-shrink:0">
@@ -3068,6 +3071,10 @@ async function renderPif(){
 // ══ USERS PAGE ════════════════════════════════════════════════
 async function renderUsers(){
   const el=document.getElementById('content');
+  if(U.role!=='admin'){
+    if(el)el.innerHTML='<div class="empty" style="padding:40px"><p>Раздел «Пользователи» доступен только Администратору</p></div>';
+    return;
+  }
   const res=await api('getUsers',{role:U.role});
   const users=res?.ok?(res.users||[]):[];
   UL=users;
@@ -3107,11 +3114,13 @@ async function renderUsers(){
     +'</tbody></table></div>'
     +'<div class="card" style="margin-top:16px;padding:16px 20px;background:var(--accbg);border-color:#d4c2eb">'
     +'<div style="font-size:13px;font-weight:700;color:var(--acc);margin-bottom:8px">Права доступа по ролям</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;font-size:12px">'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;font-size:12px">'
     +'<div><div style="font-weight:600;color:var(--green);margin-bottom:4px">Рекрутер</div>'
     +'<div style="color:var(--ink2);line-height:1.8">Создание вакансий<br>Редактирование своих полей<br>Оценка кандидатов<br>Просмотр своих вакансий</div></div>'
+    +'<div><div style="font-weight:600;color:#0E7C7B;margin-bottom:4px">РОП</div>'
+    +'<div style="color:var(--ink2);line-height:1.8">Все вакансии рекрутёров<br>Редактирование и статусы<br>Планы подбора и аналитика<br>Список тестов без результатов<br>Без удаления записей</div></div>'
     +'<div><div style="font-weight:600;color:var(--blue);margin-bottom:4px">Руководитель</div>'
-    +'<div style="color:var(--ink2);line-height:1.8">Все права рекрутера<br>Полное редактирование<br>Все вакансии и оценки<br>Аналитика и планы</div></div>'
+    +'<div style="color:var(--ink2);line-height:1.8">Все права рекрутера<br>Полное редактирование<br>Все вакансии и оценки<br>Результаты тестов<br>Аналитика и планы</div></div>'
     +'<div><div style="font-weight:600;color:var(--acc);margin-bottom:4px">Администратор</div>'
     +'<div style="color:var(--ink2);line-height:1.8">Все права руководителя<br>Удаление вакансий<br>Управление пользователями<br>Полный доступ</div></div>'
     +'</div></div>';
@@ -3319,6 +3328,7 @@ function initGlobalActs(){
     } else if(act==='cl-guide'){
       toggleCLGuide();
     } else if(act==='val-group-report'){
+      if(!canSeeResults()){toast('Групповой отчёт доступен только Администратору и Руководителю','err');return;}
       if(typeof window.GROUP_REPORT?.renderFilter==='function') window.GROUP_REPORT.renderFilter();
       else toast('Модуль группового отчёта не загружен','err');
     } else if(act==='val-new'){
@@ -3330,7 +3340,7 @@ function initGlobalActs(){
     } else if(act==='val-send'){
       sendValueInvite();
     } else if(act==='val-view'){
-      if(U?.role==='recruiter'){
+      if(!canSeeResults()){
         toast('Детальный результат доступен только Администратору и Руководителю','err');
         return;
       }
@@ -3357,7 +3367,7 @@ function initGlobalActs(){
     } else if(act==='dpi-send'){
       if(typeof DPI_MODULE!=='undefined') DPI_MODULE.sendInvite();
     } else if(act==='dpi-view'){
-      if(U?.role==='recruiter'){toast('Результат доступен Руководителю и Администратору','err');return;}
+      if(!canSeeResults()){toast('Результат доступен Руководителю и Администратору','err');return;}
       if(typeof DPI_MODULE!=='undefined') DPI_MODULE.viewResult(el.dataset.did);
     } else if(act==='dpi-del'){
       if(typeof DPI_MODULE!=='undefined') DPI_MODULE.deleteAssessment(el.dataset.did);
@@ -3378,7 +3388,7 @@ function initGlobalActs(){
     } else if(act==='pif-send'){
       if(typeof PIF_MODULE!=='undefined') PIF_MODULE.sendInvite();
     } else if(act==='pif-view'){
-      if(U?.role==='recruiter'){toast('Результат доступен Руководителю и Администратору','err');return;}
+      if(!canSeeResults()){toast('Результат доступен Руководителю и Администратору','err');return;}
       if(typeof PIF_MODULE!=='undefined') PIF_MODULE.viewResult(el.dataset.pid);
     } else if(act==='pif-del'){
       if(typeof PIF_MODULE!=='undefined') PIF_MODULE.deleteAssessment(el.dataset.pid);
