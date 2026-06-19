@@ -23,6 +23,9 @@ const SH = {
   DPI_RESULTS:     'ДПИ_Результаты',
   PIF_INVITES:     'ПиФ_Приглашения',
   PIF_RESULTS:     'ПиФ_Результаты',
+  CASE_TEMPLATES:  'Кейсы_Шаблоны',
+  CASE_INVITES:    'Кейсы_Приглашения',
+  CASE_RESULTS:    'Кейсы_Ответы',
 };
 
 // URL страницы с формой PiF (куда приходит сотрудник по ссылке из письма).
@@ -31,6 +34,9 @@ const PIF_FORM_BASE_URL = 'https://kotiknikita1991.github.io/Opros_forma/pif-for
 // URL страницы с формой DPI (куда приходит сотрудник по ссылке из письма).
 // Размещена на том же GitHub Pages, что и форма ценностей.
 const DPI_FORM_BASE_URL = 'https://kotiknikita1991.github.io/Opros_forma/dpi-form.html';
+
+// URL страницы с формой «Кейсы» (ситуативная проверка). Тот же GitHub Pages.
+const CASE_FORM_BASE_URL = 'https://kotiknikita1991.github.io/Opros_forma/case-form.html';
 
 // Для тестов можно "*", в проде лучше ограничить
 const CORS_ALLOW_ORIGIN = '*';
@@ -98,6 +104,7 @@ function initDatabase() {
   ensurePlansSheet_(ss);
   ensureDpiSheets_(ss);
   ensurePifSheets_(ss);
+  ensureCaseSheets_(ss);
 
   return '✅ База инициализирована';
 }
@@ -277,6 +284,18 @@ function route(action, data) {
       updatePifFields:             () => updatePifFields(data),
       startPifSurvey:              () => startPifSurvey(data),
       submitPifSurvey:             () => submitPifSurvey(data),
+
+      // Модуль — Кейсы (ситуативная проверка)
+      getCaseTemplates:            () => getCaseTemplates(data),
+      saveCaseTemplate:            () => saveCaseTemplate(data),
+      deleteCaseTemplate:          () => deleteCaseTemplate(data),
+      createCaseInvite:            () => createCaseInvite(data),
+      createCaseSession:           () => createCaseSession(data),
+      getCaseAssessments:          () => getCaseAssessments(data),
+      getCaseAssessmentResult:     () => getCaseAssessmentResult(data),
+      deleteCaseAssessment:        () => deleteCaseAssessment(data),
+      startCaseSurvey:             () => startCaseSurvey(data),
+      submitCaseSurvey:            () => submitCaseSurvey(data),
     };
 
     if (!action || !handlers[action]) {
@@ -2900,6 +2919,576 @@ function setPifInviteCompleted_(id, submittedAt) {
       sheet.getRange(i + 1, statusCol).setValue('completed');
       sheet.getRange(i + 1, submittedCol).setValue(submittedAt);
       sheet.getRange(i + 1, updatedCol).setValue(submittedAt);
+      try { SpreadsheetApp.flush(); } catch(_) {}
+      return;
+    }
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────
+// МОДУЛЬ: КЕЙСЫ (ситуативная проверка навыков)
+// ───────────────────────────────────────────────────────────────────
+
+const CASE_TPL_HEADERS = ['id','title','instruction','time_limit_min','cases_json','active','created_at','updated_at','updated_by'];
+const CASE_INV_HEADERS = ['id','token','status','mode','template_id','template_title','snapshot_json','sent_at','expires_at','submitted_at','candidate_name','candidate_email','position','recruiter_id','recruiter_name','created_at','updated_at'];
+const CASE_RES_HEADERS = ['id','invite_id','token','candidate_name','position','template_title','recruiter_name','submitted_at','created_at','answers_json'];
+
+function ensureCaseSheets_(ss) {
+  const sp = ss || SpreadsheetApp.openById(SPREADSHEET_ID);
+
+  let st = sp.getSheetByName(SH.CASE_TEMPLATES);
+  if (!st) st = sp.insertSheet(SH.CASE_TEMPLATES);
+  if (st.getLastRow() === 0) {
+    st.appendRow(CASE_TPL_HEADERS);
+    st.getRange('1:1').setFontWeight('bold').setBackground('#e7f0fc');
+    st.setFrozenRows(1);
+    seedCaseTemplates_(st);
+  } else {
+    ensureHeaders_(st, CASE_TPL_HEADERS);
+  }
+
+  let si = sp.getSheetByName(SH.CASE_INVITES);
+  if (!si) si = sp.insertSheet(SH.CASE_INVITES);
+  if (si.getLastRow() === 0) {
+    si.appendRow(CASE_INV_HEADERS);
+    si.getRange('1:1').setFontWeight('bold').setBackground('#e7f0fc');
+    si.setFrozenRows(1);
+  } else {
+    ensureHeaders_(si, CASE_INV_HEADERS);
+  }
+
+  let sr = sp.getSheetByName(SH.CASE_RESULTS);
+  if (!sr) sr = sp.insertSheet(SH.CASE_RESULTS);
+  if (sr.getLastRow() === 0) {
+    sr.appendRow(CASE_RES_HEADERS);
+    sr.getRange('1:1').setFontWeight('bold').setBackground('#e7f0fc');
+    sr.setFrozenRows(1);
+  } else {
+    ensureHeaders_(sr, CASE_RES_HEADERS);
+  }
+}
+
+// Стартовый шаблон «Руководитель проекта»
+function seedCaseTemplates_(sheet) {
+  const raw = [
+    { title: 'Кейс 1', description: 'Вы руководите проектом строительства. Подрядчик по фасадным работам задерживает завершение этапа на 21 день. Эти работы находятся на критическом пути. Через 45 дней стартует чистовая отделка. Смежные подрядчики уже мобилизованы.', questions: [
+      'Ваши действия в первые 24 часа (по шагам).',
+      'Как оцените влияние на общий срок? Какие данные нужны?',
+      'Какие данные и от кого запросите в первую очередь?',
+      'Предложите 2–3 варианта сокращения сроков. По каждому — один риск.',
+      'Нужно ли выносить на проектный комитет? Когда и с чем?',
+      'Какую информацию дадите руководству в первые 2 дня?'
+    ]},
+    { title: 'Кейс 1А', description: 'Представьте: через 2 недели после ваших действий ситуация не улучшилась, а стала сложнее.', questions: [
+      'Какие три точки в проекте вы проверите в первую очередь, чтобы понять, где сломалась ваша логика? Опишите каждую (1, 2, 3).'
+    ]},
+    { title: 'Кейс 2', description: 'Строители vs проектировщики vs коммерция vs подрядчик. Совещание превратилось в выяснение отношений.', questions: [
+      'Как будете проводить совещание дальше? 2–3 действия.',
+      'Как определите реальный источник проблемы?',
+      'Как зафиксируете решения и ответственность? Пример формулировки поручения.',
+      'Кого подключите из руководства/экспертов, если конфликт не погасить?',
+      'Что вынесете на проектный комитет (2–3 тезиса)?'
+    ]},
+    { title: 'Кейс 3', description: 'Коммерческий блок требует изменить планировки. Часть работ выполнена. Изменение увеличивает сроки на 2 мес., бюджет на 5%. Подрядчик требует компенсацию.', questions: [
+      'Первые 3 действия после получения требования.',
+      'Какие службы/роли подключите к анализу, кроме коммерции? Почему?',
+      'Как оцените влияние на критический путь и ресурсы? Какие документы запросите у подрядчика?',
+      'Какой пакет информации вынесете на ПК?',
+      'В каких случаях можете отказать в изменении без ПК? (2–3 примера)'
+    ]},
+    { title: 'Кейс 4', description: 'Ключевой инженер — профессионал, но постоянно задерживает задачи, хамит, не отчитывается.', questions: [
+      'Последовательность ваших действий (от первого шага до последнего).',
+      'Какие меры примете до вопроса об увольнении?',
+      'Как построите контроль, чтобы не стать микроменеджером?',
+      'Когда подключите его функционального руководителя?',
+      'В какой момент примете кадровое решение? (2–3 критерия)'
+    ]},
+    { title: 'Кейс 4А', description: 'Вы уже приняли решение по этому сотруднику. Ваш руководитель говорит: «Ты слишком мягок/жёсток, пересмотри подход».', questions: [
+      'Ваши действия в ближайшие 24 часа (что скажете, будете ли менять решение, как зафиксируете риски)?'
+    ]},
+    { title: 'Кейс 5', description: 'Месяц отчёты «зелёные», а фактически отставание 3 недели.', questions: [
+      'Почему это произошло? (2–3 причины)',
+      'Какие ошибки допустили вы как РП?',
+      'Какую систему контроля внедрите, чтобы не повторялось? (минимум 2 инструмента)',
+      'Какие метрики будете отслеживать ежедневно/еженедельно?',
+      'Что скажете команде на ближайшем совещании (речь 3–5 предложений)?'
+    ]},
+    { title: 'Кейс 6', description: 'Подрядчики законтрактованы, объёмы менять нельзя. Требуется сократить бюджет на 8% без изменения сроков и качества.', questions: [
+      'Где искать резервы? (3–4 статьи затрат)',
+      'Какие статьи нельзя сокращать? Почему?',
+      'Какие риски при попытке сэкономить 8%? (2–3 риска и их минимизация)',
+      'Предложите один нетривиальный способ экономии.',
+      'Как примете решение, если варианты экономии конфликтуют друг с другом?'
+    ]},
+    { title: 'Кейс 7', description: 'Подрядчик предлагает ускорить работы (сократить срок на 1 месяц), применив упрощённую технологию. Это снижает запас прочности, но формально соответствует нормам.', questions: [
+      'Как будете оценивать предложение? Шаги.',
+      'Какие последствия проанализируете (технические, репутационные, эксплуатационные)?',
+      'Кто должен участвовать в принятии решения? (роли)',
+      'В каких случаях согласитесь? (2–3 условия)',
+      'Как зафиксируете ответственность подрядчика на будущее?'
+    ]},
+    { title: 'Кейс 8', description: 'Отставание 4 мес., перерасход 12%, конфликт коммерции и технарей, недовольный инвестор, демотивированная команда.', questions: [
+      'Ваши действия в первые 7 дней (по дням или этапам).',
+      'Что лично на себя, что делегируете? (2–3 пункта каждое)',
+      'Как стабилизируете команду морально и организационно? (2–3 действия в первую неделю)',
+      'Что скажете инвестору на первой встрече (ключевые тезисы)?',
+      'Как восстановите управляемость (3 неотложных изменения в процессах)?'
+    ]},
+    { title: 'Кейс 8А', description: 'Прошла первая неделя. Команда вымотана, два инженера подали заявления. У вас 2 минуты на утренней планерке.', questions: [
+      'Напишите, что скажете (5–7 предложений).'
+    ]}
+  ];
+  const cases = raw.map((c, ci) => ({
+    id: 'c' + (ci + 1),
+    title: c.title,
+    description: c.description,
+    questions: c.questions.map((t, qi) => ({ id: 'c' + (ci + 1) + '_q' + (qi + 1), text: t }))
+  }));
+  const now = new Date();
+  appendRowByHeaders_(sheet, {
+    id: generateId(),
+    title: 'Руководитель проекта',
+    instruction: 'Ответьте письменно на все вопросы. Под каждым вопросом — место для ответа. Время выполнения — не более 2,5 часов.',
+    time_limit_min: 150,
+    cases_json: JSON.stringify(cases),
+    active: true,
+    created_at: now,
+    updated_at: now,
+    updated_by: 'system'
+  });
+}
+
+function caseRoleCanEdit_(role) { return role === 'admin' || role === 'manager'; }
+// РОП видит ответы по кейсам наравне с Руководителем (в отличие от тестов ценностей/деструкторов/потенциала)
+function caseRoleCanSeeResults_(role) { return role === 'admin' || role === 'manager' || role === 'rop'; }
+
+function parseCases_(json) {
+  try { const v = JSON.parse(json || '[]'); return Array.isArray(v) ? v : []; }
+  catch (e) { return []; }
+}
+
+// ── Шаблоны: чтение ───────────────────────────────────────────────
+function getCaseTemplates(data) {
+  ensureCaseSheets_();
+  const sheet = getSheet(SH.CASE_TEMPLATES);
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length < 2) return { ok: true, templates: [] };
+  const hm = headerMap_(sheet);
+  const templates = rows.slice(1).filter(r => r[0]).map(r => ({
+    id: String(getCellByHeader_(r, hm, 'id', r[0])),
+    title: getCellByHeader_(r, hm, 'title', ''),
+    instruction: getCellByHeader_(r, hm, 'instruction', ''),
+    time_limit_min: Number(getCellByHeader_(r, hm, 'time_limit_min', 0)) || 0,
+    cases: parseCases_(getCellByHeader_(r, hm, 'cases_json', '[]')),
+    active: getCellByHeader_(r, hm, 'active', true) !== false,
+    updated_at: toYMD(getCellByHeader_(r, hm, 'updated_at', '')),
+  }));
+  return { ok: true, templates };
+}
+
+// ── Шаблоны: создание/обновление ──────────────────────────────────
+function saveCaseTemplate(data) {
+  const role = String(data.caller_role || '');
+  if (!caseRoleCanEdit_(role)) return { ok: false, error: 'Недостаточно прав для редактирования кейсов' };
+  ensureCaseSheets_();
+  const tpl = data.template || {};
+  const title = String(tpl.title || '').trim();
+  if (!title) return { ok: false, error: 'Укажите название шаблона' };
+  const cases = Array.isArray(tpl.cases) ? tpl.cases : [];
+  // Нормализуем id внутри шаблона
+  const normCases = cases.map((c, ci) => {
+    const cid = String(c.id || ('c' + (ci + 1)));
+    const qs = Array.isArray(c.questions) ? c.questions : [];
+    return {
+      id: cid,
+      title: String(c.title || ('Кейс ' + (ci + 1))),
+      description: String(c.description || ''),
+      questions: qs.map((q, qi) => ({
+        id: String(q.id || (cid + '_q' + (qi + 1))),
+        text: String(q.text || '')
+      })).filter(q => q.text.trim() !== '')
+    };
+  });
+  const sheet = getSheet(SH.CASE_TEMPLATES);
+  const rows = sheet.getDataRange().getValues();
+  const hm = headerMap_(sheet);
+  const now = new Date();
+  const id = String(tpl.id || '').trim();
+
+  if (id) {
+    for (let i = 1; i < rows.length; i++) {
+      if (String(getCellByHeader_(rows[i], hm, 'id', rows[i][0])) === id) {
+        const set = (h, v) => { if (hm.hasOwnProperty(h)) sheet.getRange(i + 1, hm[h] + 1).setValue(v); };
+        set('title', title);
+        set('instruction', String(tpl.instruction || ''));
+        set('time_limit_min', Number(tpl.time_limit_min) || 0);
+        set('cases_json', JSON.stringify(normCases));
+        set('active', tpl.active !== false);
+        set('updated_at', now);
+        set('updated_by', String(data.caller_name || ''));
+        try { SpreadsheetApp.flush(); } catch (_) {}
+        return { ok: true, id };
+      }
+    }
+    return { ok: false, error: 'Шаблон не найден' };
+  }
+
+  const newId = generateId();
+  appendRowByHeaders_(sheet, {
+    id: newId,
+    title,
+    instruction: String(tpl.instruction || ''),
+    time_limit_min: Number(tpl.time_limit_min) || 0,
+    cases_json: JSON.stringify(normCases),
+    active: tpl.active !== false,
+    created_at: now,
+    updated_at: now,
+    updated_by: String(data.caller_name || '')
+  });
+  return { ok: true, id: newId };
+}
+
+// ── Шаблоны: удаление ─────────────────────────────────────────────
+function deleteCaseTemplate(data) {
+  const role = String(data.caller_role || '');
+  if (!caseRoleCanEdit_(role)) return { ok: false, error: 'Недостаточно прав' };
+  ensureCaseSheets_();
+  const id = String(data.id || '');
+  if (!id) return { ok: false, error: 'Нет id' };
+  deleteRowByValue_(getSheet(SH.CASE_TEMPLATES), 1, id);
+  return { ok: true, message: 'Шаблон удалён' };
+}
+
+// ── Снимок шаблона для приглашения ────────────────────────────────
+function buildCaseSnapshot_(templateId) {
+  const sheet = getSheet(SH.CASE_TEMPLATES);
+  const rows = sheet.getDataRange().getValues();
+  const hm = headerMap_(sheet);
+  for (let i = 1; i < rows.length; i++) {
+    if (String(getCellByHeader_(rows[i], hm, 'id', rows[i][0])) === String(templateId)) {
+      const r = rows[i];
+      return {
+        template_id: String(templateId),
+        title: getCellByHeader_(r, hm, 'title', ''),
+        instruction: getCellByHeader_(r, hm, 'instruction', ''),
+        time_limit_min: Number(getCellByHeader_(r, hm, 'time_limit_min', 0)) || 0,
+        cases: parseCases_(getCellByHeader_(r, hm, 'cases_json', '[]'))
+      };
+    }
+  }
+  return null;
+}
+
+// ── Создание приглашения по e-mail ────────────────────────────────
+function createCaseInvite(data) {
+  ensureCaseSheets_();
+  const required = ['candidate_name','email','template_id','recruiter_id','recruiter_name'];
+  for (let i = 0; i < required.length; i++) {
+    if (!data[required[i]]) return { ok: false, error: 'Не заполнено поле: ' + required[i] };
+  }
+  const emailNorm = String(data.email).trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailNorm)) return { ok: false, error: 'Некорректный e-mail: ' + data.email };
+
+  const snapshot = buildCaseSnapshot_(data.template_id);
+  if (!snapshot) return { ok: false, error: 'Шаблон кейса не найден' };
+
+  const id = generateId();
+  const token = buildSecureToken_();
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
+
+  const sheet = getSheet(SH.CASE_INVITES);
+  appendRowByHeaders_(sheet, {
+    id, token, status: 'sent', mode: 'email',
+    template_id: snapshot.template_id, template_title: snapshot.title,
+    snapshot_json: JSON.stringify(snapshot),
+    sent_at: now, expires_at: expiresAt, submitted_at: '',
+    candidate_name: data.candidate_name, candidate_email: emailNorm,
+    position: data.position || snapshot.title,
+    recruiter_id: data.recruiter_id, recruiter_name: data.recruiter_name,
+    created_at: now, updated_at: now
+  });
+
+  const surveyLink = CASE_FORM_BASE_URL + '?case_token=' + encodeURIComponent(token);
+  const subject = 'Практическое задание (кейсы) — ваша ссылка для прохождения';
+  const body =
+    'Здравствуйте, ' + data.candidate_name + '!\n\n' +
+    'Мы направляем вам ссылку на практическое задание — набор рабочих кейсов. ' +
+    'Ответьте письменно на все вопросы; под каждым вопросом есть поле для ответа.\n\n' +
+    'Ссылка для прохождения:\n' + surveyLink + '\n\n' +
+    'Ссылка действительна ' + INVITE_TTL_DAYS + ' дней. Проходить удобнее с компьютера.\n\n' +
+    'Если возникнут вопросы — просто ответьте на это письмо.\n\n' +
+    'С уважением,\nКоманда подбора персонала';
+
+  try {
+    GmailApp.sendEmail(emailNorm, subject, body);
+  } catch (mailErr) {
+    try { deleteRowByValue_(sheet, 1, id); try { SpreadsheetApp.flush(); } catch(_) {} } catch(_) {}
+    return { ok: false, error: 'Письмо не отправлено: ' + (mailErr && mailErr.message ? mailErr.message : String(mailErr)) };
+  }
+
+  return { ok: true, invite_id: id, token, survey_link: surveyLink, expires_at: toYMD(expiresAt) };
+}
+
+// ── Создание сессии «на платформе» (без письма) ───────────────────
+function createCaseSession(data) {
+  ensureCaseSheets_();
+  const required = ['candidate_name','template_id','recruiter_id','recruiter_name'];
+  for (let i = 0; i < required.length; i++) {
+    if (!data[required[i]]) return { ok: false, error: 'Не заполнено поле: ' + required[i] };
+  }
+  const snapshot = buildCaseSnapshot_(data.template_id);
+  if (!snapshot) return { ok: false, error: 'Шаблон кейса не найден' };
+
+  const id = generateId();
+  const token = buildSecureToken_();
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
+
+  appendRowByHeaders_(getSheet(SH.CASE_INVITES), {
+    id, token, status: 'sent', mode: 'platform',
+    template_id: snapshot.template_id, template_title: snapshot.title,
+    snapshot_json: JSON.stringify(snapshot),
+    sent_at: now, expires_at: expiresAt, submitted_at: '',
+    candidate_name: data.candidate_name, candidate_email: String(data.email || '').trim().toLowerCase(),
+    position: data.position || snapshot.title,
+    recruiter_id: data.recruiter_id, recruiter_name: data.recruiter_name,
+    created_at: now, updated_at: now
+  });
+
+  const surveyLink = CASE_FORM_BASE_URL + '?case_token=' + encodeURIComponent(token);
+  return { ok: true, invite_id: id, token, survey_link: surveyLink, expires_at: toYMD(expiresAt) };
+}
+
+// ── Список приглашений ────────────────────────────────────────────
+function getCaseAssessments(data) {
+  ensureCaseSheets_();
+  const role = String(data.role || '');
+  const recruiterId = String(data.recruiter_id || '');
+  const sheet = getSheet(SH.CASE_INVITES);
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length < 2) return { ok: true, items: [] };
+  const hm = headerMap_(sheet);
+  const resultsMap = buildCaseResultMap_();
+
+  const items = rows.slice(1).filter(r => r[0]).map(r => {
+    const id = String(getCellByHeader_(r, hm, 'id', r[0]));
+    const status = String(getCellByHeader_(r, hm, 'status', ''));
+    const expired = isInviteExpired_(getCellByHeader_(r, hm, 'expires_at', ''));
+    const result = resultsMap[id] || null;
+    const finalStatus = (status === 'completed' || !!result) ? 'completed' : (expired ? 'expired' : status);
+    return {
+      id,
+      token: getCellByHeader_(r, hm, 'token', ''),
+      status: finalStatus,
+      mode: getCellByHeader_(r, hm, 'mode', 'email'),
+      template_title: getCellByHeader_(r, hm, 'template_title', ''),
+      position: getCellByHeader_(r, hm, 'position', ''),
+      candidate_name: getCellByHeader_(r, hm, 'candidate_name', ''),
+      candidate_email: getCellByHeader_(r, hm, 'candidate_email', ''),
+      recruiter_id: getCellByHeader_(r, hm, 'recruiter_id', ''),
+      recruiter_name: getCellByHeader_(r, hm, 'recruiter_name', ''),
+      sent_at: toYMD(getCellByHeader_(r, hm, 'sent_at', '')),
+      has_result: !!result,
+    };
+  });
+
+  const filtered = items.filter(item => {
+    if (role === 'recruiter' && recruiterId) return String(item.recruiter_id) === recruiterId;
+    return true;
+  });
+  filtered.sort((a, b) => (a.sent_at < b.sent_at ? 1 : -1));
+  return { ok: true, items: filtered };
+}
+
+// ── Просмотр ответов (вопрос → ответ) ─────────────────────────────
+function getCaseAssessmentResult(data) {
+  const role = String(data.role || '');
+  if (!caseRoleCanSeeResults_(role)) return { ok: false, error: 'Недостаточно прав для просмотра ответов' };
+  ensureCaseSheets_();
+  const id = String(data.id || '');
+  if (!id) return { ok: false, error: 'Нет id' };
+
+  const inv = findCaseInviteById_(id);
+  if (!inv) return { ok: false, error: 'Приглашение не найдено' };
+  const result = findCaseResultByInviteId_(id);
+  if (!result) return { ok: false, error: 'Ответы ещё не получены' };
+
+  let snapshot = {};
+  try { snapshot = JSON.parse(inv.snapshot_json || '{}'); } catch (e) { snapshot = {}; }
+  let answers = {};
+  try { answers = JSON.parse(result.answers_json || '{}'); } catch (e) { answers = {}; }
+
+  return {
+    ok: true,
+    invite: {
+      candidate_name: inv.candidate_name,
+      position: inv.position,
+      template_title: inv.template_title,
+      instruction: snapshot.instruction || '',
+      time_limit_min: snapshot.time_limit_min || 0,
+      mode: inv.mode,
+      submitted_at: result.submitted_at,
+      recruiter_name: inv.recruiter_name,
+    },
+    cases: Array.isArray(snapshot.cases) ? snapshot.cases : [],
+    answers
+  };
+}
+
+// ── Старт формы кандидата ─────────────────────────────────────────
+function startCaseSurvey(data) {
+  ensureCaseSheets_();
+  const token = String(data.token || '').trim();
+  if (!token) return { ok: false, error: 'Не передан token' };
+  const inv = findCaseInviteByToken_(token);
+  if (!inv) return { ok: false, error: 'Ссылка недействительна' };
+  if (String(inv.status) === 'completed' || findCaseResultByInviteId_(inv.id)) {
+    return { ok: false, error: 'Задание уже выполнено. Ваши ответы были сохранены ранее.', already_done: true };
+  }
+  if (isInviteExpired_(inv.expires_at)) return { ok: false, error: 'Срок действия ссылки истёк' };
+
+  let snapshot = {};
+  try { snapshot = JSON.parse(inv.snapshot_json || '{}'); } catch (e) { snapshot = {}; }
+
+  return {
+    ok: true,
+    invite: { candidate_name: inv.candidate_name, position: inv.position },
+    template: {
+      title: snapshot.title || inv.template_title || 'Кейсы',
+      instruction: snapshot.instruction || '',
+      time_limit_min: snapshot.time_limit_min || 0,
+      cases: Array.isArray(snapshot.cases) ? snapshot.cases : []
+    }
+  };
+}
+
+// ── Приём ответов ─────────────────────────────────────────────────
+function submitCaseSurvey(data) {
+  ensureCaseSheets_();
+  const token = String(data.token || '').trim();
+  const rawAnswers = data.answers;
+  if (!token) return { ok: false, error: 'Не передан token' };
+  if (!rawAnswers || typeof rawAnswers !== 'object') return { ok: false, error: 'Не переданы ответы' };
+
+  const inv = findCaseInviteByToken_(token);
+  if (!inv) return { ok: false, error: 'Ссылка недействительна' };
+  if (String(inv.status) === 'completed' || findCaseResultByInviteId_(inv.id)) {
+    return { ok: false, error: 'Задание уже отправлено' };
+  }
+  if (isInviteExpired_(inv.expires_at)) return { ok: false, error: 'Срок действия ссылки истёк' };
+
+  // Оставляем только строковые ответы, обрезаем по разумной длине
+  const clean = {};
+  Object.keys(rawAnswers).forEach(k => {
+    const v = rawAnswers[k];
+    if (v != null) clean[String(k)] = String(v).slice(0, 8000);
+  });
+
+  const submittedAt = new Date();
+  appendRowByHeaders_(getSheet(SH.CASE_RESULTS), {
+    id: generateId(),
+    invite_id: inv.id,
+    token,
+    candidate_name: inv.candidate_name,
+    position: inv.position,
+    template_title: inv.template_title,
+    recruiter_name: inv.recruiter_name || '',
+    submitted_at: submittedAt,
+    created_at: submittedAt,
+    answers_json: JSON.stringify(clean)
+  });
+
+  setCaseInviteCompleted_(inv.id, submittedAt);
+  return { ok: true, message: 'Ответы успешно отправлены' };
+}
+
+// ── Удаление приглашения/ответов ──────────────────────────────────
+function deleteCaseAssessment(data) {
+  const role = String(data.caller_role || '');
+  if (role !== 'admin') return { ok: false, error: 'Недостаточно прав' };
+  ensureCaseSheets_();
+  const id = String(data.id || '');
+  if (!id) return { ok: false, error: 'Нет id' };
+  deleteRowByValue_(getSheet(SH.CASE_INVITES), 1, id);
+  deleteRowByValue_(getSheet(SH.CASE_RESULTS), 2, id);
+  return { ok: true, message: 'Запись удалена' };
+}
+
+// ── Хелперы модуля «Кейсы» ────────────────────────────────────────
+function buildCaseResultMap_() {
+  const sheet = getSheet(SH.CASE_RESULTS);
+  const rows = sheet.getDataRange().getValues();
+  const map = {};
+  if (rows.length < 2) return map;
+  const hm = headerMap_(sheet);
+  for (let i = 1; i < rows.length; i++) {
+    const invId = String(getCellByHeader_(rows[i], hm, 'invite_id', ''));
+    if (invId) map[invId] = {
+      answers_json: getCellByHeader_(rows[i], hm, 'answers_json', '{}'),
+      submitted_at: toYMD(getCellByHeader_(rows[i], hm, 'submitted_at', ''))
+    };
+  }
+  return map;
+}
+
+function findCaseResultByInviteId_(inviteId) {
+  return buildCaseResultMap_()[String(inviteId)] || null;
+}
+
+function findCaseInviteById_(id) {
+  const sheet = getSheet(SH.CASE_INVITES);
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length < 2) return null;
+  const hm = headerMap_(sheet);
+  for (let i = 1; i < rows.length; i++) {
+    if (String(getCellByHeader_(rows[i], hm, 'id', rows[i][0])) === String(id)) {
+      return caseInviteFromRow_(rows[i], hm);
+    }
+  }
+  return null;
+}
+
+function findCaseInviteByToken_(token) {
+  const sheet = getSheet(SH.CASE_INVITES);
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length < 2) return null;
+  const hm = headerMap_(sheet);
+  for (let i = 1; i < rows.length; i++) {
+    if (String(getCellByHeader_(rows[i], hm, 'token', '')) === token) {
+      return caseInviteFromRow_(rows[i], hm);
+    }
+  }
+  return null;
+}
+
+function caseInviteFromRow_(r, hm) {
+  return {
+    id: String(getCellByHeader_(r, hm, 'id', r[0])),
+    token: getCellByHeader_(r, hm, 'token', ''),
+    status: getCellByHeader_(r, hm, 'status', ''),
+    mode: getCellByHeader_(r, hm, 'mode', 'email'),
+    template_id: getCellByHeader_(r, hm, 'template_id', ''),
+    template_title: getCellByHeader_(r, hm, 'template_title', ''),
+    snapshot_json: getCellByHeader_(r, hm, 'snapshot_json', '{}'),
+    expires_at: getCellByHeader_(r, hm, 'expires_at', ''),
+    candidate_name: getCellByHeader_(r, hm, 'candidate_name', ''),
+    candidate_email: getCellByHeader_(r, hm, 'candidate_email', ''),
+    position: getCellByHeader_(r, hm, 'position', ''),
+    recruiter_id: getCellByHeader_(r, hm, 'recruiter_id', ''),
+    recruiter_name: getCellByHeader_(r, hm, 'recruiter_name', ''),
+  };
+}
+
+function setCaseInviteCompleted_(id, submittedAt) {
+  const sheet = getSheet(SH.CASE_INVITES);
+  const rows = sheet.getDataRange().getValues();
+  const hm = headerMap_(sheet);
+  for (let i = 1; i < rows.length; i++) {
+    if (String(getCellByHeader_(rows[i], hm, 'id', rows[i][0])) === String(id)) {
+      if (hm.hasOwnProperty('status')) sheet.getRange(i + 1, hm['status'] + 1).setValue('completed');
+      if (hm.hasOwnProperty('submitted_at')) sheet.getRange(i + 1, hm['submitted_at'] + 1).setValue(submittedAt);
+      if (hm.hasOwnProperty('updated_at')) sheet.getRange(i + 1, hm['updated_at'] + 1).setValue(submittedAt);
       try { SpreadsheetApp.flush(); } catch(_) {}
       return;
     }

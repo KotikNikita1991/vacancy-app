@@ -34,10 +34,10 @@ const ROLES={
   admin:    {l:'Администратор',c:'#7B5EA7',bg:'#F0EBF8'},
 };
 const NCFG={
-  recruiter:[{id:'dashboard',lbl:'Дашборд',ic:'home'},{id:'analytics',lbl:'Аналитика',ic:'ch'},{id:'checklist',lbl:'Оценка кандидата',ic:'cl'},{id:'values',lbl:'Оценка ценностей',ic:'val'},{id:'dpi',lbl:'Деструкторы',ic:'dpi'},{id:'pif',lbl:'Потенциал',ic:'pif'}],
-  manager:  [{id:'dashboard',lbl:'Дашборд',ic:'home'},{id:'analytics',lbl:'Аналитика',ic:'ch'},{id:'checklist',lbl:'Оценка кандидата',ic:'cl'},{id:'values',lbl:'Оценка ценностей',ic:'val'},{id:'dpi',lbl:'Деструкторы',ic:'dpi'},{id:'pif',lbl:'Потенциал',ic:'pif'}],
-  rop:      [{id:'dashboard',lbl:'Дашборд',ic:'home'},{id:'analytics',lbl:'Аналитика',ic:'ch'},{id:'checklist',lbl:'Оценка кандидата',ic:'cl'},{id:'values',lbl:'Оценка ценностей',ic:'val'},{id:'dpi',lbl:'Деструкторы',ic:'dpi'},{id:'pif',lbl:'Потенциал',ic:'pif'}],
-  admin:    [{id:'dashboard',lbl:'Дашборд',ic:'home'},{id:'analytics',lbl:'Аналитика',ic:'ch'},{id:'checklist',lbl:'Оценка кандидата',ic:'cl'},{id:'values',lbl:'Оценка ценностей',ic:'val'},{id:'dpi',lbl:'Деструкторы',ic:'dpi'},{id:'pif',lbl:'Потенциал',ic:'pif'},{id:'users',lbl:'Пользователи',ic:'us'}],
+  recruiter:[{id:'dashboard',lbl:'Дашборд',ic:'home'},{id:'analytics',lbl:'Аналитика',ic:'ch'},{id:'checklist',lbl:'Оценка кандидата',ic:'cl'},{id:'values',lbl:'Оценка ценностей',ic:'val'},{id:'dpi',lbl:'Деструкторы',ic:'dpi'},{id:'pif',lbl:'Потенциал',ic:'pif'},{id:'cases',lbl:'Кейсы',ic:'case'}],
+  manager:  [{id:'dashboard',lbl:'Дашборд',ic:'home'},{id:'analytics',lbl:'Аналитика',ic:'ch'},{id:'checklist',lbl:'Оценка кандидата',ic:'cl'},{id:'values',lbl:'Оценка ценностей',ic:'val'},{id:'dpi',lbl:'Деструкторы',ic:'dpi'},{id:'pif',lbl:'Потенциал',ic:'pif'},{id:'cases',lbl:'Кейсы',ic:'case'}],
+  rop:      [{id:'dashboard',lbl:'Дашборд',ic:'home'},{id:'analytics',lbl:'Аналитика',ic:'ch'},{id:'checklist',lbl:'Оценка кандидата',ic:'cl'},{id:'values',lbl:'Оценка ценностей',ic:'val'},{id:'dpi',lbl:'Деструкторы',ic:'dpi'},{id:'pif',lbl:'Потенциал',ic:'pif'},{id:'cases',lbl:'Кейсы',ic:'case'}],
+  admin:    [{id:'dashboard',lbl:'Дашборд',ic:'home'},{id:'analytics',lbl:'Аналитика',ic:'ch'},{id:'checklist',lbl:'Оценка кандидата',ic:'cl'},{id:'values',lbl:'Оценка ценностей',ic:'val'},{id:'dpi',lbl:'Деструкторы',ic:'dpi'},{id:'pif',lbl:'Потенциал',ic:'pif'},{id:'cases',lbl:'Кейсы',ic:'case'},{id:'users',lbl:'Пользователи',ic:'us'}],
 };
 const IC={
   home:'<path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>',
@@ -47,6 +47,7 @@ const IC={
   val:'<path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 10-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 000-7.8z"/>',
   dpi:'<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
   pif:'<circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>',
+  case:'<path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/>',
 };
 const SC_MAP={'В работе':'sw','Закрыта':'sc2','Приостановлена':'sp','Отменена':'sca','Передана':'st'};
 

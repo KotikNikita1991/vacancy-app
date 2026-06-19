@@ -252,7 +252,7 @@ function buildNav(){
 function navigate(page){
   PAGE=page;
   document.querySelectorAll('.ni').forEach(el=>el.classList.toggle('active',el.id===`ni-${page}`));
-  const ttls={dashboard:'Дашборд',analytics:'Аналитика',checklist:'Оценка кандидата',values:'Оценка ценностей',dpi:'Деструкторы',pif:'Потенциал',users:'Пользователи'};
+  const ttls={dashboard:'Дашборд',analytics:'Аналитика',checklist:'Оценка кандидата',values:'Оценка ценностей',dpi:'Деструкторы',pif:'Потенциал',cases:'Кейсы',users:'Пользователи'};
   document.getElementById('httl').textContent=ttls[page]||page;
   // Сбрасываем хлебные крошки на корневую страницу
   if(window.VAC_UI&&window.VAC_UI.crumbs){
@@ -297,6 +297,7 @@ async function renderPage(p){
   else if(p==='values')await renderValues();
   else if(p==='dpi')await renderDpi();
   else if(p==='pif')await renderPif();
+  else if(p==='cases')await renderCases();
   else if(p==='users')await renderUsers();
   else renderSoon(p);
 }
@@ -3068,6 +3069,16 @@ async function renderPif(){
   }
 }
 
+async function renderCases(){
+  const el=document.getElementById('content');
+  if(!el)return;
+  if(typeof CASES_MODULE!=='undefined'&&typeof CASES_MODULE.renderList==='function'){
+    await CASES_MODULE.renderList(el);
+  } else {
+    el.innerHTML='<div class="card"><div class="empty" style="padding:48px"><h3>Модуль не загружен</h3><p style="color:var(--ink3)">Перезагрузите страницу.</p></div></div>';
+  }
+}
+
 // ══ USERS PAGE ════════════════════════════════════════════════
 async function renderUsers(){
   const el=document.getElementById('content');
@@ -3118,7 +3129,7 @@ async function renderUsers(){
     +'<div><div style="font-weight:600;color:var(--green);margin-bottom:4px">Рекрутер</div>'
     +'<div style="color:var(--ink2);line-height:1.8">Создание вакансий<br>Редактирование своих полей<br>Оценка кандидатов<br>Просмотр своих вакансий</div></div>'
     +'<div><div style="font-weight:600;color:#0E7C7B;margin-bottom:4px">РОП</div>'
-    +'<div style="color:var(--ink2);line-height:1.8">Все вакансии рекрутёров<br>Редактирование и статусы<br>Планы подбора и аналитика<br>Список тестов без результатов<br>Без удаления записей</div></div>'
+    +'<div style="color:var(--ink2);line-height:1.8">Все вакансии рекрутёров<br>Редактирование и статусы<br>Планы подбора и аналитика<br>Тесты: список без расшифровки<br>Кейсы: просмотр ответов<br>Без удаления записей</div></div>'
     +'<div><div style="font-weight:600;color:var(--blue);margin-bottom:4px">Руководитель</div>'
     +'<div style="color:var(--ink2);line-height:1.8">Все права рекрутера<br>Полное редактирование<br>Все вакансии и оценки<br>Результаты тестов<br>Аналитика и планы</div></div>'
     +'<div><div style="font-weight:600;color:var(--acc);margin-bottom:4px">Администратор</div>'
